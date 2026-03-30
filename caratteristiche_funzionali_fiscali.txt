@@ -1,0 +1,258 @@
+# Business Plan Tool — Caratteristiche funzionali, dinamiche e fiscali
+**Versione 1.1 | Studio Commerciale | 2025**
+
+---
+
+## 1. Struttura dei ricavi previsionali
+
+Ogni voce di ricavo si configura con tre livelli di controllo indipendenti e cumulativi.
+
+### Livello 1 — Importo annuale base
+- Deriva dall'ultimo dato storico disponibile
+- Viene modificato in avanti dagli eventi strutturali (apertura nuova sede, nuovo contratto, ecc.)
+- Accetta anche un tasso di crescita % annuo uniforme come driver semplice
+
+### Livello 2 — Profilo di distribuzione mensile
+- **Uniforme:** importo annuale diviso per 12 — per ricavi stabili
+- **Stagionale:** 12 coefficienti percentuali che sommano 100%, definiti una volta per voce
+- Il profilo stagionale vale per tutti gli anni previsionali — non si ridefinisce anno per anno
+- Esempi: balneazione (picco lug-ago), gioielleria (picco nov-dic), edilizia (picco primavera-autunno)
+
+### Livello 3 — Variazioni puntuali e strutturali
+
+| Tipo | Descrizione | Esempio |
+|---|---|---|
+| A — Puntuale | Variazione % su singolo mese di un anno specifico | -20% agosto 2025 fermo produttivo |
+| B — Strutturale | Variazione % del run-rate da un mese in avanti, permanente | +30% da giugno 2026 apertura sede Roma |
+| C — Annuale | Crescita % da gennaio dell'anno — driver semplice | +5% anno 2026 crescita programmata |
+
+I tre tipi sono cumulativi sulla stessa voce. La variazione strutturale modifica la base su cui poi si applica la puntuale.
+
+> **Nota:** la stessa struttura a tre livelli si applica simmetricamente ai costi variabili legati ai ricavi. I costi fissi usano solo variazioni strutturali proprie (es. nuovo contratto di affitto).
+
+---
+
+## 2. Gestione mutui e finanziamenti
+
+Ogni mutuo o finanziamento genera mensilmente tre flussi distinti e automatici:
+
+| Flusso | Effetto contabile |
+|---|---|
+| Quota interessi | CE voce C.17 — Oneri e proventi finanziari |
+| Quota capitale | SP Passivo D.4 — Debiti verso banche (riduzione) |
+| Uscita di cassa | SP Attivo C.IV — Disponibilità liquide (riduzione) |
+
+### Parametri configurabili per ogni mutuo
+- Descrizione e istituto erogante
+- Capitale residuo alla data di inserimento
+- Tasso annuo nominale (fisso)
+- Durata residua in mesi
+- Data di inizio rata (mese e anno)
+- Tipo ammortamento: **francese** (rata costante) o **italiano** (quota capitale costante)
+
+> **Nota:** il tool supporta la gestione simultanea di N mutui con date e condizioni diverse. Il totale degli oneri finanziari mensili viene aggregato automaticamente nella voce CE corrispondente.
+
+---
+
+## 3. Gestione investimenti e ammortamenti
+
+Ogni investimento è un evento puntuale con data precisa che genera effetti automatici su CE e SP a partire dal mese di entrata in funzione.
+
+| Effetto | Voce contabile |
+|---|---|
+| Quota ammortamento CE | B.10 — pro-rata dal mese di entrata in funzione |
+| Valore netto SP Attivo | Voce B corrispondente — costo storico meno fondo ammortamento cumulato |
+| Uscita cassa | C.IV — importo nel mese di acquisto o secondo piano rateizzato |
+
+**Calcolo pro-rata anno di acquisto:** `aliquota_annua × (mesi_residui_anno / 12)`
+
+Esempio: acquisto ad aprile → 9/12 della quota annua nel primo anno.
+
+### Parametri configurabili per ogni investimento
+- Descrizione del cespite
+- Mese e anno di acquisto / entrata in funzione
+- Importo lordo
+- Categoria SP: B.I immateriali / B.II materiali / B.III finanziarie
+- Voce specifica SP (es. B.II.2 Impianti e macchinari)
+- Aliquota di ammortamento annua %
+- Metodo: **quote costanti** (lineare) o **quote decrescenti**
+- Piano di pagamento rateizzato opzionale (separato dalla registrazione contabile)
+
+> **Nota:** gli ammortamenti dei cespiti già presenti nel bilancio storico si inseriscono come driver separati con aliquota e valore netto di partenza, per garantire continuità con lo storico.
+
+---
+
+## 4. Capitale circolante
+
+Il capitale circolante netto si calcola automaticamente ogni mese applicando tre indici:
+
+| Indice | Significato | Effetto SP |
+|---|---|---|
+| DSO — Days Sales Outstanding | Giorni medi incasso crediti clienti | C.II Crediti verso clienti |
+| DPO — Days Payable Outstanding | Giorni medi pagamento debiti fornitori | D.7 Debiti verso fornitori |
+| DIO — Days Inventory Outstanding | Giorni medi giacenza magazzino | C.I Rimanenze |
+
+La **variazione del circolante** (differenza tra saldo mese corrente e precedente) è un flusso di cassa nel rendiconto finanziario.
+
+> **Nota:** DSO, DPO e DIO possono essere modificati nel tempo come eventi strutturali (es. rinegoziazione condizioni commerciali da un mese specifico).
+
+---
+
+## 5. Aspetti fiscali
+
+### 5.1 IRES — Imposta sul reddito delle società
+- Aliquota standard: **24%** sull'imponibile fiscale
+- L'imponibile fiscale coincide in prima approssimazione con il risultato ante imposte del CE
+- Possibilità di inserire variazioni in aumento e in diminuzione (costi indeducibili, agevolazioni)
+- Le imposte vengono accantonate mensilmente per competenza e liquidate secondo le scadenze fiscali (acconto giugno, acconto novembre, saldo anno successivo)
+
+### 5.2 IRAP — Imposta regionale sulle attività produttive
+- Aliquota ordinaria: **3,9%** (modificabile per settore e regione)
+- Base imponibile IRAP: valore della produzione (A) meno costi della produzione (B), esclusi gli oneri finanziari e il costo del personale dipendente a tempo indeterminato (deducibile)
+- Il tool calcola la base IRAP separatamente dalla base IRES
+
+> **Semplificazione v1.0:** nessuna gestione di imposte differite/anticipate, ACE, Patent Box. Queste voci potranno essere aggiunte come rettifiche manuali su righe dedicate in versioni successive.
+
+---
+
+## 6. Patrimonio netto — dinamica annuale
+
+```
+PN fine anno = PN inizio anno
+             + Utile netto dell'anno (da CE)
+             - Dividendi distribuiti
+             +/- Variazioni di capitale (aumenti/riduzioni — eventi puntuali)
+```
+
+- I dividendi vengono distribuiti nell'anno successivo a quello di maturazione (default) o nello stesso anno (configurabile)
+- La riserva legale (5% dell'utile fino a 1/5 del capitale) è calcolata automaticamente se abilitata
+- Aumenti di capitale gestiti come eventi puntuali con data e importo
+
+---
+
+## 7. Rendiconto finanziario
+
+Generato automaticamente come output di verifica — metodo indiretto. Non richiede inserimento dati separato.
+
+### Area operativa
+- Utile netto dell'esercizio
+- \+ Ammortamenti (reintegro costi non monetari)
+- +/- Variazione capitale circolante netto (da DSO/DPO/DIO)
+- +/- Variazioni altre poste operative
+
+### Area investimenti
+- \- Acquisti cespiti (Capex per mese da eventi investimento)
+- \+ Incassi da dismissioni (se configurate)
+
+### Area finanziaria
+- \+ Nuovi finanziamenti erogati
+- \- Rimborso quote capitale mutui
+- \- Dividendi pagati
+- +/- Variazioni altre poste finanziarie
+
+### Verifica di quadratura
+```
+Flusso di cassa netto (A + B + C) = Variazione disponibilità liquide
+Disponibilità liquide fine periodo = SP C.IV fine anno
+```
+Se i due valori non coincidono il motore segnala un errore di quadratura con dettaglio della differenza.
+
+---
+
+## 8. Controlli e validazioni
+
+### 8.1 Quadratura SP
+- `Totale Attivo = Totale Passivo + Patrimonio Netto` — verificato a ogni ricalcolo
+- In caso di squilibrio il tool mostra la differenza e la voce PFN che la assorbe
+
+### 8.2 Controlli di coerenza
+- Crediti verso clienti > 0 se ci sono ricavi
+- Ammortamenti <= valore lordo cespiti
+- Debiti finanziari >= 0
+- Disponibilità liquide: warning se il saldo mensile scende sotto soglia configurabile
+- Oneri finanziari coerenti con il debito in essere
+
+### 8.3 Indicatori di allerta
+
+| Indicatore | Azione |
+|---|---|
+| Cassa mensile sotto soglia | Evidenziata in rosso nel dettaglio mensile |
+| PFN/EBITDA > soglia configurabile | Warning nel dashboard |
+| Patrimonio netto negativo | Segnalazione con anno e mese di erosione |
+| EBITDA negativo | Warning se il margine operativo diventa negativo |
+
+---
+
+## 9. Output e prospetti
+
+| Output | Descrizione |
+|---|---|
+| CE previsionale annuale | Struttura art. 2425 — colonne storico + anni previsionali affiancati |
+| SP previsionale annuale | Struttura art. 2424 — Attivo e Passivo con dettaglio voci |
+| Rendiconto finanziario | Metodo indiretto — per ogni anno previsionale |
+| Dettaglio mensile | CE e cassa mese per mese — consultabile in drill-down |
+| Piano ammortamento mutui | Tabella rata per rata per ogni mutuo attivo |
+| Piano ammortamento cespiti | Quota annua per investimento — fondo e valore netto |
+| KPI dashboard | EBITDA%, ROE, ROI, PFN/EBITDA, indice liquidità, DSO/DPO effettivi |
+| Export PDF | Prospetti formattati per presentazione a banche o soci |
+
+---
+
+## 10. Modalità di inserimento dati storici
+
+### 10.1 Tre scenari di partenza
+
+Il tool supporta tre modalità di avvio del progetto, selezionabili alla creazione e modificabili in seguito:
+
+| Scenario | SP storico | CE storico | Caso d'uso |
+|---|---|---|---|
+| SP + CE storici | Completo art. 2424 | Completo art. 2425 | Società esistente con bilanci disponibili |
+| Solo SP storico | Completo art. 2424 | Non inserito | Società esistente, CE costruito dai driver |
+| Società costituenda | SP semplificato di avvio | Non applicabile | Nuova società senza storico |
+
+Per i casi "Solo SP storico" e "Costituenda" il tab CE nella sezione dati storici è disabilitato con messaggio esplicativo. Il primo CE viene generato interamente dal motore sulla base dei driver e parametri configurati.
+
+### 10.2 SP semplificato per società costituenda
+
+Quando il progetto è di tipo "Costituenda", lo SP di avvio raccoglie solo le voci rilevanti alla costituzione:
+
+**Patrimonio netto iniziale**
+- Capitale sociale versato
+- Versamenti in conto capitale soci (apporti non titolati)
+
+**Finanziamenti iniziali**
+- Finanziamenti soci (infruttiferi o a tasso)
+- Finanziamenti bancari (mutui / aperture di credito)
+
+**Liquidità iniziale**
+- Cassa e conti bancari (saldo disponibile al via)
+
+**Investimenti già acquisiti alla data di avvio**
+- Immobilizzazioni materiali (macchinari, arredi, veicoli)
+- Immobilizzazioni immateriali (licenze, software, avviamento)
+- Partecipazioni e depositi cauzionali
+
+Questo SP semplificato diventa il saldo di apertura del primo mese del primo anno previsionale.
+
+### 10.3 Granularità inserimento: modalità Rapida e Analitica
+
+Indipendentemente dallo scenario, l'utente sceglie la granularità di inserimento dei dati:
+
+| Modalità | Descrizione | Caso d'uso |
+|---|---|---|
+| Rapida | Inserimento per mastri e macro-aree aggregate | Prima stima veloce, dati parziali, clienti semplici |
+| Analitica | Inserimento per conti foglia completi art. 2424/2425 | Analisi dettagliata, bilanci completi disponibili |
+
+La modalità è selezionabile per ogni progetto e modificabile in qualsiasi momento. Il motore di calcolo è identico in entrambi i casi — cambia solo la granularità dell'input e di conseguenza dell'output.
+
+> **Nota tecnica:** anche in modalità Rapida, alcune distinzioni rimangono obbligatorie per il corretto funzionamento del motore fiscale: costo del personale (rilevante IRAP), oneri finanziari (esclusi da base IRAP), ammortamenti (gestiti come eventi separati).
+
+---
+
+## 11. Anni previsionali e gestione dello storico
+
+- Anni previsionali configurabili: da 1 a 8 anni oltre l'anno base
+- L'anno base (storico consolidato) è sempre disponibile come colonna nei prospetti affiancati
+- L'operatore sceglie quali anni visualizzare nei prospetti: può includere o escludere lo storico
+- È possibile inserire fino a 3 anni storici precedenti all'anno base per trend e confronti
+- Gli anni previsionali si aggiungono in blocchi: +1 anno alla volta, o salto diretto a +3 o +5
