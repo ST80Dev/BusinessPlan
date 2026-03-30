@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Business Plan Tool</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<!-- =====================================================
+     APP SHELL
+     ===================================================== -->
+<div id="app">
+
+  <!-- ── Sidebar ────────────────────────────────────────── -->
+  <nav id="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-title">Business Plan</div>
+      <div class="sidebar-logo-sub">Studio Commerciale</div>
+    </div>
+
+    <!-- Info progetto corrente -->
+    <div class="sidebar-project-info" id="sidebar-project-info">
+      <div class="sidebar-project-name text-muted" id="sidebar-project-name">Nessun progetto</div>
+      <div class="sidebar-project-meta" id="sidebar-project-meta">—</div>
+    </div>
+
+    <!-- Navigazione principale -->
+    <div class="sidebar-nav">
+      <div class="sidebar-nav-section">Navigazione</div>
+
+      <div class="sidebar-nav-item active" data-section="home" onclick="UI.navigate('home')">
+        <span class="sidebar-nav-icon">⌂</span>
+        <span>Home</span>
+      </div>
+
+      <div class="sidebar-nav-item disabled" data-section="dati-partenza" onclick="UI.navigate('dati-partenza')">
+        <span class="sidebar-nav-icon">📋</span>
+        <span>Dati di partenza</span>
+      </div>
+
+      <div class="sidebar-nav-item disabled" data-section="driver" onclick="UI.navigate('driver')">
+        <span class="sidebar-nav-icon">⚙</span>
+        <span>Driver &amp; Parametri</span>
+      </div>
+
+      <div class="sidebar-nav-item disabled" data-section="eventi" onclick="UI.navigate('eventi')">
+        <span class="sidebar-nav-icon">📅</span>
+        <span>Eventi</span>
+      </div>
+
+      <div class="sidebar-nav-item disabled" data-section="prospetti" onclick="UI.navigate('prospetti')">
+        <span class="sidebar-nav-icon">📊</span>
+        <span>Prospetti futuri</span>
+      </div>
+
+      <div class="sidebar-nav-item disabled" data-section="dashboard" onclick="UI.navigate('dashboard')">
+        <span class="sidebar-nav-icon">◈</span>
+        <span>Dashboard KPI</span>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">v1.0 · Fase 1</div>
+  </nav>
+
+  <!-- ── Header ─────────────────────────────────────────── -->
+  <header id="header">
+    <div class="header-title" id="header-title">Home</div>
+    <div id="header-badges" class="header-actions"></div>
+    <div class="header-actions" id="header-actions"></div>
+  </header>
+
+  <!-- ── Area contenuto ─────────────────────────────────── -->
+  <main id="content">
+    <!-- Le sezioni vengono iniettate da ui.js -->
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────────── -->
+  <footer id="footer">
+    <div class="footer-status">
+      <div class="footer-status-dot pronto" id="footer-dot"></div>
+      <span id="footer-status-text">Pronto</span>
+    </div>
+    <span class="footer-sep">|</span>
+    <div class="footer-quadratura hidden" id="footer-quadratura">
+      <span id="footer-quadratura-text"></span>
+    </div>
+    <div style="flex:1"></div>
+    <span id="footer-info" class="text-muted"></span>
+  </footer>
+
+</div><!-- /#app -->
+
+<!-- =====================================================
+     MODALE NUOVO PROGETTO
+     ===================================================== -->
+<div class="modal-overlay hidden" id="modal-nuovo-progetto">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Nuovo progetto</span>
+      <div class="modal-close" onclick="UI.closeModal('modal-nuovo-progetto')">✕</div>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Nome cliente -->
+      <div class="form-group">
+        <span class="form-label required">Nome cliente / Ragione sociale</span>
+        <div class="form-field"
+             contenteditable="true"
+             id="np-cliente"
+             data-placeholder="Es. Rossi Srl"
+             spellcheck="false"></div>
+      </div>
+
+      <!-- Settore -->
+      <div class="form-group">
+        <span class="form-label">Settore</span>
+        <div class="form-field"
+             contenteditable="true"
+             id="np-settore"
+             data-placeholder="Es. Commercio al dettaglio"
+             spellcheck="false"></div>
+      </div>
+
+      <!-- Anno base + Anni previsionali -->
+      <div class="form-row">
+        <div class="form-group">
+          <span class="form-label required">Anno base (storico)</span>
+          <div class="form-field"
+               contenteditable="true"
+               id="np-anno-base"
+               data-placeholder="Es. 2024"
+               spellcheck="false"></div>
+          <div class="form-hint">Anno dell'ultimo bilancio approvato</div>
+        </div>
+
+        <div class="form-group">
+          <span class="form-label required">Anni previsionali</span>
+          <div class="stepper">
+            <div class="stepper-btn" onclick="UI.stepperChange('np-anni-prev', -1)">−</div>
+            <div class="stepper-value" id="np-anni-prev">3</div>
+            <div class="stepper-btn" onclick="UI.stepperChange('np-anni-prev', +1)">+</div>
+          </div>
+          <div class="form-hint">Da 1 a 8 anni oltre l'anno base</div>
+        </div>
+      </div>
+
+      <!-- Scenario -->
+      <div class="form-group">
+        <span class="form-label required">Modalità di inserimento</span>
+        <div class="radio-group" id="np-scenario">
+
+          <div class="radio-item selected" data-value="sp_ce" onclick="UI.radioSelect('np-scenario', this)">
+            <div class="radio-dot"></div>
+            <div>
+              <div class="radio-label">SP + CE storici</div>
+              <div class="radio-desc">Società esistente con bilanci disponibili — inserimento completo art. 2424/2425</div>
+            </div>
+          </div>
+
+          <div class="radio-item" data-value="sp_only" onclick="UI.radioSelect('np-scenario', this)">
+            <div class="radio-dot"></div>
+            <div>
+              <div class="radio-label">Solo SP storico</div>
+              <div class="radio-desc">CE storico non disponibile — il primo CE viene costruito interamente dai driver</div>
+            </div>
+          </div>
+
+          <div class="radio-item" data-value="costituenda" onclick="UI.radioSelect('np-scenario', this)">
+            <div class="radio-dot"></div>
+            <div>
+              <div class="radio-label">Società costituenda</div>
+              <div class="radio-desc">Nuova società senza storico — SP semplificato di avvio, CE dai driver</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Modalità inserimento dati -->
+      <div class="form-group">
+        <span class="form-label">Granularità inserimento dati</span>
+        <div class="toggle-group" id="np-modalita">
+          <div class="toggle-item active" data-value="rapida" onclick="UI.toggleSelect('np-modalita', this)">
+            Rapida
+          </div>
+          <div class="toggle-item" data-value="analitica" onclick="UI.toggleSelect('np-modalita', this)">
+            Analitica
+          </div>
+        </div>
+        <div class="form-hint mt-4">
+          <strong>Rapida:</strong> inserimento per macro-aree aggregate &nbsp;|&nbsp;
+          <strong>Analitica:</strong> conti foglia completi art. 2424/2425
+        </div>
+      </div>
+
+    </div><!-- /.modal-body -->
+
+    <div class="modal-footer">
+      <div class="btn btn-secondary" onclick="UI.closeModal('modal-nuovo-progetto')">Annulla</div>
+      <div class="btn btn-primary" onclick="Projects.creaProgetto()">Crea progetto</div>
+    </div>
+  </div>
+</div><!-- /#modal-nuovo-progetto -->
+
+<!-- =====================================================
+     MODALE CONFERMA ELIMINAZIONE
+     ===================================================== -->
+<div class="modal-overlay hidden" id="modal-elimina">
+  <div class="modal" style="width:420px">
+    <div class="modal-header">
+      <span class="modal-title">Elimina progetto</span>
+      <div class="modal-close" onclick="UI.closeModal('modal-elimina')">✕</div>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--color-text-secondary);font-size:14px;">
+        Sei sicuro di voler eliminare il progetto
+        <strong id="modal-elimina-nome"></strong>?
+        Questa operazione rimuoverà il progetto dalla lista recenti del browser.
+        Il file JSON salvato sul disco non viene modificato.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <div class="btn btn-secondary" onclick="UI.closeModal('modal-elimina')">Annulla</div>
+      <div class="btn btn-danger" onclick="Projects.confermaElimina()">Elimina</div>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
+     SCRIPT — ordine di caricamento importante
+     ===================================================== -->
+<script src="js/schema.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/projects.js"></script>
+<script src="js/ui.js"></script>
+
+<script>
+  // Avvio applicazione
+  document.addEventListener('DOMContentLoaded', function() {
+    UI.init();
+  });
+</script>
+
+</body>
+</html>
