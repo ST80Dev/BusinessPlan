@@ -78,6 +78,8 @@ const UI = (() => {
         _renderDatiPartenza();
         break;
       case 'driver':
+        _renderDriver();
+        break;
       case 'eventi':
       case 'prospetti':
       case 'dashboard':
@@ -932,6 +934,565 @@ const UI = (() => {
     return isNaN(val) ? 0 : Math.round(val);
   }
 
+  /* ══════════════════════════════════════════════════════════
+     FASE 3 — Driver & Parametri
+     ══════════════════════════════════════════════════════════ */
+
+  let _driverTab = 'drv-ricavi';
+
+  /* ── Render principale ───────────────────────────────────── */
+
+  function _renderDriver() {
+    var content = document.getElementById('content');
+    var progetto = Projects.getProgetto();
+    if (!content || !progetto) return;
+
+    var html = '';
+
+    // Tabs
+    html += '<div class="tabs" id="driver-tabs">';
+    html += _driverTabItem('drv-ricavi', 'Ricavi');
+    html += _driverTabItem('drv-costi', 'Costi');
+    html += _driverTabItem('drv-circolante', 'Circolante');
+    html += _driverTabItem('drv-fiscale', 'Fiscale');
+    html += '</div>';
+
+    // Tab panes
+    html += '<div class="tab-pane' + (_driverTab === 'drv-ricavi' ? ' active' : '') + '" id="drv-ricavi">';
+    html += _renderDriverRicavi(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_driverTab === 'drv-costi' ? ' active' : '') + '" id="drv-costi">';
+    html += _renderDriverCosti(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_driverTab === 'drv-circolante' ? ' active' : '') + '" id="drv-circolante">';
+    html += _renderDriverCircolante(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_driverTab === 'drv-fiscale' ? ' active' : '') + '" id="drv-fiscale">';
+    html += _renderDriverFiscale(progetto);
+    html += '</div>';
+
+    content.innerHTML = html;
+  }
+
+  function _driverTabItem(id, label) {
+    return '<div class="tab-item' + (_driverTab === id ? ' active' : '') + '" data-tab="' + id + '" onclick="UI.switchDriverTab(\'' + id + '\')">' + label + '</div>';
+  }
+
+  function switchDriverTab(tabId) {
+    _driverTab = tabId;
+    document.querySelectorAll('#driver-tabs .tab-item').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.tab === tabId);
+    });
+    document.querySelectorAll('#content > .tab-pane').forEach(function(el) {
+      el.classList.toggle('active', el.id === tabId);
+    });
+  }
+
+  /* ── Tab RICAVI ──────────────────────────────────────────── */
+
+  function _renderDriverRicavi(progetto) {
+    var ricavi = progetto.driver.ricavi;
+    var html = '';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-left">';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Voci di ricavo previsionali</span>';
+    html += '</div><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiRicavo()">+ Aggiungi voce</div>';
+    if (progetto.meta.scenario === 'sp_ce') {
+      html += ' <div class="btn btn-secondary btn-sm" onclick="UI.importaRicaviDaCE()">Importa da CE</div>';
+    }
+    html += '</div></div>';
+
+    if (ricavi.length === 0) {
+      html += '<div class="projects-empty" style="padding:32px"><p>Nessuna voce di ricavo configurata.<br>';
+      if (progetto.meta.scenario === 'sp_ce') {
+        html += 'Clicca "Importa da CE" per popolare dai dati storici, oppure "Aggiungi voce" per crearne una nuova.';
+      } else {
+        html += 'Clicca "Aggiungi voce" per creare la prima voce di ricavo.';
+      }
+      html += '</p></div>';
+      return html;
+    }
+
+    // Tabella ricavi
+    html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:140px"><col style="width:100px"><col style="width:120px"><col style="width:60px"></colgroup>';
+    html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Base annuale</td><td class="cell-amount">Crescita %/anno</td><td class="cell-amount">Profilo</td><td></td></tr></thead><tbody>';
+
+    for (var i = 0; i < ricavi.length; i++) {
+      var r = ricavi[i];
+      var profiloLabel = _isProfiloUniforme(r.profilo_stagionale) ? 'Uniforme' : 'Personalizzato';
+      html += '<tr class="row-conto" data-driver-idx="' + i + '">';
+      html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:200px;font-family:var(--font-ui)" data-field="label" data-idx="' + i + '" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'label\')">' + _escapeHtml(r.label) + '</div></td>';
+      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-field="base_annuale" data-idx="' + i + '" data-placeholder="0" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'base_annuale\')" onkeydown="UI._handleAmountKey(event)">' + (r.base_annuale ? _formatImporto(r.base_annuale) : '') + '</div></td>';
+      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-field="crescita_annua" data-idx="' + i + '" data-placeholder="0" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'crescita_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(r.crescita_annua) + '</div></td>';
+      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.editProfiloStagionale(' + i + ')">' + profiloLabel + '</div></td>';
+      html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'ricavi\',' + i + ')">✕</div></td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+
+    return html;
+  }
+
+  function _isProfiloUniforme(profilo) {
+    if (!profilo || profilo.length !== 12) return true;
+    var ref = 100 / 12;
+    return profilo.every(function(v) { return Math.abs(v - ref) < 0.1; });
+  }
+
+  function aggiungiRicavo() {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var drv = Projects.creaDriverRicavo(null, 'Nuova voce ricavo', 0);
+    progetto.driver.ricavi.push(drv);
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function importaRicaviDaCE() {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var anno = String(progetto.meta.anno_base);
+    var annoData = progetto.storico[anno];
+    if (!annoData || !annoData.ce) { mostraNotifica('Nessun dato CE storico disponibile.', 'warning'); return; }
+
+    // Voci ricavo dal CE (sotto ce.A)
+    var nodoA = Schema.trovaNodo('ce.A');
+    if (!nodoA || !nodoA.children) return;
+
+    var aggiunti = 0;
+    var esistenti = progetto.driver.ricavi.map(function(r) { return r.voce_ce; });
+
+    nodoA.children.forEach(function(figlio) {
+      var val = annoData.ce[figlio.id] || 0;
+      if (val !== 0 && esistenti.indexOf(figlio.id) === -1) {
+        var drv = Projects.creaDriverRicavo(figlio.id, figlio.label, val);
+        progetto.driver.ricavi.push(drv);
+        aggiunti++;
+      }
+    });
+
+    if (aggiunti > 0) {
+      Projects.segnaModificato();
+      mostraNotifica(aggiunti + ' voci ricavo importate dal CE storico.', 'success');
+    } else {
+      mostraNotifica('Nessuna nuova voce da importare (già presenti o valori a zero).', 'info');
+    }
+    _renderDriver();
+  }
+
+  /* ── Tab COSTI ───────────────────────────────────────────── */
+
+  function _renderDriverCosti(progetto) {
+    var costi = progetto.driver.costi;
+    var html = '';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-left">';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Voci di costo previsionali</span>';
+    html += '</div><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiCosto()">+ Aggiungi voce</div>';
+    if (progetto.meta.scenario === 'sp_ce') {
+      html += ' <div class="btn btn-secondary btn-sm" onclick="UI.importaCostiDaCE()">Importa da CE</div>';
+    }
+    html += '</div></div>';
+
+    if (costi.length === 0) {
+      html += '<div class="projects-empty" style="padding:32px"><p>Nessuna voce di costo configurata.<br>';
+      if (progetto.meta.scenario === 'sp_ce') {
+        html += 'Clicca "Importa da CE" per popolare dai dati storici, oppure "Aggiungi voce".';
+      } else {
+        html += 'Clicca "Aggiungi voce" per creare la prima voce di costo.';
+      }
+      html += '</p></div>';
+      return html;
+    }
+
+    // Tabella costi
+    html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:120px"><col style="width:130px"><col style="width:110px"><col style="width:90px"><col style="width:60px"></colgroup>';
+    html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Tipo driver</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td></td></tr></thead><tbody>';
+
+    for (var i = 0; i < costi.length; i++) {
+      var c = costi[i];
+      html += '<tr class="row-conto">';
+
+      // Label
+      html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:180px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'label\')">' + _escapeHtml(c.label) + '</div></td>';
+
+      // Tipo driver (select simulato)
+      var tipoLabel = c.usa_var_personale ? 'Personale' : (c.tipo_driver === 'pct_ricavi' ? '% ricavi' : 'Fisso');
+      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaTipoDriver(' + i + ')">' + tipoLabel + '</div></td>';
+
+      // Valore
+      if (c.tipo_driver === 'pct_ricavi') {
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'pct_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(c.pct_ricavi) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'var_pct_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(c.var_pct_annua) + '</div></td>';
+      } else {
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'importo_fisso\')" onkeydown="UI._handleAmountKey(event)">' + (c.importo_fisso ? _formatImporto(c.importo_fisso) : '') + '</div></td>';
+        html += '<td class="cell-amount"><span class="text-muted" style="font-size:12px">' + (c.usa_var_personale ? 'Param. ded.' : '—') + '</span></td>';
+      }
+
+      // Flag inflazione
+      if (c.tipo_driver === 'pct_ricavi' || c.usa_var_personale) {
+        html += '<td class="cell-amount"><span class="text-muted" style="font-size:11px">n/a</span></td>';
+      } else {
+        var flagIcon = c.soggetto_inflazione ? '✓' : '✕';
+        var flagColor = c.soggetto_inflazione ? 'var(--color-success)' : 'var(--color-text-muted)';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + flagColor + '" onclick="UI.toggleInflazione(' + i + ')">' + flagIcon + '</div></td>';
+      }
+
+      html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'costi\',' + i + ')">✕</div></td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table>';
+
+    return html;
+  }
+
+  function aggiungiCosto() {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var drv = Projects.creaDriverCosto(null, 'Nuova voce costo', 'fisso');
+    progetto.driver.costi.push(drv);
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function importaCostiDaCE() {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var anno = String(progetto.meta.anno_base);
+    var annoData = progetto.storico[anno];
+    if (!annoData || !annoData.ce) { mostraNotifica('Nessun dato CE storico disponibile.', 'warning'); return; }
+
+    var nodoB = Schema.trovaNodo('ce.B');
+    if (!nodoB || !nodoB.children) return;
+
+    var aggiunti = 0;
+    var esistenti = progetto.driver.costi.map(function(c) { return c.voce_ce; });
+
+    // Voci ammortamento (ce.B.10) escluse — gestite dagli investimenti
+    var esclusi = ['ce.B.10', 'ce.B.10a', 'ce.B.10b', 'ce.B.10c', 'ce.B.10d'];
+
+    function importaFigli(figli) {
+      figli.forEach(function(figlio) {
+        if (esclusi.indexOf(figlio.id) !== -1) return;
+        if (figlio.children) {
+          // Sottomastro: importa i figli (es. ce.B.9 -> 9a, 9b, ...)
+          importaFigli(figlio.children);
+          return;
+        }
+        var val = annoData.ce[figlio.id] || 0;
+        if (val !== 0 && esistenti.indexOf(figlio.id) === -1) {
+          var isPersonale = figlio.id.indexOf('ce.B.9') === 0;
+          var tipo = isPersonale ? 'personale' : 'fisso';
+          var drv = Projects.creaDriverCosto(figlio.id, figlio.label, tipo);
+          drv.importo_fisso = val;
+          progetto.driver.costi.push(drv);
+          aggiunti++;
+        }
+      });
+    }
+
+    importaFigli(nodoB.children);
+
+    if (aggiunti > 0) {
+      Projects.segnaModificato();
+      mostraNotifica(aggiunti + ' voci costo importate dal CE storico.', 'success');
+    } else {
+      mostraNotifica('Nessuna nuova voce da importare.', 'info');
+    }
+    _renderDriver();
+  }
+
+  function ciclaTipoDriver(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var c = progetto.driver.costi[idx];
+    if (!c) return;
+
+    // Cicla: pct_ricavi -> fisso -> personale -> pct_ricavi
+    if (c.tipo_driver === 'pct_ricavi') {
+      c.tipo_driver = 'fisso';
+      c.pct_ricavi = null;
+      c.var_pct_annua = null;
+      c.importo_fisso = c.importo_fisso || 0;
+      c.soggetto_inflazione = true;
+      c.usa_var_personale = false;
+    } else if (!c.usa_var_personale) {
+      // fisso -> personale
+      c.usa_var_personale = true;
+      c.soggetto_inflazione = false;
+    } else {
+      // personale -> pct_ricavi
+      c.tipo_driver = 'pct_ricavi';
+      c.pct_ricavi = 0;
+      c.var_pct_annua = 0;
+      c.importo_fisso = null;
+      c.soggetto_inflazione = false;
+      c.usa_var_personale = false;
+    }
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function toggleInflazione(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var c = progetto.driver.costi[idx];
+    if (!c) return;
+    c.soggetto_inflazione = !c.soggetto_inflazione;
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  /* ── Tab CIRCOLANTE ──────────────────────────────────────── */
+
+  function _renderDriverCircolante(progetto) {
+    var circ = progetto.driver.circolante;
+    var html = '<div style="max-width:400px">';
+
+    html += '<div style="margin-bottom:20px;font-size:13px;color:var(--color-text-secondary)">Indici di capitale circolante applicati a tutti gli anni previsionali.</div>';
+
+    html += _campoCircolante('DSO — Giorni medi incasso clienti', 'dso', circ.dso, 'gg');
+    html += _campoCircolante('DPO — Giorni medi pagamento fornitori', 'dpo', circ.dpo, 'gg');
+    html += _campoCircolante('DIO — Giorni medi giacenza magazzino', 'dio', circ.dio, 'gg');
+
+    html += '</div>';
+    return html;
+  }
+
+  function _campoCircolante(label, campo, valore, unita) {
+    return '<div class="form-group">' +
+      '<span class="form-label">' + label + '</span>' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+      '<div class="form-field" contenteditable="true" style="width:100px;text-align:right;font-family:var(--font-mono)" data-placeholder="0" onblur="UI._handleCircolanteField(this,\'' + campo + '\')" onkeydown="UI._handleAmountKey(event)">' + (valore || '') + '</div>' +
+      '<span class="text-muted" style="font-size:13px">' + unita + '</span>' +
+      '</div></div>';
+  }
+
+  /* ── Tab FISCALE ─────────────────────────────────────────── */
+
+  function _renderDriverFiscale(progetto) {
+    var fisc = progetto.driver.fiscale;
+    var anniPrev = progetto.meta.anni_previsione;
+    var html = '';
+
+    // Aliquote
+    html += '<div style="max-width:500px">';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Aliquote</h3>';
+
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><span class="form-label">IRES %</span>';
+    html += '<div class="form-field" contenteditable="true" style="width:100px;text-align:right;font-family:var(--font-mono)" onblur="UI._handleFiscaleField(this,\'aliquota_ires\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(fisc.aliquota_ires) + '</div></div>';
+    html += '<div class="form-group"><span class="form-label">IRAP %</span>';
+    html += '<div class="form-field" contenteditable="true" style="width:100px;text-align:right;font-family:var(--font-mono)" onblur="UI._handleFiscaleField(this,\'aliquota_irap\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(fisc.aliquota_irap) + '</div></div>';
+    html += '</div>';
+
+    // Inflazione per anno
+    html += '<h3 style="font-size:14px;font-weight:700;margin:24px 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Inflazione prevista %</h3>';
+    html += '<div class="form-hint mb-8">Applicata automaticamente ai costi fissi soggetti a inflazione.</div>';
+
+    html += '<table class="schema-table" style="max-width:400px"><tbody>';
+    for (var i = 0; i < anniPrev.length; i++) {
+      var a = String(anniPrev[i]);
+      var val = fisc.inflazione ? (fisc.inflazione[a] || 0) : 0;
+      html += '<tr class="row-conto"><td>' + a + '</td>';
+      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleFiscaleAnnoField(this,\'inflazione\',\'' + a + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(val) + '</div></td></tr>';
+    }
+    html += '</tbody></table>';
+
+    // Variazione personale per anno
+    html += '<h3 style="font-size:14px;font-weight:700;margin:24px 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione costo personale %</h3>';
+    html += '<div class="form-hint mb-8">Applicata alle voci costo di tipo "Personale" (indipendente dall\'inflazione).</div>';
+
+    html += '<table class="schema-table" style="max-width:400px"><tbody>';
+    for (var j = 0; j < anniPrev.length; j++) {
+      var a2 = String(anniPrev[j]);
+      var val2 = fisc.var_personale ? (fisc.var_personale[a2] || 0) : 0;
+      html += '<tr class="row-conto"><td>' + a2 + '</td>';
+      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleFiscaleAnnoField(this,\'var_personale\',\'' + a2 + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(val2) + '</div></td></tr>';
+    }
+    html += '</tbody></table>';
+
+    html += '</div>';
+    return html;
+  }
+
+  /* ── Profilo stagionale (modale inline) ──────────────────── */
+
+  function editProfiloStagionale(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var r = progetto.driver.ricavi[idx];
+    if (!r) return;
+
+    var mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    var profilo = r.profilo_stagionale || [];
+
+    var html = '<div class="modal-header"><span class="modal-title">Profilo stagionale — ' + _escapeHtml(r.label) + '</span>';
+    html += '<div class="modal-close" onclick="UI.closeModal(\'modal-profilo\')">✕</div></div>';
+
+    html += '<div class="modal-body">';
+    html += '<div class="form-hint mb-8">I 12 coefficienti devono sommare 100%. Profilo uniforme = 8,33% per mese.</div>';
+    html += '<table class="schema-table" style="max-width:300px"><tbody>';
+
+    for (var i = 0; i < 12; i++) {
+      var val = profilo[i] !== undefined ? profilo[i] : (100 / 12);
+      html += '<tr class="row-conto"><td>' + mesi[i] + '</td>';
+      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" id="profilo-m-' + i + '" data-placeholder="0" onkeydown="UI._handleAmountKey(event)">' + _formatDec(val) + '</div></td></tr>';
+    }
+    html += '</tbody></table>';
+    html += '<div id="profilo-somma" style="margin-top:8px;font-size:12px;font-weight:600"></div>';
+    html += '<div style="margin-top:12px"><div class="btn btn-ghost btn-sm" onclick="UI._resetProfiloUniforme()">Reset uniforme</div></div>';
+    html += '</div>';
+
+    html += '<div class="modal-footer">';
+    html += '<div class="btn btn-secondary" onclick="UI.closeModal(\'modal-profilo\')">Annulla</div>';
+    html += '<div class="btn btn-primary" onclick="UI._salvaProfiloStagionale(' + idx + ')">Salva</div>';
+    html += '</div>';
+
+    // Crea modale se non esiste
+    var overlay = document.getElementById('modal-profilo');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'modal-profilo';
+      overlay.className = 'modal-overlay';
+      var modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.style.width = '380px';
+      modal.id = 'modal-profilo-inner';
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+    } else {
+      overlay.classList.remove('hidden');
+    }
+
+    document.getElementById('modal-profilo-inner').innerHTML = html;
+  }
+
+  function _resetProfiloUniforme() {
+    var val = _formatDec(100 / 12);
+    for (var i = 0; i < 12; i++) {
+      var el = document.getElementById('profilo-m-' + i);
+      if (el) el.textContent = val;
+    }
+  }
+
+  function _salvaProfiloStagionale(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var r = progetto.driver.ricavi[idx];
+    if (!r) return;
+
+    var profilo = [];
+    var somma = 0;
+    for (var i = 0; i < 12; i++) {
+      var el = document.getElementById('profilo-m-' + i);
+      var val = el ? _parsePct(el.textContent) : (100 / 12);
+      profilo.push(val);
+      somma += val;
+    }
+
+    if (Math.abs(somma - 100) > 0.5) {
+      mostraNotifica('La somma dei coefficienti deve essere 100% (attuale: ' + _formatDec(somma) + '%).', 'error');
+      return;
+    }
+
+    r.profilo_stagionale = profilo;
+    Projects.segnaModificato();
+    closeModal('modal-profilo');
+    _renderDriver();
+  }
+
+  /* ── Handler campi driver ────────────────────────────────── */
+
+  function _handleDriverField(el, tipo, idx, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var arr = progetto.driver[tipo];
+    if (!arr || !arr[idx]) return;
+
+    if (campo === 'label') {
+      arr[idx].label = (el.textContent || '').trim() || 'Senza nome';
+    } else if (campo === 'base_annuale' || campo === 'importo_fisso') {
+      var val = _parseImporto(el.textContent);
+      arr[idx][campo] = val;
+      el.textContent = val !== 0 ? _formatImporto(val) : '';
+    } else if (campo === 'crescita_annua' || campo === 'pct_ricavi' || campo === 'var_pct_annua') {
+      var pct = _parsePct(el.textContent);
+      arr[idx][campo] = pct;
+      el.textContent = _formatPct(pct);
+    }
+    Projects.segnaModificato();
+  }
+
+  function _handleCircolanteField(el, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var val = parseInt((el.textContent || '').replace(/\D/g, ''), 10) || 0;
+    progetto.driver.circolante[campo] = val;
+    el.textContent = val || '';
+    Projects.segnaModificato();
+  }
+
+  function _handleFiscaleField(el, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var val = _parsePct(el.textContent);
+    progetto.driver.fiscale[campo] = val;
+    el.textContent = _formatPct(val);
+    Projects.segnaModificato();
+  }
+
+  function _handleFiscaleAnnoField(el, param, anno) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    if (!progetto.driver.fiscale[param]) progetto.driver.fiscale[param] = {};
+    var val = _parsePct(el.textContent);
+    progetto.driver.fiscale[param][anno] = val;
+    el.textContent = _formatPct(val);
+    Projects.segnaModificato();
+  }
+
+  function rimuoviDriver(tipo, idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var arr = progetto.driver[tipo];
+    if (!arr) return;
+    arr.splice(idx, 1);
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  /* ── Formattazione percentuali ───────────────────────────── */
+
+  function _formatPct(val) {
+    if (val === null || val === undefined || val === 0) return '';
+    // Mostra come percentuale: 0.24 -> "24" oppure 2.5 -> "2,5"
+    // Se il valore e gia in forma percentuale (>1 o <-1 per valori grandi), lo mostra diretto
+    // Convenzione: valori < 1 in forma decimale (0.24 = 24%), valori >= 1 gia percentuali
+    var pct = Math.abs(val) < 1 ? val * 100 : val;
+    var str = pct % 1 === 0 ? String(pct) : pct.toFixed(2).replace('.', ',').replace(/,?0+$/, '');
+    return str;
+  }
+
+  function _parsePct(str) {
+    if (!str || str.trim() === '') return 0;
+    var clean = str.replace(/%/g, '').replace(',', '.').trim();
+    var val = parseFloat(clean);
+    if (isNaN(val)) return 0;
+    // Restituisce in forma decimale se sembra una percentuale (es. "24" -> 0.24)
+    return Math.abs(val) > 1 ? val / 100 : val;
+  }
+
+  function _formatDec(val) {
+    if (val === null || val === undefined) return '';
+    return val % 1 === 0 ? String(val) : val.toFixed(2).replace('.', ',');
+  }
+
   /* ── API pubblica ────────────────────────────────────────── */
   return {
     init,
@@ -953,7 +1514,23 @@ const UI = (() => {
     expandAll,
     collapseAll,
     _handleAmountBlur,
-    _handleAmountKey
+    _handleAmountKey,
+    // Fase 3
+    switchDriverTab,
+    aggiungiRicavo,
+    importaRicaviDaCE,
+    aggiungiCosto,
+    importaCostiDaCE,
+    ciclaTipoDriver,
+    toggleInflazione,
+    rimuoviDriver,
+    editProfiloStagionale,
+    _resetProfiloUniforme,
+    _salvaProfiloStagionale,
+    _handleDriverField,
+    _handleCircolanteField,
+    _handleFiscaleField,
+    _handleFiscaleAnnoField
   };
 
 })();

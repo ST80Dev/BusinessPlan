@@ -59,10 +59,15 @@ const Projects = (() => {
       storico,
       eventi:    [],
       driver: {
-        ricavi:     [],
-        costi:      [],
+        ricavi:     [],    // [{ id, voce_ce, label, base_annuale, crescita_annua, profilo_stagionale[12] }]
+        costi:      [],    // [{ id, voce_ce, label, tipo_driver, pct_ricavi, var_pct_annua, importo_fisso, soggetto_inflazione }]
         circolante: { dso: 60, dpo: 45, dio: 30 },
-        fiscale:    { aliquota_ires: 0.24, aliquota_irap: 0.039 }
+        fiscale: {
+          aliquota_ires: 0.24,
+          aliquota_irap: 0.039,
+          inflazione:    _creaParamAnnuale(anniPrev, 0.02),
+          var_personale: _creaParamAnnuale(anniPrev, 0)
+        }
       },
       proiezioni: {
         mensili: {},
@@ -89,6 +94,70 @@ const Projects = (() => {
         passivo: Schema.creaDataVuoto(Schema.SP_PASSIVO)
       },
       ce: scenario === 'sp_ce' ? Schema.creaDataVuoto(Schema.CE) : null
+    };
+  }
+
+  /**
+   * Crea un oggetto { anno: valore } per ogni anno previsionale.
+   * @param {Array}  anniPrev - es. [2025, 2026, 2027]
+   * @param {number} valDefault
+   * @returns {Object} es. { "2025": 0.02, "2026": 0.02, "2027": 0.02 }
+   */
+  function _creaParamAnnuale(anniPrev, valDefault) {
+    const obj = {};
+    anniPrev.forEach(function(a) { obj[String(a)] = valDefault; });
+    return obj;
+  }
+
+  /** Contatore incrementale per ID driver. */
+  let _nextDriverId = 1;
+
+  /**
+   * Genera un ID univoco per un driver ricavo o costo.
+   * @param {string} prefisso - 'drv_r' o 'drv_c'
+   * @returns {string}
+   */
+  function _generaDriverId(prefisso) {
+    return prefisso + (_nextDriverId++);
+  }
+
+  /**
+   * Crea un driver ricavo con valori default.
+   * @param {string|null} voceCe - id voce CE collegata (null se personalizzata)
+   * @param {string} label
+   * @param {number} baseAnnuale
+   * @returns {Object}
+   */
+  function creaDriverRicavo(voceCe, label, baseAnnuale) {
+    return {
+      id:                  _generaDriverId('drv_r'),
+      voce_ce:             voceCe,
+      label:               label,
+      base_annuale:        baseAnnuale || 0,
+      crescita_annua:      0,
+      profilo_stagionale:  [8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34]
+    };
+  }
+
+  /**
+   * Crea un driver costo con valori default.
+   * @param {string|null} voceCe
+   * @param {string} label
+   * @param {string} tipoDriver - 'pct_ricavi' | 'fisso' | 'personale'
+   * @returns {Object}
+   */
+  function creaDriverCosto(voceCe, label, tipoDriver) {
+    const isPersonale = tipoDriver === 'personale';
+    return {
+      id:                    _generaDriverId('drv_c'),
+      voce_ce:               voceCe,
+      label:                 label,
+      tipo_driver:           isPersonale ? 'fisso' : tipoDriver,  // personale usa 'fisso' internamente
+      pct_ricavi:            tipoDriver === 'pct_ricavi' ? 0 : null,
+      var_pct_annua:         tipoDriver === 'pct_ricavi' ? 0 : null,
+      importo_fisso:         tipoDriver !== 'pct_ricavi' ? 0 : null,
+      soggetto_inflazione:   !isPersonale && tipoDriver === 'fisso',
+      usa_var_personale:     isPersonale
     };
   }
 
@@ -478,7 +547,10 @@ const Projects = (() => {
     haModifiche,
     getProgetto,
     setValoreStorico,
-    getValoreStorico
+    getValoreStorico,
+    // Fase 3 — driver
+    creaDriverRicavo,
+    creaDriverCosto
   };
 
 })();
