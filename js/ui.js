@@ -109,7 +109,7 @@ const UI = (() => {
     const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
     badges.innerHTML = `
       <span class="header-badge header-badge-scenario">${scenarioLabels[progetto.meta.scenario] || progetto.meta.scenario}</span>
-      <span class="header-badge header-badge-anno">${progetto.meta.anno_base}</span>
+      <span class="header-badge header-badge-anno">${progetto.meta.scenario === 'costituenda' ? 'Inizio' : 'Base'}: ${progetto.meta.anno_base}</span>
     `;
 
     // Pulsanti salva
@@ -330,6 +330,30 @@ const UI = (() => {
     el.classList.add('active');
   }
 
+  /**
+   * Aggiorna etichette anno nel modale nuovo progetto in base allo scenario.
+   * Per costituenda: "Anno di inizio attività" invece di "Anno base (storico)".
+   * @param {string} scenario
+   */
+  function aggiornaLabelAnno(scenario) {
+    var labelEl = document.getElementById('np-anno-label');
+    var hintEl  = document.getElementById('np-anno-hint');
+    var anniHint = document.getElementById('np-anni-hint');
+    var annoField = document.getElementById('np-anno-base');
+
+    if (scenario === 'costituenda') {
+      if (labelEl) labelEl.textContent = 'Anno di inizio attività *';
+      if (hintEl)  hintEl.textContent  = 'Primo anno operativo della nuova società';
+      if (anniHint) anniHint.textContent = 'Da 1 a 8 anni di previsione';
+      if (annoField) annoField.dataset.placeholder = 'Es. 2025';
+    } else {
+      if (labelEl) labelEl.textContent = 'Anno base (storico) *';
+      if (hintEl)  hintEl.textContent  = "Anno dell'ultimo bilancio approvato";
+      if (anniHint) anniHint.textContent = "Da 1 a 8 anni oltre l'anno base";
+      if (annoField) annoField.dataset.placeholder = 'Es. 2024';
+    }
+  }
+
   /* ──────────────────────────────────────────────────────────
      Status bar
      ────────────────────────────────────────────────────────── */
@@ -547,7 +571,7 @@ const UI = (() => {
     // Toolbar
     html += `<div class="section-toolbar">
       <div class="section-toolbar-left">
-        <span class="header-badge header-badge-anno">Anno: ${anno}</span>
+        <span class="header-badge header-badge-anno">${scenario === 'costituenda' ? 'Avvio' : 'Anno'}: ${anno}</span>
         <div class="btn btn-ghost btn-sm" onclick="UI.expandAll()">Espandi tutto</div>
         <div class="btn btn-ghost btn-sm" onclick="UI.collapseAll()">Comprimi tutto</div>
       </div>
@@ -1515,6 +1539,7 @@ const UI = (() => {
     collapseAll,
     _handleAmountBlur,
     _handleAmountKey,
+    aggiornaLabelAnno,
     // Fase 3
     switchDriverTab,
     aggiungiRicavo,

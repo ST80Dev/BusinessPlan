@@ -35,12 +35,17 @@ const Projects = (() => {
    */
   function _creaStruttura(meta) {
     const oggi = new Date().toISOString().split('T')[0];
+    const isCostitutenda = meta.scenario === 'costituenda';
     const anniPrev = [];
-    for (let i = 1; i <= meta.anni_previsione; i++) {
+
+    // Per costituenda: anno_base = anno inizio attivita, le previsioni partono da li
+    // Per sp_ce/sp_only: anno_base = ultimo bilancio, previsioni da anno_base + 1
+    const primoAnnoPrev = isCostitutenda ? 0 : 1;
+    for (let i = primoAnnoPrev; i < primoAnnoPrev + meta.anni_previsione; i++) {
       anniPrev.push(meta.anno_base + i);
     }
 
-    // Dati storici vuoti
+    // Dati storici vuoti (per costituenda: SP di avvio, non un bilancio storico)
     const storico = {};
     storico[meta.anno_base] = _creaAnnoVuoto(meta.scenario);
 
