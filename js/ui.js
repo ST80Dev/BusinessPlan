@@ -1219,7 +1219,7 @@ const UI = (() => {
       gruppi[catId].push({ drv: c, idx: i });
     }
 
-    html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:100px"><col style="width:120px"><col style="width:100px"><col style="width:70px"><col style="width:50px"></colgroup>';
+    html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:90px"><col style="width:110px"><col style="width:90px"><col style="width:60px"><col style="width:60px"><col style="width:40px"></colgroup>';
 
     for (var ci = 0; ci < categorie.length; ci++) {
       var cat = categorie[ci];
@@ -1231,7 +1231,7 @@ const UI = (() => {
       html += '<thead><tr class="row-sottomastro"><td colspan="5" style="padding:8px 12px;font-weight:700">' + cat.label + '</td>';
       html += '<td style="text-align:right;padding-right:12px"><div class="add-conto-btn" onclick="UI.aggiungiCosto(\'' + cat.id + '\')" style="display:inline-flex">+ Aggiungi</div></td></tr>';
       if (items.length > 0) {
-        html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td></td></tr>';
+        html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td class="cell-amount">IVA</td><td></td></tr>';
       }
       html += '</thead><tbody>';
 
@@ -1260,6 +1260,10 @@ const UI = (() => {
           var flagColor = cc.soggetto_inflazione ? 'var(--color-success)' : 'var(--color-text-muted)';
           html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + flagColor + '" onclick="UI.toggleInflazione(' + ii + ')">' + flagIcon + '</div></td>';
         }
+
+        // IVA %
+        var ivaPct = cc.iva_pct !== undefined ? cc.iva_pct : 0.22;
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" style="width:50px" data-placeholder="22%" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'iva_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(ivaPct) + '</div></td>';
 
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'costi\',' + ii + ')">✕</div></td>';
         html += '</tr>';
@@ -1745,6 +1749,32 @@ const UI = (() => {
     html += '<div class="form-field" contenteditable="true" style="width:100px;text-align:right;font-family:var(--font-mono)" onblur="UI._handleFiscaleField(this,\'aliquota_irap\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(fisc.aliquota_irap) + '</div></div>';
     html += '</div>';
 
+    // IVA
+    html += '<h3 style="font-size:14px;font-weight:700;margin:24px 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">IVA</h3>';
+
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><span class="form-label">Aliquota IVA media ricavi %</span>';
+    html += '<div class="form-field" contenteditable="true" style="width:100px;text-align:right;font-family:var(--font-mono)" onblur="UI._handleFiscaleField(this,\'iva_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(fisc.iva_ricavi || 0.22) + '</div>';
+    html += '<div class="form-hint">IVA applicata ai ricavi per calcolo debito IVA</div></div>';
+    html += '</div>';
+
+    html += '<div style="display:flex;gap:20px;align-items:center;margin-top:8px;margin-bottom:4px">';
+    html += '<div class="form-group"><span class="form-label">Liquidazione IVA</span>';
+    var liqIva = fisc.liquidazione_iva || 'mensile';
+    html += '<div class="toggle-group" id="tg-liq-iva" style="width:200px">';
+    html += '<div class="toggle-item' + (liqIva === 'mensile' ? ' active' : '') + '" data-value="mensile" onclick="UI._handleFiscaleToggle(\'liquidazione_iva\',\'mensile\')">Mensile</div>';
+    html += '<div class="toggle-item' + (liqIva === 'trimestrale' ? ' active' : '') + '" data-value="trimestrale" onclick="UI._handleFiscaleToggle(\'liquidazione_iva\',\'trimestrale\')">Trimestrale</div>';
+    html += '</div></div>';
+
+    html += '<div class="form-group"><span class="form-label">Rimborso IVA trimestrale</span>';
+    var rimbIva = fisc.rimborso_iva_trim || false;
+    html += '<div class="toggle-group" id="tg-rimb-iva" style="width:140px">';
+    html += '<div class="toggle-item' + (rimbIva ? ' active' : '') + '" data-value="true" onclick="UI._handleFiscaleToggle(\'rimborso_iva_trim\',true)">Sì</div>';
+    html += '<div class="toggle-item' + (!rimbIva ? ' active' : '') + '" data-value="false" onclick="UI._handleFiscaleToggle(\'rimborso_iva_trim\',false)">No</div>';
+    html += '</div>';
+    html += '<div class="form-hint">Per società con IVA strutturalmente a credito (art. 38-bis)</div></div>';
+    html += '</div>';
+
     // Inflazione per anno
     html += '<h3 style="font-size:14px;font-weight:700;margin:24px 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Inflazione prevista %</h3>';
     html += '<div class="form-hint mb-8">Applicata automaticamente ai costi fissi soggetti a inflazione.</div>';
@@ -1875,7 +1905,7 @@ const UI = (() => {
       var val = _parseImporto(el.textContent);
       arr[idx][campo] = val;
       el.textContent = val !== 0 ? _formatImporto(val) : '';
-    } else if (campo === 'crescita_annua' || campo === 'pct_ricavi' || campo === 'var_pct_annua') {
+    } else if (campo === 'crescita_annua' || campo === 'pct_ricavi' || campo === 'var_pct_annua' || campo === 'iva_pct') {
       var pct = _parsePct(el.textContent);
       arr[idx][campo] = pct;
       el.textContent = _formatPct(pct);
@@ -1909,6 +1939,14 @@ const UI = (() => {
     progetto.driver.fiscale[param][anno] = val;
     el.textContent = _formatPct(val);
     Projects.segnaModificato();
+  }
+
+  function _handleFiscaleToggle(campo, valore) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    progetto.driver.fiscale[campo] = valore;
+    Projects.segnaModificato();
+    _renderDriver();
   }
 
   function rimuoviDriver(tipo, idx) {
@@ -2109,6 +2147,7 @@ const UI = (() => {
     _handleCircolanteField,
     _handleFiscaleField,
     _handleFiscaleAnnoField,
+    _handleFiscaleToggle,
     // Conti custom
     aggiungiContoCustom,
     _handleCustomLabelBlur,

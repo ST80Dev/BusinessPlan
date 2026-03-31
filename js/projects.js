@@ -81,6 +81,9 @@ const Projects = (() => {
         fiscale: {
           aliquota_ires: 0.24,
           aliquota_irap: 0.039,
+          iva_ricavi:        0.22,        // Aliquota IVA media sui ricavi
+          liquidazione_iva:  'mensile',   // 'mensile' | 'trimestrale'
+          rimborso_iva_trim: false,       // Rimborso IVA trimestrale (art. 38-bis)
           inflazione:    _creaParamAnnuale(anniPrev, 0.02),
           var_personale: _creaParamAnnuale(anniPrev, 0)
         }
@@ -253,16 +256,21 @@ const Projects = (() => {
    */
   function creaDriverCosto(voceCe, label, tipoDriver) {
     const isPersonale = tipoDriver === 'personale';
+    // IVA default: 22% per costi con IVA, 0% per personale/ammortamenti/accantonamenti
+    var ivaDefault = 0.22;
+    if (isPersonale) ivaDefault = 0;
+    if (voceCe && (voceCe.indexOf('ce.B.10') === 0 || voceCe.indexOf('ce.B.12') === 0 || voceCe.indexOf('ce.B.13') === 0)) ivaDefault = 0;
     return {
       id:                    _generaDriverId('drv_c'),
       voce_ce:               voceCe,
       label:                 label,
-      tipo_driver:           isPersonale ? 'fisso' : tipoDriver,  // personale usa 'fisso' internamente
+      tipo_driver:           isPersonale ? 'fisso' : tipoDriver,
       pct_ricavi:            tipoDriver === 'pct_ricavi' ? 0 : null,
       var_pct_annua:         tipoDriver === 'pct_ricavi' ? 0 : null,
       importo_fisso:         tipoDriver !== 'pct_ricavi' ? 0 : null,
       soggetto_inflazione:   !isPersonale && tipoDriver === 'fisso',
-      usa_var_personale:     isPersonale
+      usa_var_personale:     isPersonale,
+      iva_pct:               ivaDefault
     };
   }
 
