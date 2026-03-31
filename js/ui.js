@@ -885,21 +885,23 @@ const UI = (() => {
   }
 
   function _applyCollapse() {
-    document.querySelectorAll('.schema-table tr[data-node-id]').forEach(function(tr) {
-      const nodeId = tr.dataset.nodeId;
-      const parents = (tr.dataset.parents || '').split(' ').filter(Boolean);
+    document.querySelectorAll('.schema-table tr[data-parents]').forEach(function(tr) {
+      var nodeId = tr.dataset.nodeId;
+      var parents = (tr.dataset.parents || '').split(' ').filter(Boolean);
 
-      // Aggiorna icona collasso sulla riga stessa
-      if (_collapsed.has(nodeId)) {
-        tr.classList.add('collapsed');
-      } else {
-        tr.classList.remove('collapsed');
+      // Aggiorna icona collasso sulla riga stessa (solo se ha un nodeId)
+      if (nodeId) {
+        if (_collapsed.has(nodeId)) {
+          tr.classList.add('collapsed');
+        } else {
+          tr.classList.remove('collapsed');
+        }
       }
 
       // Nascondi se un qualsiasi antenato e collassato
-      if (parents.some(function(pid) { return _collapsed.has(pid); })) {
+      if (parents.length > 0 && parents.some(function(pid) { return _collapsed.has(pid); })) {
         tr.classList.add('row-collapsed');
-      } else {
+      } else if (parents.length > 0) {
         tr.classList.remove('row-collapsed');
       }
     });
@@ -1185,33 +1187,12 @@ const UI = (() => {
     html += '<div class="section-toolbar"><div class="section-toolbar-left">';
     html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Altre voci di costo</span>';
     html += '</div><div class="section-toolbar-right">';
-    html += '<div class="form-select-wrap" style="display:inline-block;position:relative">';
-    html += '<div class="btn btn-primary btn-sm" onclick="UI._toggleCatMenu()" id="btn-add-costo">+ Aggiungi voce</div>';
-    html += '<div class="form-select-dropdown hidden" id="cat-menu" style="min-width:200px;right:0;left:auto">';
-    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.6\')">B.6 — Materie prime</div>';
-    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.7\')">B.7 — Servizi</div>';
-    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.8\')">B.8 — Godimento beni terzi</div>';
-    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.11\')">B.11 — Var. rimanenze</div>';
-    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.12\')">B.12 — Acc. rischi</div>';
-    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.14\')">B.14 — Oneri diversi</div>';
-    html += '</div></div>';
     if (progetto.meta.scenario === 'sp_ce') {
-      html += ' <div class="btn btn-secondary btn-sm" onclick="UI.importaCostiDaCE()">Importa da CE</div>';
+      html += '<div class="btn btn-secondary btn-sm" onclick="UI.importaCostiDaCE()">Importa da CE</div>';
     }
     html += '</div></div>';
 
-    if (costi.length === 0) {
-      html += '<div class="projects-empty" style="padding:32px"><p>Nessuna voce di costo configurata.<br>';
-      if (progetto.meta.scenario === 'sp_ce') {
-        html += 'Clicca "Importa da CE" per popolare dai dati storici, oppure "Aggiungi voce".';
-      } else {
-        html += 'Clicca "Aggiungi voce" per creare la prima voce di costo.';
-      }
-      html += '</p></div>';
-      return html;
-    }
-
-    // Categorie CE per raggruppamento
+    // Categorie CE per raggruppamento (mostrate sempre, anche vuote)
     var categorie = [
       { id: 'ce.B.6',  label: 'B.6 — Materie prime' },
       { id: 'ce.B.7',  label: 'B.7 — Servizi' },
@@ -1241,11 +1222,16 @@ const UI = (() => {
     for (var ci = 0; ci < categorie.length; ci++) {
       var cat = categorie[ci];
       var items = gruppi[cat.id];
-      if (!items || items.length === 0) continue;
+      if (!items) items = [];
+      if (cat.id === '_altro' && items.length === 0) continue;
 
-      // Header categoria
-      html += '<thead><tr class="row-sottomastro"><td colspan="6" style="padding:8px 12px;font-weight:700">' + cat.label + '</td></tr>';
-      html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td></td></tr></thead><tbody>';
+      // Header categoria con pulsante "+"
+      html += '<thead><tr class="row-sottomastro"><td colspan="5" style="padding:8px 12px;font-weight:700">' + cat.label + '</td>';
+      html += '<td style="text-align:right;padding-right:12px"><div class="add-conto-btn" onclick="UI.aggiungiCosto(\'' + cat.id + '\')" style="display:inline-flex">+ Aggiungi</div></td></tr>';
+      if (items.length > 0) {
+        html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td></td></tr>';
+      }
+      html += '</thead><tbody>';
 
       for (var j = 0; j < items.length; j++) {
         var item = items[j];
