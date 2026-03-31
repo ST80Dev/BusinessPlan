@@ -1007,7 +1007,8 @@ const UI = (() => {
     if (val === 0 || val === undefined || val === null) return '0';
     var neg = val < 0;
     var abs = Math.abs(Math.round(val));
-    var str = abs.toLocaleString('it-IT');
+    // Separatore migliaia manuale (il toLocaleString puo non funzionare ovunque)
+    var str = String(abs).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return neg ? '-' + str : str;
   }
 
@@ -1184,7 +1185,16 @@ const UI = (() => {
     html += '<div class="section-toolbar"><div class="section-toolbar-left">';
     html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Altre voci di costo</span>';
     html += '</div><div class="section-toolbar-right">';
-    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiCosto()">+ Aggiungi voce</div>';
+    html += '<div class="form-select-wrap" style="display:inline-block;position:relative">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI._toggleCatMenu()" id="btn-add-costo">+ Aggiungi voce</div>';
+    html += '<div class="form-select-dropdown hidden" id="cat-menu" style="min-width:200px;right:0;left:auto">';
+    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.6\')">B.6 — Materie prime</div>';
+    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.7\')">B.7 — Servizi</div>';
+    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.8\')">B.8 — Godimento beni terzi</div>';
+    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.11\')">B.11 — Var. rimanenze</div>';
+    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.12\')">B.12 — Acc. rischi</div>';
+    html += '<div class="form-select-option" onclick="UI.aggiungiCosto(\'ce.B.14\')">B.14 — Oneri diversi</div>';
+    html += '</div></div>';
     if (progetto.meta.scenario === 'sp_ce') {
       html += ' <div class="btn btn-secondary btn-sm" onclick="UI.importaCostiDaCE()">Importa da CE</div>';
     }
@@ -1201,53 +1211,116 @@ const UI = (() => {
       return html;
     }
 
-    // Tabella costi (usa indice reale nell'array completo)
+    // Categorie CE per raggruppamento
+    var categorie = [
+      { id: 'ce.B.6',  label: 'B.6 — Materie prime' },
+      { id: 'ce.B.7',  label: 'B.7 — Servizi' },
+      { id: 'ce.B.8',  label: 'B.8 — Godimento beni di terzi' },
+      { id: 'ce.B.11', label: 'B.11 — Variazione rimanenze' },
+      { id: 'ce.B.12', label: 'B.12 — Accantonamenti rischi' },
+      { id: 'ce.B.13', label: 'B.13 — Altri accantonamenti' },
+      { id: 'ce.B.14', label: 'B.14 — Oneri diversi di gestione' },
+      { id: '_altro',  label: 'Altre voci' }
+    ];
+
+    // Raggruppa i costi per categoria
     var costiAll = progetto.driver.costi;
-    html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:120px"><col style="width:130px"><col style="width:110px"><col style="width:90px"><col style="width:60px"></colgroup>';
-    html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Tipo driver</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td></td></tr></thead><tbody>';
+    var gruppi = {};
+    categorie.forEach(function(cat) { gruppi[cat.id] = []; });
 
     for (var i = 0; i < costiAll.length; i++) {
       var c = costiAll[i];
-      if (c.usa_var_personale) continue; // personale gestito dal pannello dedicato
-      html += '<tr class="row-conto">';
-
-      // Label
-      html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:180px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'label\')">' + _escapeHtml(c.label) + '</div></td>';
-
-      // Tipo driver (cicla solo tra pct_ricavi e fisso, no personale)
-      var tipoLabel = c.tipo_driver === 'pct_ricavi' ? '% ricavi' : 'Fisso';
-      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaTipoCosto(' + i + ')">' + tipoLabel + '</div></td>';
-
-      // Valore
-      if (c.tipo_driver === 'pct_ricavi') {
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'pct_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(c.pct_ricavi) + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'var_pct_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(c.var_pct_annua) + '</div></td>';
-      } else {
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'importo_fisso\')" onkeydown="UI._handleAmountKey(event)">' + (c.importo_fisso ? _formatImporto(c.importo_fisso) : '') + '</div></td>';
-        html += '<td class="cell-amount"><span class="text-muted" style="font-size:12px">—</span></td>';
-      }
-
-      // Flag inflazione
-      if (c.tipo_driver === 'pct_ricavi') {
-        html += '<td class="cell-amount"><span class="text-muted" style="font-size:11px">n/a</span></td>';
-      } else {
-        var flagIcon = c.soggetto_inflazione ? '✓' : '✕';
-        var flagColor = c.soggetto_inflazione ? 'var(--color-success)' : 'var(--color-text-muted)';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + flagColor + '" onclick="UI.toggleInflazione(' + i + ')">' + flagIcon + '</div></td>';
-      }
-
-      html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'costi\',' + i + ')">✕</div></td>';
-      html += '</tr>';
+      if (c.usa_var_personale) continue;
+      var catId = _categoriaCosto(c.voce_ce);
+      if (!gruppi[catId]) gruppi[catId] = gruppi['_altro'];
+      gruppi[catId].push({ drv: c, idx: i });
     }
-    html += '</tbody></table>';
+
+    html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:100px"><col style="width:120px"><col style="width:100px"><col style="width:70px"><col style="width:50px"></colgroup>';
+
+    for (var ci = 0; ci < categorie.length; ci++) {
+      var cat = categorie[ci];
+      var items = gruppi[cat.id];
+      if (!items || items.length === 0) continue;
+
+      // Header categoria
+      html += '<thead><tr class="row-sottomastro"><td colspan="6" style="padding:8px 12px;font-weight:700">' + cat.label + '</td></tr>';
+      html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td></td></tr></thead><tbody>';
+
+      for (var j = 0; j < items.length; j++) {
+        var item = items[j];
+        var cc = item.drv;
+        var ii = item.idx;
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:160px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'label\')">' + _escapeHtml(cc.label) + '</div></td>';
+
+        var tipoLabel = cc.tipo_driver === 'pct_ricavi' ? '% ricavi' : 'Fisso';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaTipoCosto(' + ii + ')">' + tipoLabel + '</div></td>';
+
+        if (cc.tipo_driver === 'pct_ricavi') {
+          html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'pct_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.pct_ricavi) + '</div></td>';
+          html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'var_pct_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.var_pct_annua) + '</div></td>';
+        } else {
+          html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'importo_fisso\')" onkeydown="UI._handleAmountKey(event)">' + (cc.importo_fisso ? _formatImporto(cc.importo_fisso) : '') + '</div></td>';
+          html += '<td class="cell-amount"><span class="text-muted" style="font-size:12px">—</span></td>';
+        }
+
+        if (cc.tipo_driver === 'pct_ricavi') {
+          html += '<td class="cell-amount"><span class="text-muted" style="font-size:11px">n/a</span></td>';
+        } else {
+          var flagIcon = cc.soggetto_inflazione ? '✓' : '✕';
+          var flagColor = cc.soggetto_inflazione ? 'var(--color-success)' : 'var(--color-text-muted)';
+          html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + flagColor + '" onclick="UI.toggleInflazione(' + ii + ')">' + flagIcon + '</div></td>';
+        }
+
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'costi\',' + ii + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody>';
+    }
+    html += '</table>';
 
     return html;
   }
 
-  function aggiungiCosto() {
+  function _toggleCatMenu() {
+    var menu = document.getElementById('cat-menu');
+    if (menu) menu.classList.toggle('hidden');
+  }
+
+  /** Determina la categoria CE di una voce costo dal suo voce_ce o parent. */
+  function _categoriaCosto(voceCe) {
+    if (!voceCe) return '_altro';
+    // Mappa i conti foglia alla categoria sottomastro
+    if (voceCe.indexOf('ce.B.6') === 0) return 'ce.B.6';
+    if (voceCe.indexOf('ce.B.7') === 0) return 'ce.B.7';
+    if (voceCe.indexOf('ce.B.8') === 0) return 'ce.B.8';
+    if (voceCe.indexOf('ce.B.11') === 0) return 'ce.B.11';
+    if (voceCe.indexOf('ce.B.12') === 0) return 'ce.B.12';
+    if (voceCe.indexOf('ce.B.13') === 0) return 'ce.B.13';
+    if (voceCe.indexOf('ce.B.14') === 0) return 'ce.B.14';
+    return '_altro';
+  }
+
+  function aggiungiCosto(catId) {
     var progetto = Projects.getProgetto();
     if (!progetto) return;
-    var drv = Projects.creaDriverCosto(null, 'Nuova voce costo', 'fisso');
+
+    if (!catId) {
+      // Mostra scelta categoria
+      var cats = [
+        { id: 'ce.B.6',  label: 'B.6 Materie prime' },
+        { id: 'ce.B.7',  label: 'B.7 Servizi' },
+        { id: 'ce.B.8',  label: 'B.8 Godimento beni terzi' },
+        { id: 'ce.B.11', label: 'B.11 Var. rimanenze' },
+        { id: 'ce.B.14', label: 'B.14 Oneri diversi' }
+      ];
+      var scelta = cats.map(function(c) { return c.label; }).join('\n');
+      // Per ora cicla su B.7 (la piu comune)
+      catId = 'ce.B.7';
+    }
+
+    var drv = Projects.creaDriverCosto(catId, 'Nuova voce costo', 'fisso');
     progetto.driver.costi.push(drv);
     Projects.segnaModificato();
     _renderDriver();
@@ -1926,23 +1999,21 @@ const UI = (() => {
     html += '<td class="cell-amount"><span class="amount-computed' + valCls + '" data-nodo-id="' + nodo.id + '" data-sez="' + sez + '" data-lato="' + lato + '">' + _formatImporto(netto) + '</span></td>';
     html += '</tr>\n';
 
-    // Sotto-riga: Costo storico
-    html += '<tr class="row-conto' + childHidden + '" data-parents="' + childPar + '">';
-    html += '<td style="padding-left:' + childPad + 'px;color:var(--color-text-secondary);font-size:12px">Costo storico</td>';
-    html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'costo_storico\')" onkeydown="UI._handleAmountKey(event)">' + (costo ? _formatImporto(costo) : '') + '</div></td>';
-    html += '</tr>\n';
+    // Sotto-righe con layout compatto: Costo storico | Fondo | Aliquota su una riga
+    html += '<tr class="row-conto' + childHidden + '" data-parents="' + childPar + '" style="background:var(--color-surface-alt)">';
+    html += '<td colspan="2" style="padding-left:' + childPad + 'px;font-size:12px">';
+    html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
 
-    // Sotto-riga: Fondo ammortamento
-    html += '<tr class="row-conto' + childHidden + '" data-parents="' + childPar + '">';
-    html += '<td style="padding-left:' + childPad + 'px;color:var(--color-text-secondary);font-size:12px">Fondo ammortamento</td>';
-    html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'fondo_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + (fondo ? _formatImporto(fondo) : '') + '</div></td>';
-    html += '</tr>\n';
+    html += '<span style="color:var(--color-text-muted);min-width:90px">Costo storico</span>';
+    html += '<div class="amount-field" contenteditable="true" style="width:110px" data-placeholder="0" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'costo_storico\')" onkeydown="UI._handleAmountKey(event)">' + (costo ? _formatImporto(costo) : '') + '</div>';
 
-    // Sotto-riga: Aliquota ammortamento
-    html += '<tr class="row-conto' + childHidden + '" data-parents="' + childPar + '">';
-    html += '<td style="padding-left:' + childPad + 'px;color:var(--color-text-secondary);font-size:12px">Aliquota ammortamento %</td>';
-    html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" style="width:80px" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'aliquota\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(aliq) + '</div></td>';
-    html += '</tr>\n';
+    html += '<span style="color:var(--color-text-muted);min-width:60px">Fondo</span>';
+    html += '<div class="amount-field" contenteditable="true" style="width:110px" data-placeholder="0" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'fondo_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + (fondo ? _formatImporto(fondo) : '') + '</div>';
+
+    html += '<span style="color:var(--color-text-muted);min-width:50px">Aliq. %</span>';
+    html += '<div class="amount-field" contenteditable="true" style="width:70px" data-placeholder="0%" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'aliquota\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(aliq) + '</div>';
+
+    html += '</div></td></tr>\n';
 
     return html;
   }
@@ -2015,12 +2086,10 @@ const UI = (() => {
 
   function _formatPct(val) {
     if (val === null || val === undefined || val === 0) return '';
-    // Mostra come percentuale: 0.24 -> "24" oppure 2.5 -> "2,5"
-    // Se il valore e gia in forma percentuale (>1 o <-1 per valori grandi), lo mostra diretto
-    // Convenzione: valori < 1 in forma decimale (0.24 = 24%), valori >= 1 gia percentuali
+    // Converti in forma percentuale per display
     var pct = Math.abs(val) < 1 ? val * 100 : val;
     var str = pct % 1 === 0 ? String(pct) : pct.toFixed(2).replace('.', ',').replace(/,?0+$/, '');
-    return str;
+    return str + '%';
   }
 
   function _parsePct(str) {
@@ -2028,7 +2097,7 @@ const UI = (() => {
     var clean = str.replace(/%/g, '').replace(',', '.').trim();
     var val = parseFloat(clean);
     if (isNaN(val)) return 0;
-    // Restituisce in forma decimale se sembra una percentuale (es. "24" -> 0.24)
+    // Restituisce sempre in forma decimale (es. "24" o "24%" -> 0.24)
     return Math.abs(val) > 1 ? val / 100 : val;
   }
 
@@ -2081,8 +2150,9 @@ const UI = (() => {
     _handleCustomLabelBlur,
     // Immobilizzazioni
     _handleImmobField,
-    // Personale
+    // Costi
     ciclaTipoCosto,
+    _toggleCatMenu,
     _handlePersField,
     _handlePersRalAnno,
     aggiungiVarOrganico,
