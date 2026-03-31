@@ -1040,6 +1040,7 @@ const UI = (() => {
     html += '<div class="tabs" id="driver-tabs">';
     html += _driverTabItem('drv-ricavi', 'Ricavi');
     html += _driverTabItem('drv-costi', 'Costi');
+    html += _driverTabItem('drv-personale', 'Personale');
     html += _driverTabItem('drv-circolante', 'Circolante');
     html += _driverTabItem('drv-patrimoniali', 'Patrimoniali');
     html += _driverTabItem('drv-fiscale', 'Fiscale');
@@ -1052,6 +1053,10 @@ const UI = (() => {
 
     html += '<div class="tab-pane' + (_driverTab === 'drv-costi' ? ' active' : '') + '" id="drv-costi">';
     html += _renderDriverCosti(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_driverTab === 'drv-personale' ? ' active' : '') + '" id="drv-personale">';
+    html += _renderPannelloPersonale(progetto);
     html += '</div>';
 
     html += '<div class="tab-pane' + (_driverTab === 'drv-circolante' ? ' active' : '') + '" id="drv-circolante">';
@@ -1179,9 +1184,6 @@ const UI = (() => {
     // Filtra le voci personale (gestite dal pannello dedicato)
     var costi = progetto.driver.costi.filter(function(c) { return !c.usa_var_personale; });
     var html = '';
-
-    // ── Pannello Personale ──
-    html += _renderPannelloPersonale(progetto);
 
     // ── Voci costo (non personale) ──
     html += '<div class="section-toolbar"><div class="section-toolbar-left">';
@@ -1398,29 +1400,7 @@ const UI = (() => {
     }
     html += '</div>';
 
-    // Variazioni organico
-    html += '<div style="margin-bottom:12px;font-size:13px;font-weight:600;color:var(--color-text-secondary)">Variazioni organico per anno</div>';
-
-    var variazioni = pers.variazioni_organico || [];
-    html += '<div class="section-toolbar" style="margin-bottom:8px"><div class="section-toolbar-right">';
-    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiVarOrganico()">+ Aggiungi variazione</div>';
-    html += '</div></div>';
-
-    if (variazioni.length > 0) {
-      html += '<table class="schema-table" style="max-width:500px"><colgroup><col style="width:100px"><col style="width:120px"><col style="width:100px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-sottomastro"><td>Anno</td><td class="cell-amount">+/- persone</td><td class="cell-amount">Da mese</td><td></td></tr></thead><tbody>';
-
-      for (var vi = 0; vi < variazioni.length; vi++) {
-        var v = variazioni[vi];
-        html += '<tr class="row-conto">';
-        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;width:70px;font-family:var(--font-mono)" onblur="UI._handleVarOrgField(this,' + vi + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (v.anno || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleVarOrgField(this,' + vi + ',\'delta\')" onkeydown="UI._handleAmountKey(event)">' + (v.delta || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleVarOrgField(this,' + vi + ',\'da_mese\')" onkeydown="UI._handleAmountKey(event)">' + (v.da_mese || '') + '</div></td>';
-        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviVarOrganico(' + vi + ')">✕</div></td>';
-        html += '</tr>';
-      }
-      html += '</tbody></table>';
-    }
+    html += '<div class="form-hint mb-8" style="margin-top:8px">Le variazioni di organico (+/- persone) si gestiscono nella sezione Eventi.</div>';
 
     // Riepilogo calcolato
     if (pers.headcount > 0 && pers.ral_media > 0) {
@@ -1442,8 +1422,6 @@ const UI = (() => {
       }
       html += '</tbody></table>';
     }
-
-    html += '<div style="margin-top:20px;border-bottom:1px solid var(--color-border);padding-bottom:4px"></div>';
 
     return html;
   }
