@@ -67,9 +67,95 @@ const Engine = (() => {
     return dati[nodo.id] || 0;
   }
 
+  /* ──────────────────────────────────────────────────────────
+     Calcolo personale per anno
+     ────────────────────────────────────────────────────────── */
+
+  /**
+   * Calcola i costi del personale per un anno dato, basato su organico.
+   * @param {Object} personale - driver.personale del progetto
+   * @param {number} anno      - anno di calcolo
+   * @param {number} annoBase  - anno base del progetto
+   * @returns {Object} { headcount_medio, salari, oneri, tfr, totale }
+   */
+  function calcolaPersonaleAnno(personale, anno, annoBase) {
+    if (!personale || !personale.headcount) {
+      return { headcount_medio: 0, headcount_fine: 0, salari: 0, oneri: 0, tfr: 0, totale: 0 };
+    }
+
+    var hcBase = personale.headcount;
+    var ralMedia = personale.ral_media || 0;
+    var coeffOneri = personale.coeff_oneri || 0.32;
+    var variazioni = personale.variazioni_organico || [];
+    var varRal = personale.var_ral_pct || {};
+
+    // Calcola RAL media per l'anno corrente (con adeguamenti cumulativi)
+    var ralAnno = ralMedia;
+    for (var a = annoBase + 1; a <= anno; a++) {
+      var pct = varRal[String(a)] || 0;
+      ralAnno = ralAnno * (1 + pct);
+    }
+
+    // Calcola headcount mensile (12 mesi)
+    // Parte dal headcount di fine anno precedente
+    var hcInizio = hcBase;
+    // Applica tutte le variazioni degli anni precedenti (effetto pieno)
+    variazioni.forEach(function(v) {
+      if (v.anno < anno) {
+        hcInizio += (v.delta || 0);
+      }
+    });
+
+    // Mese per mese nell'anno corrente
+    var mesiHc = [];
+    var hcCorrente = hcInizio;
+    for (var m = 1; m <= 12; m++) {
+      // Applica variazioni che entrano in vigore questo mese/anno
+      variazioni.forEach(function(v) {
+        if (v.anno === anno && v.da_mese === m) {
+          hcCorrente += (v.delta || 0);
+        }
+      });
+      mesiHc.push(Math.max(0, hcCorrente));
+    }
+
+    // Headcount medio e fine anno
+    var sommaHc = 0;
+    for (var k = 0; k < 12; k++) sommaHc += mesiHc[k];
+    var hcMedio = sommaHc / 12;
+    var hcFine = mesiHc[11];
+
+    // Salari: somma mensile di (hc_mese × RAL / 12)
+    var salari = 0;
+    for (var j = 0; j < 12; j++) {
+      salari += mesiHc[j] * ralAnno / 12;
+    }
+    salari = Math.round(salari);
+
+    // Oneri sociali
+    var oneri = Math.round(salari * coeffOneri);
+
+    // TFR (art. 2120 c.c.): retribuzione lorda totale / 13,5
+    // La retribuzione include le mensilita aggiuntive, ma per semplicita
+    // usiamo i salari lordi come base (gia comprensivi nel RAL)
+    var tfr = Math.round(salari / 13.5);
+
+    var totale = salari + oneri + tfr;
+
+    return {
+      headcount_medio: Math.round(hcMedio * 10) / 10,
+      headcount_fine: hcFine,
+      salari: salari,
+      oneri: oneri,
+      tfr: tfr,
+      totale: totale
+    };
+  }
+
   /* ── API pubblica ────────────────────────────────────────── */
   return {
-    calcolaValore
+    calcolaValore,
+    calcolaPersonaleAnno
   };
 
 })();
