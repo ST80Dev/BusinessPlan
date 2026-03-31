@@ -692,7 +692,7 @@ const UI = (() => {
     if (isRapida) {
       if (inRapida) {
         // Nodo nella lista rapida: mostra come editabile, nascondi figli
-        html += _editableRowHtml(nodo, dati, sez, lato, depth, parentIds);
+        html += _editableRowHtml(nodo, dati, sez, lato, depth, parentIds, modalita);
       } else if (hasChildren) {
         // Nodo genitore con figli nella lista rapida: mostra come header calcolato
         html += _computedRowHtml(nodo, dati, sez, lato, modalita, depth, parentIds);
@@ -707,7 +707,7 @@ const UI = (() => {
         const newParents = parentIds.concat(nodo.id);
         html += _buildTreeRows(nodo.children, dati, sez, lato, modalita, depth + 1, newParents);
       } else {
-        html += _editableRowHtml(nodo, dati, sez, lato, depth, parentIds);
+        html += _editableRowHtml(nodo, dati, sez, lato, depth, parentIds, modalita);
       }
     }
 
@@ -726,18 +726,68 @@ const UI = (() => {
     return parentIds.some(function(pid) { return _collapsed.has(pid); });
   }
 
-  function _editableRowHtml(nodo, dati, sez, lato, depth, parentIds) {
+  function _editableRowHtml(nodo, dati, sez, lato, depth, parentIds, modalita) {
     const cls = _rowClass(depth);
     const hidden = _isHidden(parentIds) ? ' row-collapsed' : '';
     const parStr = parentIds.join(' ');
-    const val = dati[nodo.id] || 0;
-    const display = val !== 0 ? _formatImporto(val) : '';
     const pad = 12 + depth * 12;
 
-    return `<tr class="${cls}${hidden}" data-node-id="${nodo.id}" data-parents="${parStr}">
-      <td style="padding-left:${pad}px">${_escapeHtml(nodo.label)}</td>
-      <td class="cell-amount"><div class="amount-field" contenteditable="true" data-conto-id="${nodo.id}" data-sez="${sez}" data-lato="${lato}" data-placeholder="0" onblur="UI._handleAmountBlur(this)" onkeydown="UI._handleAmountKey(event)">${display}</div></td>
-    </tr>\n`;
+    // Controlla se ha conti custom figli
+    const contiCustom = _getContiCustom();
+    const figli = contiCustom.filter(function(cc) { return cc.parent_id === nodo.id; });
+    const haFigli = figli.length > 0;
+    const isAnalitica = modalita === 'analitica';
+
+    let html = '';
+
+    if (haFigli && isAnalitica) {
+      // Nodo diventa computed (somma dei figli custom)
+      const isCol = _collapsed.has(nodo.id);
+      const val = Engine.calcolaValore(nodo, dati, modalita, contiCustom);
+      const valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
+
+      html += `<tr class="${cls}${hidden}${isCol ? ' collapsed' : ''}" data-node-id="${nodo.id}" data-parents="${parStr}">
+        <td style="padding-left:${pad}px"><span class="collapse-icon" onclick="UI.toggleCollapse('${nodo.id}')">▾</span> ${_escapeHtml(nodo.label)}</td>
+        <td class="cell-amount"><span class="amount-computed${valCls}" data-nodo-id="${nodo.id}" data-sez="${sez}" data-lato="${lato}">${_formatImporto(val)}</span></td>
+      </tr>\n`;
+
+      // Righe conti custom
+      const childPar = parentIds.concat(nodo.id).join(' ');
+      const childHidden = _isHidden(parentIds.concat(nodo.id)) ? ' row-collapsed' : '';
+      const childPad = pad + 12;
+      for (const cc of figli) {
+        const ccVal = dati[cc.id] || 0;
+        const ccDisplay = ccVal !== 0 ? _formatImporto(ccVal) : '';
+        html += `<tr class="row-conto${childHidden}" data-node-id="${cc.id}" data-parents="${childPar}" data-custom="1">
+          <td style="padding-left:${childPad}px"><div class="amount-field" contenteditable="true" style="text-align:left;font-family:var(--font-ui);min-width:150px" data-custom-id="${cc.id}" onblur="UI._handleCustomLabelBlur(this)">${_escapeHtml(cc.label)}</div></td>
+          <td class="cell-amount"><div class="amount-field" contenteditable="true" data-conto-id="${cc.id}" data-sez="${sez}" data-lato="${lato}" data-placeholder="0" onblur="UI._handleAmountBlur(this)" onkeydown="UI._handleAmountKey(event)">${ccDisplay}</div></td>
+        </tr>\n`;
+      }
+
+      // Pulsante aggiungi conto
+      html += `<tr class="add-conto-row${childHidden}" data-parents="${childPar}">
+        <td style="padding-left:${childPad}px" colspan="2"><div class="add-conto-btn" onclick="UI.aggiungiContoCustom('${nodo.id}','${sez}','${lato}')">+ Aggiungi conto</div></td>
+      </tr>\n`;
+    } else {
+      // Nodo foglia semplice
+      const val = dati[nodo.id] || 0;
+      const display = val !== 0 ? _formatImporto(val) : '';
+      html += `<tr class="${cls}${hidden}" data-node-id="${nodo.id}" data-parents="${parStr}">
+        <td style="padding-left:${pad}px">${_escapeHtml(nodo.label)}</td>
+        <td class="cell-amount"><div class="amount-field" contenteditable="true" data-conto-id="${nodo.id}" data-sez="${sez}" data-lato="${lato}" data-placeholder="0" onblur="UI._handleAmountBlur(this)" onkeydown="UI._handleAmountKey(event)">${display}</div></td>
+      </tr>\n`;
+
+      // In analitica, mostra sempre il pulsante aggiungi conto (per nodi foglia CE e SP)
+      if (isAnalitica && nodo.tipo === 'conto') {
+        const childPar = parentIds.concat(nodo.id).join(' ');
+        const childHidden = _isHidden(parentIds.concat(nodo.id)) ? ' row-collapsed' : '';
+        html += `<tr class="add-conto-row${childHidden}" data-parents="${childPar}" style="display:none" data-add-for="${nodo.id}">
+          <td style="padding-left:${pad + 12}px" colspan="2"><div class="add-conto-btn" onclick="UI.aggiungiContoCustom('${nodo.id}','${sez}','${lato}')">+ Aggiungi conto</div></td>
+        </tr>\n`;
+      }
+    }
+
+    return html;
   }
 
   function _computedRowHtml(nodo, dati, sez, lato, modalita, depth, parentIds) {
@@ -745,7 +795,7 @@ const UI = (() => {
     const hidden = _isHidden(parentIds) ? ' row-collapsed' : '';
     const isCol = _collapsed.has(nodo.id);
     const parStr = parentIds.join(' ');
-    const val = Engine.calcolaValore(nodo, dati, modalita);
+    const val = Engine.calcolaValore(nodo, dati, modalita, _getContiCustom());
     const valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
     const pad = 12 + depth * 12;
 
@@ -758,7 +808,7 @@ const UI = (() => {
   function _totaleRowHtml(nodo, dati, sez, lato, modalita, parentIds) {
     const hidden = _isHidden(parentIds) ? ' row-collapsed' : '';
     const parStr = parentIds.join(' ');
-    const val = Engine.calcolaValore(nodo, dati, modalita);
+    const val = Engine.calcolaValore(nodo, dati, modalita, _getContiCustom());
     const valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
 
     return `<tr class="row-totale${hidden}" data-node-id="${nodo.id}" data-parents="${parStr}">
@@ -774,6 +824,12 @@ const UI = (() => {
     if (sez === 'sp' && lato === 'passivo') return Schema.SP_RAPIDA_PASSIVO;
     if (sez === 'ce')                       return Schema.CE_RAPIDA;
     return null;
+  }
+
+  /** Restituisce i conti custom del progetto corrente (o array vuoto). */
+  function _getContiCustom() {
+    var p = Projects.getProgetto();
+    return (p && p.conti_custom) ? p.conti_custom : [];
   }
 
   /* ── Tab switching ───────────────────────────────────────── */
@@ -898,7 +954,7 @@ const UI = (() => {
       if (sez === 'sp_avvio')                 dati = annoData.sp_avvio;
       if (!dati) return;
 
-      const val = Engine.calcolaValore(nodo, dati, modalita);
+      const val = Engine.calcolaValore(nodo, dati, modalita, _getContiCustom());
       span.textContent = _formatImporto(val);
       span.className = 'amount-computed' + (val < 0 ? ' negative' : (val === 0 ? ' zero' : ''));
     });
@@ -926,8 +982,9 @@ const UI = (() => {
     const nodoPass = Schema.trovaNodo('sp.TOT_PASS');
     if (!nodoAtt || !nodoPass) return;
 
-    const totAtt  = Engine.calcolaValore(nodoAtt, annoData.sp.attivo, modalita);
-    const totPass = Engine.calcolaValore(nodoPass, annoData.sp.passivo, modalita);
+    const cc = _getContiCustom();
+    const totAtt  = Engine.calcolaValore(nodoAtt, annoData.sp.attivo, modalita, cc);
+    const totPass = Engine.calcolaValore(nodoPass, annoData.sp.passivo, modalita, cc);
     const diff = totAtt - totPass;
 
     qEl.classList.remove('hidden');
@@ -1083,28 +1140,25 @@ const UI = (() => {
     var annoData = progetto.storico[anno];
     if (!annoData || !annoData.ce) { mostraNotifica('Nessun dato CE storico disponibile.', 'warning'); return; }
 
-    // Voci ricavo dal CE (sotto ce.A)
+    // Sincronizza valori base dei driver esistenti + importa conti custom
+    var nuovi = Projects.sincronizzaDriverDaCE() || 0;
+
+    // Importa anche voci standard non ancora presenti
     var nodoA = Schema.trovaNodo('ce.A');
-    if (!nodoA || !nodoA.children) return;
-
-    var aggiunti = 0;
-    var esistenti = progetto.driver.ricavi.map(function(r) { return r.voce_ce; });
-
-    nodoA.children.forEach(function(figlio) {
-      var val = annoData.ce[figlio.id] || 0;
-      if (val !== 0 && esistenti.indexOf(figlio.id) === -1) {
-        var drv = Projects.creaDriverRicavo(figlio.id, figlio.label, val);
-        progetto.driver.ricavi.push(drv);
-        aggiunti++;
-      }
-    });
-
-    if (aggiunti > 0) {
-      Projects.segnaModificato();
-      mostraNotifica(aggiunti + ' voci ricavo importate dal CE storico.', 'success');
-    } else {
-      mostraNotifica('Nessuna nuova voce da importare (già presenti o valori a zero).', 'info');
+    if (nodoA && nodoA.children) {
+      var esistenti = progetto.driver.ricavi.map(function(r) { return r.voce_ce; });
+      nodoA.children.forEach(function(figlio) {
+        var val = annoData.ce[figlio.id] || 0;
+        if (esistenti.indexOf(figlio.id) === -1) {
+          var drv = Projects.creaDriverRicavo(figlio.id, figlio.label, val);
+          progetto.driver.ricavi.push(drv);
+          nuovi++;
+        }
+      });
     }
+
+    Projects.segnaModificato();
+    mostraNotifica('Driver ricavi sincronizzati dal CE storico.', 'success');
     _renderDriver();
   }
 
@@ -1191,43 +1245,21 @@ const UI = (() => {
     var annoData = progetto.storico[anno];
     if (!annoData || !annoData.ce) { mostraNotifica('Nessun dato CE storico disponibile.', 'warning'); return; }
 
-    var nodoB = Schema.trovaNodo('ce.B');
-    if (!nodoB || !nodoB.children) return;
+    // Sincronizza valori base + conti custom
+    Projects.sincronizzaDriverDaCE();
 
-    var aggiunti = 0;
-    var esistenti = progetto.driver.costi.map(function(c) { return c.voce_ce; });
-
-    // Voci ammortamento (ce.B.10) escluse — gestite dagli investimenti
-    var esclusi = ['ce.B.10', 'ce.B.10a', 'ce.B.10b', 'ce.B.10c', 'ce.B.10d'];
-
-    function importaFigli(figli) {
-      figli.forEach(function(figlio) {
-        if (esclusi.indexOf(figlio.id) !== -1) return;
-        if (figlio.children) {
-          // Sottomastro: importa i figli (es. ce.B.9 -> 9a, 9b, ...)
-          importaFigli(figlio.children);
-          return;
-        }
-        var val = annoData.ce[figlio.id] || 0;
-        if (val !== 0 && esistenti.indexOf(figlio.id) === -1) {
-          var isPersonale = figlio.id.indexOf('ce.B.9') === 0;
-          var tipo = isPersonale ? 'personale' : 'fisso';
-          var drv = Projects.creaDriverCosto(figlio.id, figlio.label, tipo);
+    // Aggiorna i valori base dei costi esistenti dal CE
+    progetto.driver.costi.forEach(function(drv) {
+      if (drv.voce_ce && annoData.ce[drv.voce_ce] !== undefined) {
+        var val = annoData.ce[drv.voce_ce] || 0;
+        if (drv.tipo_driver !== 'pct_ricavi' && val > 0) {
           drv.importo_fisso = val;
-          progetto.driver.costi.push(drv);
-          aggiunti++;
         }
-      });
-    }
+      }
+    });
 
-    importaFigli(nodoB.children);
-
-    if (aggiunti > 0) {
-      Projects.segnaModificato();
-      mostraNotifica(aggiunti + ' voci costo importate dal CE storico.', 'success');
-    } else {
-      mostraNotifica('Nessuna nuova voce da importare.', 'info');
-    }
+    Projects.segnaModificato();
+    mostraNotifica('Driver costi sincronizzati dal CE storico.', 'success');
     _renderDriver();
   }
 
@@ -1491,6 +1523,43 @@ const UI = (() => {
     _renderDriver();
   }
 
+  /* ── Conti custom ─────────────────────────────────────────── */
+
+  var _nextCustomId = 1;
+
+  function aggiungiContoCustom(parentId, sez, lato) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    if (!progetto.conti_custom) progetto.conti_custom = [];
+
+    var id = 'cc_' + Date.now() + '_' + (_nextCustomId++);
+    progetto.conti_custom.push({ id: id, parent_id: parentId, label: 'Nuovo conto' });
+
+    // Inizializza valore a 0 nei dati storici
+    var anno = String(progetto.meta.anno_base);
+    var annoData = progetto.storico[anno];
+    if (annoData) {
+      if (sez === 'sp' && lato === 'attivo' && annoData.sp) annoData.sp.attivo[id] = 0;
+      else if (sez === 'sp' && lato === 'passivo' && annoData.sp) annoData.sp.passivo[id] = 0;
+      else if (sez === 'ce' && annoData.ce) annoData.ce[id] = 0;
+      else if (sez === 'sp_avvio' && annoData.sp_avvio) annoData.sp_avvio[id] = 0;
+    }
+
+    Projects.segnaModificato();
+    _renderDatiPartenza();
+  }
+
+  function _handleCustomLabelBlur(el) {
+    var ccId = el.dataset.customId;
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.conti_custom) return;
+    var cc = progetto.conti_custom.find(function(c) { return c.id === ccId; });
+    if (cc) {
+      cc.label = (el.textContent || '').trim() || 'Senza nome';
+      Projects.segnaModificato();
+    }
+  }
+
   /* ── Formattazione percentuali ───────────────────────────── */
 
   function _formatPct(val) {
@@ -1555,7 +1624,10 @@ const UI = (() => {
     _handleDriverField,
     _handleCircolanteField,
     _handleFiscaleField,
-    _handleFiscaleAnnoField
+    _handleFiscaleAnnoField,
+    // Conti custom
+    aggiungiContoCustom,
+    _handleCustomLabelBlur
   };
 
 })();

@@ -15,12 +15,13 @@ const Engine = (() => {
 
   /**
    * Calcola il valore aggregato di un nodo (somma ricorsiva dei figli).
-   * @param {Object} nodo      - nodo dello schema (mastro/sottomastro/totale)
-   * @param {Object} dati      - oggetto { contoId: valore, ... }
-   * @param {string} [modalita] - 'rapida' | 'analitica' (default: 'analitica')
+   * @param {Object} nodo           - nodo dello schema (mastro/sottomastro/totale)
+   * @param {Object} dati           - oggetto { contoId: valore, ... }
+   * @param {string} [modalita]     - 'rapida' | 'analitica' (default: 'analitica')
+   * @param {Array}  [contiCustom]  - array di { id, parent_id, label } conti personalizzati
    * @returns {number}
    */
-  function calcolaValore(nodo, dati, modalita) {
+  function calcolaValore(nodo, dati, modalita, contiCustom) {
     if (!nodo) return 0;
 
     // Nodo totale con campo 'somma': somma dei nodi referenziati
@@ -29,7 +30,7 @@ const Engine = (() => {
       for (const id of nodo.somma) {
         const ref = Schema.trovaNodo(id);
         if (ref) {
-          const val = calcolaValore(ref, dati, modalita);
+          const val = calcolaValore(ref, dati, modalita, contiCustom);
           tot += val * (ref.segno !== undefined ? ref.segno : 1);
         }
       }
@@ -39,20 +40,30 @@ const Engine = (() => {
     // Nodo computed con figli
     if (nodo.computed && nodo.children) {
       // In modalita rapida, se il nodo ha un valore diretto nei dati, usalo
-      // (l'utente ha inserito l'aggregato al livello sottomastro/mastro)
       if (modalita === 'rapida' && dati[nodo.id] !== undefined && dati[nodo.id] !== 0) {
         return dati[nodo.id];
       }
-      // Altrimenti somma ricorsiva dei figli
+      // Somma ricorsiva dei figli (schema + custom)
       let tot = 0;
       for (const figlio of nodo.children) {
-        const val = calcolaValore(figlio, dati, modalita);
+        const val = calcolaValore(figlio, dati, modalita, contiCustom);
         tot += val * (figlio.segno !== undefined ? figlio.segno : 1);
       }
       return tot;
     }
 
-    // Nodo foglia o editabile senza figli: valore diretto dai dati
+    // Nodo foglia: se ha conti custom, somma quelli; altrimenti valore diretto
+    if (contiCustom && contiCustom.length > 0) {
+      const figli = contiCustom.filter(function(cc) { return cc.parent_id === nodo.id; });
+      if (figli.length > 0) {
+        let tot = 0;
+        for (const cc of figli) {
+          tot += dati[cc.id] || 0;
+        }
+        return tot;
+      }
+    }
+
     return dati[nodo.id] || 0;
   }
 

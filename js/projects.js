@@ -49,7 +49,7 @@ const Projects = (() => {
     const storico = {};
     storico[meta.anno_base] = _creaAnnoVuoto(meta.scenario);
 
-    return {
+    const progetto = {
       meta: {
         cliente:            meta.cliente,
         settore:            meta.settore || '',
@@ -62,6 +62,7 @@ const Projects = (() => {
         stato:              'in_lavorazione'      // 'in_lavorazione' | 'completato'
       },
       storico,
+      conti_custom: [],  // [{ id, parent_id, label }] — conti foglia personalizzati
       eventi:    [],
       driver: {
         ricavi:     [],    // [{ id, voce_ce, label, base_annuale, crescita_annua, profilo_stagionale[12] }]
@@ -79,6 +80,11 @@ const Projects = (() => {
         annuali: {}
       }
     };
+
+    // Pre-popola driver con struttura standard
+    _prePopulaDriver(progetto, meta.scenario);
+
+    return progetto;
   }
 
   /**
@@ -112,6 +118,92 @@ const Projects = (() => {
     const obj = {};
     anniPrev.forEach(function(a) { obj[String(a)] = valDefault; });
     return obj;
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Conti tipici di dettaglio per pre-popolamento
+     ────────────────────────────────────────────────────────── */
+
+  /** Voci ricavo tipiche (sotto ce.A) */
+  const RICAVI_TIPICI = [
+    { parent: 'ce.A.1', label: 'Vendita prodotti' },
+    { parent: 'ce.A.1', label: 'Prestazione servizi' },
+    { parent: 'ce.A.5', label: 'Altri ricavi e proventi' }
+  ];
+
+  /** Voci costo tipiche con dettaglio sotto le voci UE */
+  const COSTI_TIPICI = [
+    // B.6 Materie prime
+    { parent: 'ce.B.6',  label: 'Materie prime',                tipo: 'pct_ricavi' },
+    { parent: 'ce.B.6',  label: 'Materiali di consumo',         tipo: 'pct_ricavi' },
+    // B.7 Servizi
+    { parent: 'ce.B.7',  label: 'Utenze (acqua, luce, gas)',    tipo: 'fisso' },
+    { parent: 'ce.B.7',  label: 'Pubblicità e marketing',       tipo: 'fisso' },
+    { parent: 'ce.B.7',  label: 'Consulenze professionali',     tipo: 'fisso' },
+    { parent: 'ce.B.7',  label: 'Assicurazioni',                tipo: 'fisso' },
+    { parent: 'ce.B.7',  label: 'Manutenzioni e riparazioni',   tipo: 'fisso' },
+    { parent: 'ce.B.7',  label: 'Trasporti e spedizioni',       tipo: 'pct_ricavi' },
+    { parent: 'ce.B.7',  label: 'Compensi amministratori',      tipo: 'fisso' },
+    // B.8 Godimento beni di terzi
+    { parent: 'ce.B.8',  label: 'Affitti e locazioni',          tipo: 'fisso' },
+    { parent: 'ce.B.8',  label: 'Canoni di leasing',            tipo: 'fisso' },
+    { parent: 'ce.B.8',  label: 'Noleggi',                      tipo: 'fisso' },
+    // B.9 Personale (voci standard schema)
+    { parent: 'ce.B.9a', label: 'Salari e stipendi',            tipo: 'personale' },
+    { parent: 'ce.B.9b', label: 'Oneri sociali',                tipo: 'personale' },
+    { parent: 'ce.B.9c', label: 'Trattamento di fine rapporto', tipo: 'personale' },
+    // B.11 Variazione rimanenze
+    { parent: 'ce.B.11', label: 'Variazione rimanenze materie prime', tipo: 'fisso' },
+    // B.14 Oneri diversi
+    { parent: 'ce.B.14', label: 'Imposte e tasse diverse',      tipo: 'fisso' },
+    { parent: 'ce.B.14', label: 'Cancelleria e materiale ufficio', tipo: 'fisso' }
+  ];
+
+  /**
+   * Pre-popola i driver ricavi e costi alla creazione del progetto.
+   * - Costituenda / sp_only: conti tipici dettagliati a 0
+   * - sp_ce: struttura base dalle voci CE standard (senza dettaglio;
+   *   l'utente userà "Importa da CE" dopo aver inserito i dati storici)
+   */
+  function _prePopulaDriver(progetto, scenario) {
+    if (scenario === 'costituenda' || scenario === 'sp_only') {
+      // Ricavi tipici
+      RICAVI_TIPICI.forEach(function(r) {
+        progetto.driver.ricavi.push(creaDriverRicavo(r.parent, r.label, 0));
+      });
+      // Costi tipici con dettaglio
+      COSTI_TIPICI.forEach(function(c) {
+        var drv = creaDriverCosto(c.parent, c.label, c.tipo);
+        progetto.driver.costi.push(drv);
+      });
+    } else {
+      // sp_ce: struttura aggregata dalle voci CE principali
+      // Ricavi: voci sotto ce.A
+      var nodoA = Schema.trovaNodo('ce.A');
+      if (nodoA && nodoA.children) {
+        nodoA.children.forEach(function(figlio) {
+          progetto.driver.ricavi.push(creaDriverRicavo(figlio.id, figlio.label, 0));
+        });
+      }
+      // Costi: voci sotto ce.B (esclusi ammortamenti ce.B.10)
+      var nodoB = Schema.trovaNodo('ce.B');
+      if (nodoB && nodoB.children) {
+        nodoB.children.forEach(function(figlio) {
+          if (figlio.id === 'ce.B.10') return; // ammortamenti gestiti da investimenti
+          if (figlio.children) {
+            // Sottomastro con figli (es. ce.B.9 Personale)
+            figlio.children.forEach(function(sotto) {
+              var isPersonale = sotto.id.indexOf('ce.B.9') === 0;
+              var drv = creaDriverCosto(sotto.id, sotto.label, isPersonale ? 'personale' : 'fisso');
+              progetto.driver.costi.push(drv);
+            });
+          } else {
+            var drv = creaDriverCosto(figlio.id, figlio.label, 'fisso');
+            progetto.driver.costi.push(drv);
+          }
+        });
+      }
+    }
   }
 
   /** Contatore incrementale per ID driver. */
@@ -495,6 +587,66 @@ const Projects = (() => {
     return 0;
   }
 
+  /**
+   * Sincronizza i driver con i dati CE storici: aggiorna i valori base
+   * dei driver esistenti che hanno un voce_ce collegata, e aggiunge i
+   * conti custom come nuovi driver se non gia presenti.
+   */
+  function sincronizzaDriverDaCE() {
+    if (!_progettoCorrente) return;
+    var p = _progettoCorrente;
+    var anno = String(p.meta.anno_base);
+    var annoData = p.storico[anno];
+    if (!annoData || !annoData.ce) return;
+
+    var ce = annoData.ce;
+    var aggiunti = 0;
+
+    // Aggiorna ricavi esistenti con valori da CE
+    p.driver.ricavi.forEach(function(drv) {
+      if (drv.voce_ce && ce[drv.voce_ce] !== undefined) {
+        drv.base_annuale = ce[drv.voce_ce] || 0;
+      }
+    });
+
+    // Aggiorna costi esistenti con valori da CE
+    p.driver.costi.forEach(function(drv) {
+      if (drv.voce_ce && ce[drv.voce_ce] !== undefined) {
+        var val = ce[drv.voce_ce] || 0;
+        if (drv.tipo_driver === 'pct_ricavi') {
+          // Non sovrascrivere la percentuale col valore assoluto
+        } else {
+          drv.importo_fisso = val;
+        }
+      }
+    });
+
+    // Aggiungi driver da conti custom non ancora presenti
+    var driverVoci = {};
+    p.driver.ricavi.forEach(function(d) { if (d.voce_ce) driverVoci[d.voce_ce] = true; });
+    p.driver.costi.forEach(function(d) { if (d.voce_ce) driverVoci[d.voce_ce] = true; });
+
+    (p.conti_custom || []).forEach(function(cc) {
+      if (driverVoci[cc.id]) return;
+      var val = ce[cc.id] || 0;
+      // Determina se e ricavo o costo dal parent
+      if (cc.parent_id && cc.parent_id.indexOf('ce.A') === 0) {
+        var drv = creaDriverRicavo(cc.id, cc.label, val);
+        p.driver.ricavi.push(drv);
+        aggiunti++;
+      } else if (cc.parent_id && cc.parent_id.indexOf('ce.B') === 0) {
+        var isPersonale = cc.parent_id.indexOf('ce.B.9') === 0;
+        var drv = creaDriverCosto(cc.id, cc.label, isPersonale ? 'personale' : 'fisso');
+        if (drv.importo_fisso !== null) drv.importo_fisso = val;
+        p.driver.costi.push(drv);
+        aggiunti++;
+      }
+    });
+
+    segnaModificato();
+    return aggiunti;
+  }
+
   /* ──────────────────────────────────────────────────────────
      Utility interne
      ────────────────────────────────────────────────────────── */
@@ -555,7 +707,8 @@ const Projects = (() => {
     getValoreStorico,
     // Fase 3 — driver
     creaDriverRicavo,
-    creaDriverCosto
+    creaDriverCosto,
+    sincronizzaDriverDaCE
   };
 
 })();
