@@ -133,13 +133,13 @@
       <!-- Anno base + Anni previsionali -->
       <div class="form-row">
         <div class="form-group">
-          <span class="form-label required">Anno base (storico)</span>
+          <span class="form-label required" id="np-anno-label">Anno base (storico)</span>
           <div class="form-field"
                contenteditable="true"
                id="np-anno-base"
                data-placeholder="Es. 2024"
                spellcheck="false"></div>
-          <div class="form-hint">Anno dell'ultimo bilancio approvato</div>
+          <div class="form-hint" id="np-anno-hint">Anno dell'ultimo bilancio approvato</div>
         </div>
 
         <div class="form-group">
@@ -149,7 +149,7 @@
             <div class="stepper-value" id="np-anni-prev">3</div>
             <div class="stepper-btn" onclick="UI.stepperChange('np-anni-prev', +1)">+</div>
           </div>
-          <div class="form-hint">Da 1 a 8 anni oltre l'anno base</div>
+          <div class="form-hint" id="np-anni-hint">Da 1 a 8 anni oltre l'anno base</div>
         </div>
       </div>
 
@@ -158,7 +158,7 @@
         <span class="form-label required">Modalità di inserimento</span>
         <div class="radio-group" id="np-scenario">
 
-          <div class="radio-item selected" data-value="sp_ce" onclick="UI.radioSelect('np-scenario', this)">
+          <div class="radio-item selected" data-value="sp_ce" onclick="UI.radioSelect('np-scenario', this); UI.aggiornaLabelAnno('sp_ce')">
             <div class="radio-dot"></div>
             <div>
               <div class="radio-label">SP + CE storici</div>
@@ -166,7 +166,7 @@
             </div>
           </div>
 
-          <div class="radio-item" data-value="sp_only" onclick="UI.radioSelect('np-scenario', this)">
+          <div class="radio-item" data-value="sp_only" onclick="UI.radioSelect('np-scenario', this); UI.aggiornaLabelAnno('sp_only')">
             <div class="radio-dot"></div>
             <div>
               <div class="radio-label">Solo SP storico</div>
@@ -174,7 +174,7 @@
             </div>
           </div>
 
-          <div class="radio-item" data-value="costituenda" onclick="UI.radioSelect('np-scenario', this)">
+          <div class="radio-item" data-value="costituenda" onclick="UI.radioSelect('np-scenario', this); UI.aggiornaLabelAnno('costituenda')">
             <div class="radio-dot"></div>
             <div>
               <div class="radio-label">Società costituenda</div>
