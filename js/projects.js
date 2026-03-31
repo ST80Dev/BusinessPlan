@@ -63,10 +63,13 @@ const Projects = (() => {
       },
       storico,
       conti_custom: [],  // [{ id, parent_id, label }] — conti foglia personalizzati
+      immobilizzazioni: {},  // { 'sp.BI.1': { costo_storico, fondo_ammortamento, aliquota } }
       eventi:    [],
       driver: {
         ricavi:     [],    // [{ id, voce_ce, label, base_annuale, crescita_annua, profilo_stagionale[12] }]
         costi:      [],    // [{ id, voce_ce, label, tipo_driver, pct_ricavi, var_pct_annua, importo_fisso, soggetto_inflazione }]
+        finanziamenti_essere: [],  // [{ id, descrizione, capitale_residuo, tasso_annuo, durata_mesi, tipo_ammortamento, data_inizio_rata }]
+        smobilizzo: [],            // [{ voce_sp, label, saldo, mesi_incasso }]
         circolante: { dso: 60, dpo: 45, dio: 30 },
         fiscale: {
           aliquota_ires: 0.24,

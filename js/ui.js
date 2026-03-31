@@ -768,6 +768,9 @@ const UI = (() => {
       html += `<tr class="add-conto-row${childHidden}" data-parents="${childPar}">
         <td style="padding-left:${childPad}px" colspan="2"><div class="add-conto-btn" onclick="UI.aggiungiContoCustom('${nodo.id}','${sez}','${lato}')">+ Aggiungi conto</div></td>
       </tr>\n`;
+    } else if (_isImmobilizzazione(nodo.id) && isAnalitica && sez === 'sp') {
+      // Immobilizzazione in analitica: mostra costo storico, fondo, netto, aliquota
+      html += _immobilizzazioneRowHtml(nodo, dati, sez, lato, depth, parentIds);
     } else {
       // Nodo foglia semplice
       const val = dati[nodo.id] || 0;
@@ -1035,6 +1038,7 @@ const UI = (() => {
     html += _driverTabItem('drv-ricavi', 'Ricavi');
     html += _driverTabItem('drv-costi', 'Costi');
     html += _driverTabItem('drv-circolante', 'Circolante');
+    html += _driverTabItem('drv-patrimoniali', 'Patrimoniali');
     html += _driverTabItem('drv-fiscale', 'Fiscale');
     html += '</div>';
 
@@ -1049,6 +1053,10 @@ const UI = (() => {
 
     html += '<div class="tab-pane' + (_driverTab === 'drv-circolante' ? ' active' : '') + '" id="drv-circolante">';
     html += _renderDriverCircolante(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_driverTab === 'drv-patrimoniali' ? ' active' : '') + '" id="drv-patrimoniali">';
+    html += _renderDriverPatrimoniali(progetto);
     html += '</div>';
 
     html += '<div class="tab-pane' + (_driverTab === 'drv-fiscale' ? ' active' : '') + '" id="drv-fiscale">';
@@ -1329,6 +1337,212 @@ const UI = (() => {
       '</div></div>';
   }
 
+  /* ── Tab PATRIMONIALI ─────────────────────────────────────── */
+
+  function _renderDriverPatrimoniali(progetto) {
+    var html = '';
+
+    // ── Finanziamenti in essere ──
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Finanziamenti in essere</h3>';
+    html += '<div class="form-hint mb-8">Mutui e finanziamenti attivi alla data del bilancio storico. Generano automaticamente quota interessi (CE C.17), rimborso capitale (SP D.4) e uscita cassa mensile.</div>';
+
+    var fin = progetto.driver.finanziamenti_essere || [];
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiFinanziamento()">+ Aggiungi finanziamento</div>';
+    html += '</div></div>';
+
+    if (fin.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessun finanziamento in essere. Clicca "Aggiungi finanziamento" se la società ha mutui o finanziamenti attivi.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:120px"><col style="width:80px"><col style="width:80px"><col style="width:100px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Capitale residuo</td><td class="cell-amount">Tasso %</td><td class="cell-amount">Durata mesi</td><td class="cell-amount">Tipo amm.</td><td class="cell-amount">Inizio rata</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < fin.length; i++) {
+        var f = fin[i];
+        var tipoLabel = f.tipo_ammortamento === 'italiano' ? 'Italiano' : 'Francese';
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleFinField(this,' + i + ',\'descrizione\')">' + _escapeHtml(f.descrizione || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleFinField(this,' + i + ',\'capitale_residuo\')" onkeydown="UI._handleAmountKey(event)">' + (f.capitale_residuo ? _formatImporto(f.capitale_residuo) : '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleFinField(this,' + i + ',\'tasso_annuo\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(f.tasso_annuo) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleFinField(this,' + i + ',\'durata_mesi\')" onkeydown="UI._handleAmountKey(event)">' + (f.durata_mesi || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaTipoAmm(' + i + ')">' + tipoLabel + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" style="font-size:12px" data-placeholder="MM/AAAA" onblur="UI._handleFinField(this,' + i + ',\'data_inizio_rata\')" onkeydown="UI._handleAmountKey(event)">' + _escapeHtml(f.data_inizio_rata || '') + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviFinanziamento(' + i + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+
+    // ── Smobilizzo crediti/debiti ──
+    html += '<h3 style="font-size:14px;font-weight:700;margin:28px 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Smobilizzo crediti e debiti storici</h3>';
+    html += '<div class="form-hint mb-8">Indica in quanti mesi i crediti/debiti presenti nello SP dell\'anno base verranno incassati/pagati. Diverso da DSO/DPO che si applicano alle nuove operazioni.</div>';
+
+    var smob = progetto.driver.smobilizzo || [];
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiSmobilizzo()">+ Aggiungi voce</div>';
+    if (progetto.meta.scenario !== 'costituenda') {
+      html += ' <div class="btn btn-secondary btn-sm" onclick="UI.importaSmobilizzoDaSP()">Importa da SP</div>';
+    }
+    html += '</div></div>';
+
+    if (smob.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessuna voce di smobilizzo configurata. Clicca "Importa da SP" per popolare dai saldi patrimoniali.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:130px"><col style="width:100px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Saldo</td><td class="cell-amount">Mesi incasso/pag.</td><td></td></tr></thead><tbody>';
+
+      for (var j = 0; j < smob.length; j++) {
+        var s = smob[j];
+        html += '<tr class="row-conto">';
+        html += '<td style="font-size:13px">' + _escapeHtml(s.label || '') + '</td>';
+        html += '<td class="cell-amount"><span class="amount-computed">' + _formatImporto(s.saldo || 0) + '</span></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleSmobField(this,' + j + ',\'mesi_incasso\')" onkeydown="UI._handleAmountKey(event)">' + (s.mesi_incasso || '') + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviSmobilizzo(' + j + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+
+    return html;
+  }
+
+  function aggiungiFinanziamento() {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    if (!progetto.driver.finanziamenti_essere) progetto.driver.finanziamenti_essere = [];
+    progetto.driver.finanziamenti_essere.push({
+      id: 'fin_' + Date.now(),
+      descrizione: 'Nuovo finanziamento',
+      capitale_residuo: 0,
+      tasso_annuo: 0,
+      durata_mesi: 60,
+      tipo_ammortamento: 'francese',
+      data_inizio_rata: ''
+    });
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function rimuoviFinanziamento(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.finanziamenti_essere) return;
+    progetto.driver.finanziamenti_essere.splice(idx, 1);
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function ciclaTipoAmm(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.finanziamenti_essere) return;
+    var f = progetto.driver.finanziamenti_essere[idx];
+    if (!f) return;
+    f.tipo_ammortamento = f.tipo_ammortamento === 'francese' ? 'italiano' : 'francese';
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function _handleFinField(el, idx, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.finanziamenti_essere) return;
+    var f = progetto.driver.finanziamenti_essere[idx];
+    if (!f) return;
+
+    if (campo === 'descrizione' || campo === 'data_inizio_rata') {
+      f[campo] = (el.textContent || '').trim();
+    } else if (campo === 'tasso_annuo') {
+      f.tasso_annuo = _parsePct(el.textContent);
+      el.textContent = _formatPct(f.tasso_annuo);
+    } else if (campo === 'durata_mesi') {
+      f.durata_mesi = parseInt((el.textContent || '').replace(/\D/g, ''), 10) || 0;
+      el.textContent = f.durata_mesi || '';
+    } else if (campo === 'capitale_residuo') {
+      f.capitale_residuo = _parseImporto(el.textContent);
+      el.textContent = f.capitale_residuo ? _formatImporto(f.capitale_residuo) : '';
+    }
+    Projects.segnaModificato();
+  }
+
+  function aggiungiSmobilizzo() {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    if (!progetto.driver.smobilizzo) progetto.driver.smobilizzo = [];
+    progetto.driver.smobilizzo.push({
+      voce_sp: '',
+      label: 'Nuova voce',
+      saldo: 0,
+      mesi_incasso: 3
+    });
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function rimuoviSmobilizzo(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.smobilizzo) return;
+    progetto.driver.smobilizzo.splice(idx, 1);
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function importaSmobilizzoDaSP() {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var anno = String(progetto.meta.anno_base);
+    var annoData = progetto.storico[anno];
+    if (!annoData || !annoData.sp) { mostraNotifica('Nessun dato SP disponibile.', 'warning'); return; }
+
+    if (!progetto.driver.smobilizzo) progetto.driver.smobilizzo = [];
+    var esistenti = progetto.driver.smobilizzo.map(function(s) { return s.voce_sp; });
+
+    // Voci crediti da smobilizzare
+    var vociCrediti = [
+      { id: 'sp.CII.1',  label: 'Crediti verso clienti',   lato: 'attivo' },
+      { id: 'sp.CII.5b', label: 'Crediti tributari',        lato: 'attivo' },
+      { id: 'sp.CII.5q', label: 'Crediti verso altri',      lato: 'attivo' }
+    ];
+    // Voci debiti da smobilizzare
+    var vociDebiti = [
+      { id: 'sp.D_pass.7',  label: 'Debiti verso fornitori',      lato: 'passivo' },
+      { id: 'sp.D_pass.12', label: 'Debiti tributari',             lato: 'passivo' },
+      { id: 'sp.D_pass.13', label: 'Debiti previdenziali',         lato: 'passivo' }
+    ];
+
+    var aggiunti = 0;
+    var tutte = vociCrediti.concat(vociDebiti);
+    tutte.forEach(function(v) {
+      if (esistenti.indexOf(v.id) !== -1) return;
+      var saldo = (annoData.sp[v.lato] && annoData.sp[v.lato][v.id]) || 0;
+      if (saldo !== 0) {
+        progetto.driver.smobilizzo.push({
+          voce_sp: v.id,
+          label: v.label,
+          saldo: saldo,
+          mesi_incasso: 3
+        });
+        aggiunti++;
+      }
+    });
+
+    if (aggiunti > 0) {
+      Projects.segnaModificato();
+      mostraNotifica(aggiunti + ' voci importate dallo SP.', 'success');
+    } else {
+      mostraNotifica('Nessuna voce con saldo da importare.', 'info');
+    }
+    _renderDriver();
+  }
+
+  function _handleSmobField(el, idx, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.smobilizzo) return;
+    var s = progetto.driver.smobilizzo[idx];
+    if (!s) return;
+    s[campo] = parseInt((el.textContent || '').replace(/\D/g, ''), 10) || 0;
+    el.textContent = s[campo] || '';
+    Projects.segnaModificato();
+  }
+
   /* ── Tab FISCALE ─────────────────────────────────────────── */
 
   function _renderDriverFiscale(progetto) {
@@ -1523,6 +1737,96 @@ const UI = (() => {
     _renderDriver();
   }
 
+  /* ── Immobilizzazioni dettaglio (lordo/fondo/netto) ────────── */
+
+  /** Voci di immobilizzazione che mostrano costo storico + fondo. */
+  function _isImmobilizzazione(id) {
+    return id && (id.indexOf('sp.BI.') === 0 || id.indexOf('sp.BII.') === 0);
+  }
+
+  function _getImmob(nodoId) {
+    var p = Projects.getProgetto();
+    if (!p || !p.immobilizzazioni) return null;
+    return p.immobilizzazioni[nodoId] || null;
+  }
+
+  function _immobilizzazioneRowHtml(nodo, dati, sez, lato, depth, parentIds) {
+    var cls = _rowClass(depth);
+    var hidden = _isHidden(parentIds) ? ' row-collapsed' : '';
+    var parStr = parentIds.join(' ');
+    var pad = 12 + depth * 12;
+    var immob = _getImmob(nodo.id) || {};
+    var costo = immob.costo_storico || 0;
+    var fondo = immob.fondo_ammortamento || 0;
+    var aliq  = immob.aliquota || 0;
+    var netto = costo - fondo;
+
+    // Aggiorna il valore netto nei dati SP
+    dati[nodo.id] = netto;
+
+    var isCol = _collapsed.has(nodo.id);
+    var childPar = parentIds.concat(nodo.id).join(' ');
+    var childHidden = _isHidden(parentIds.concat(nodo.id)) ? ' row-collapsed' : '';
+    var childPad = pad + 12;
+
+    var valCls = netto < 0 ? ' negative' : (netto === 0 ? ' zero' : '');
+
+    var html = '';
+
+    // Riga principale: label + valore netto (calcolato)
+    html += '<tr class="' + cls + hidden + (isCol ? ' collapsed' : '') + '" data-node-id="' + nodo.id + '" data-parents="' + parStr + '">';
+    html += '<td style="padding-left:' + pad + 'px"><span class="collapse-icon" onclick="UI.toggleCollapse(\'' + nodo.id + '\')">▾</span> ' + _escapeHtml(nodo.label) + '</td>';
+    html += '<td class="cell-amount"><span class="amount-computed' + valCls + '" data-nodo-id="' + nodo.id + '" data-sez="' + sez + '" data-lato="' + lato + '">' + _formatImporto(netto) + '</span></td>';
+    html += '</tr>\n';
+
+    // Sotto-riga: Costo storico
+    html += '<tr class="row-conto' + childHidden + '" data-parents="' + childPar + '">';
+    html += '<td style="padding-left:' + childPad + 'px;color:var(--color-text-secondary);font-size:12px">Costo storico</td>';
+    html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'costo_storico\')" onkeydown="UI._handleAmountKey(event)">' + (costo ? _formatImporto(costo) : '') + '</div></td>';
+    html += '</tr>\n';
+
+    // Sotto-riga: Fondo ammortamento
+    html += '<tr class="row-conto' + childHidden + '" data-parents="' + childPar + '">';
+    html += '<td style="padding-left:' + childPad + 'px;color:var(--color-text-secondary);font-size:12px">Fondo ammortamento</td>';
+    html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'fondo_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + (fondo ? _formatImporto(fondo) : '') + '</div></td>';
+    html += '</tr>\n';
+
+    // Sotto-riga: Aliquota ammortamento
+    html += '<tr class="row-conto' + childHidden + '" data-parents="' + childPar + '">';
+    html += '<td style="padding-left:' + childPad + 'px;color:var(--color-text-secondary);font-size:12px">Aliquota ammortamento %</td>';
+    html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" style="width:80px" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'aliquota\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(aliq) + '</div></td>';
+    html += '</tr>\n';
+
+    return html;
+  }
+
+  function _handleImmobField(el, nodoId, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    if (!progetto.immobilizzazioni) progetto.immobilizzazioni = {};
+    if (!progetto.immobilizzazioni[nodoId]) {
+      progetto.immobilizzazioni[nodoId] = { costo_storico: 0, fondo_ammortamento: 0, aliquota: 0 };
+    }
+
+    var immob = progetto.immobilizzazioni[nodoId];
+
+    if (campo === 'aliquota') {
+      immob.aliquota = _parsePct(el.textContent);
+      el.textContent = _formatPct(immob.aliquota);
+    } else {
+      immob[campo] = _parseImporto(el.textContent);
+      el.textContent = immob[campo] ? _formatImporto(immob[campo]) : '';
+    }
+
+    // Aggiorna valore netto nello SP
+    var netto = (immob.costo_storico || 0) - (immob.fondo_ammortamento || 0);
+    var anno = String(progetto.meta.anno_base);
+    Projects.setValoreStorico(anno, 'sp', 'attivo', nodoId, netto);
+
+    _ricalcolaTotali();
+    _aggiornaQuadratura();
+  }
+
   /* ── Conti custom ─────────────────────────────────────────── */
 
   var _nextCustomId = 1;
@@ -1627,7 +1931,18 @@ const UI = (() => {
     _handleFiscaleAnnoField,
     // Conti custom
     aggiungiContoCustom,
-    _handleCustomLabelBlur
+    _handleCustomLabelBlur,
+    // Immobilizzazioni
+    _handleImmobField,
+    // Driver patrimoniali
+    aggiungiFinanziamento,
+    rimuoviFinanziamento,
+    ciclaTipoAmm,
+    _handleFinField,
+    aggiungiSmobilizzo,
+    rimuoviSmobilizzo,
+    importaSmobilizzoDaSP,
+    _handleSmobField
   };
 
 })();
