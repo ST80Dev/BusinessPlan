@@ -1173,11 +1173,16 @@ const UI = (() => {
   /* ── Tab COSTI ───────────────────────────────────────────── */
 
   function _renderDriverCosti(progetto) {
-    var costi = progetto.driver.costi;
+    // Filtra le voci personale (gestite dal pannello dedicato)
+    var costi = progetto.driver.costi.filter(function(c) { return !c.usa_var_personale; });
     var html = '';
 
+    // ── Pannello Personale ──
+    html += _renderPannelloPersonale(progetto);
+
+    // ── Voci costo (non personale) ──
     html += '<div class="section-toolbar"><div class="section-toolbar-left">';
-    html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Voci di costo previsionali</span>';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Altre voci di costo</span>';
     html += '</div><div class="section-toolbar-right">';
     html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiCosto()">+ Aggiungi voce</div>';
     if (progetto.meta.scenario === 'sp_ce') {
@@ -1196,20 +1201,22 @@ const UI = (() => {
       return html;
     }
 
-    // Tabella costi
+    // Tabella costi (usa indice reale nell'array completo)
+    var costiAll = progetto.driver.costi;
     html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:120px"><col style="width:130px"><col style="width:110px"><col style="width:90px"><col style="width:60px"></colgroup>';
     html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Tipo driver</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td></td></tr></thead><tbody>';
 
-    for (var i = 0; i < costi.length; i++) {
-      var c = costi[i];
+    for (var i = 0; i < costiAll.length; i++) {
+      var c = costiAll[i];
+      if (c.usa_var_personale) continue; // personale gestito dal pannello dedicato
       html += '<tr class="row-conto">';
 
       // Label
       html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:180px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'label\')">' + _escapeHtml(c.label) + '</div></td>';
 
-      // Tipo driver (select simulato)
-      var tipoLabel = c.usa_var_personale ? 'Personale' : (c.tipo_driver === 'pct_ricavi' ? '% ricavi' : 'Fisso');
-      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaTipoDriver(' + i + ')">' + tipoLabel + '</div></td>';
+      // Tipo driver (cicla solo tra pct_ricavi e fisso, no personale)
+      var tipoLabel = c.tipo_driver === 'pct_ricavi' ? '% ricavi' : 'Fisso';
+      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaTipoCosto(' + i + ')">' + tipoLabel + '</div></td>';
 
       // Valore
       if (c.tipo_driver === 'pct_ricavi') {
@@ -1217,11 +1224,11 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'var_pct_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(c.var_pct_annua) + '</div></td>';
       } else {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'costi\',' + i + ',\'importo_fisso\')" onkeydown="UI._handleAmountKey(event)">' + (c.importo_fisso ? _formatImporto(c.importo_fisso) : '') + '</div></td>';
-        html += '<td class="cell-amount"><span class="text-muted" style="font-size:12px">' + (c.usa_var_personale ? 'Param. ded.' : '—') + '</span></td>';
+        html += '<td class="cell-amount"><span class="text-muted" style="font-size:12px">—</span></td>';
       }
 
       // Flag inflazione
-      if (c.tipo_driver === 'pct_ricavi' || c.usa_var_personale) {
+      if (c.tipo_driver === 'pct_ricavi') {
         html += '<td class="cell-amount"><span class="text-muted" style="font-size:11px">n/a</span></td>';
       } else {
         var flagIcon = c.soggetto_inflazione ? '✓' : '✕';
@@ -1271,33 +1278,173 @@ const UI = (() => {
     _renderDriver();
   }
 
-  function ciclaTipoDriver(idx) {
+  /** Cicla tipo costo: solo pct_ricavi <-> fisso (personale gestito a parte). */
+  function ciclaTipoDriver(idx) { ciclaTipoCosto(idx); }
+
+  function ciclaTipoCosto(idx) {
     var progetto = Projects.getProgetto();
     if (!progetto) return;
     var c = progetto.driver.costi[idx];
-    if (!c) return;
+    if (!c || c.usa_var_personale) return;
 
-    // Cicla: pct_ricavi -> fisso -> personale -> pct_ricavi
     if (c.tipo_driver === 'pct_ricavi') {
       c.tipo_driver = 'fisso';
       c.pct_ricavi = null;
       c.var_pct_annua = null;
       c.importo_fisso = c.importo_fisso || 0;
       c.soggetto_inflazione = true;
-      c.usa_var_personale = false;
-    } else if (!c.usa_var_personale) {
-      // fisso -> personale
-      c.usa_var_personale = true;
-      c.soggetto_inflazione = false;
     } else {
-      // personale -> pct_ricavi
       c.tipo_driver = 'pct_ricavi';
       c.pct_ricavi = 0;
       c.var_pct_annua = 0;
       c.importo_fisso = null;
       c.soggetto_inflazione = false;
-      c.usa_var_personale = false;
     }
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  /* ── Pannello Personale (organico) ───────────────────────── */
+
+  function _renderPannelloPersonale(progetto) {
+    var pers = progetto.driver.personale || {};
+    var anniPrev = progetto.meta.anni_previsione || [];
+    var annoBase = progetto.meta.anno_base;
+    var html = '';
+
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Personale</h3>';
+    html += '<div class="form-hint mb-8">I costi del personale (salari, oneri, TFR) sono calcolati automaticamente dall\'organico. Le voci ce.B.9a/9b/9c vengono alimentate da questo pannello.</div>';
+
+    // Parametri base
+    html += '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">';
+
+    html += '<div class="form-group" style="min-width:120px"><span class="form-label">N. dipendenti</span>';
+    html += '<div class="form-field" contenteditable="true" style="width:80px;text-align:right;font-family:var(--font-mono)" data-placeholder="0" onblur="UI._handlePersField(this,\'headcount\')" onkeydown="UI._handleAmountKey(event)">' + (pers.headcount || '') + '</div></div>';
+
+    html += '<div class="form-group" style="min-width:150px"><span class="form-label">RAL media annua</span>';
+    html += '<div class="form-field" contenteditable="true" style="width:120px;text-align:right;font-family:var(--font-mono)" data-placeholder="0" onblur="UI._handlePersField(this,\'ral_media\')" onkeydown="UI._handleAmountKey(event)">' + (pers.ral_media ? _formatImporto(pers.ral_media) : '') + '</div></div>';
+
+    html += '<div class="form-group" style="min-width:120px"><span class="form-label">Coeff. oneri %</span>';
+    html += '<div class="form-field" contenteditable="true" style="width:80px;text-align:right;font-family:var(--font-mono)" data-placeholder="32" onblur="UI._handlePersField(this,\'coeff_oneri\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(pers.coeff_oneri) + '</div></div>';
+
+    html += '</div>';
+
+    // Variazione RAL per anno
+    html += '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">';
+    var varRal = pers.var_ral_pct || {};
+    for (var k = 0; k < anniPrev.length; k++) {
+      var a = String(anniPrev[k]);
+      html += '<div class="form-group" style="min-width:100px"><span class="form-label">Var. RAL % ' + a + '</span>';
+      html += '<div class="form-field" contenteditable="true" style="width:70px;text-align:right;font-family:var(--font-mono)" data-placeholder="0" onblur="UI._handlePersRalAnno(this,\'' + a + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(varRal[a] || 0) + '</div></div>';
+    }
+    html += '</div>';
+
+    // Variazioni organico
+    html += '<div style="margin-bottom:12px;font-size:13px;font-weight:600;color:var(--color-text-secondary)">Variazioni organico per anno</div>';
+
+    var variazioni = pers.variazioni_organico || [];
+    html += '<div class="section-toolbar" style="margin-bottom:8px"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiVarOrganico()">+ Aggiungi variazione</div>';
+    html += '</div></div>';
+
+    if (variazioni.length > 0) {
+      html += '<table class="schema-table" style="max-width:500px"><colgroup><col style="width:100px"><col style="width:120px"><col style="width:100px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-sottomastro"><td>Anno</td><td class="cell-amount">+/- persone</td><td class="cell-amount">Da mese</td><td></td></tr></thead><tbody>';
+
+      for (var vi = 0; vi < variazioni.length; vi++) {
+        var v = variazioni[vi];
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;width:70px;font-family:var(--font-mono)" onblur="UI._handleVarOrgField(this,' + vi + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (v.anno || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleVarOrgField(this,' + vi + ',\'delta\')" onkeydown="UI._handleAmountKey(event)">' + (v.delta || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleVarOrgField(this,' + vi + ',\'da_mese\')" onkeydown="UI._handleAmountKey(event)">' + (v.da_mese || '') + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviVarOrganico(' + vi + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+
+    // Riepilogo calcolato
+    if (pers.headcount > 0 && pers.ral_media > 0) {
+      html += '<div style="margin-top:16px;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--color-text-secondary)">Riepilogo calcolato</div>';
+      html += '<table class="schema-table" style="max-width:700px"><colgroup><col style="width:80px"><col style="width:70px"><col style="width:120px"><col style="width:120px"><col style="width:100px"><col style="width:120px"></colgroup>';
+      html += '<thead><tr class="row-sottomastro"><td>Anno</td><td class="cell-amount">HC medio</td><td class="cell-amount">Salari</td><td class="cell-amount">Oneri sociali</td><td class="cell-amount">TFR</td><td class="cell-amount">Totale</td></tr></thead><tbody>';
+
+      for (var pi = 0; pi < anniPrev.length; pi++) {
+        var annoCalc = anniPrev[pi];
+        var calc = Engine.calcolaPersonaleAnno(pers, annoCalc, annoBase);
+        html += '<tr class="row-conto">';
+        html += '<td>' + annoCalc + '</td>';
+        html += '<td class="cell-amount"><span class="amount-computed">' + calc.headcount_medio + '</span></td>';
+        html += '<td class="cell-amount"><span class="amount-computed">' + _formatImporto(calc.salari) + '</span></td>';
+        html += '<td class="cell-amount"><span class="amount-computed">' + _formatImporto(calc.oneri) + '</span></td>';
+        html += '<td class="cell-amount"><span class="amount-computed">' + _formatImporto(calc.tfr) + '</span></td>';
+        html += '<td class="cell-amount"><span class="amount-computed" style="font-weight:700">' + _formatImporto(calc.totale) + '</span></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+
+    html += '<div style="margin-top:20px;border-bottom:1px solid var(--color-border);padding-bottom:4px"></div>';
+
+    return html;
+  }
+
+  function _handlePersField(el, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.personale) return;
+    var pers = progetto.driver.personale;
+    if (campo === 'headcount') {
+      pers.headcount = parseInt((el.textContent || '').replace(/\D/g, ''), 10) || 0;
+      el.textContent = pers.headcount || '';
+    } else if (campo === 'ral_media') {
+      pers.ral_media = _parseImporto(el.textContent);
+      el.textContent = pers.ral_media ? _formatImporto(pers.ral_media) : '';
+    } else if (campo === 'coeff_oneri') {
+      pers.coeff_oneri = _parsePct(el.textContent);
+      el.textContent = _formatPct(pers.coeff_oneri);
+    }
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function _handlePersRalAnno(el, anno) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.personale) return;
+    if (!progetto.driver.personale.var_ral_pct) progetto.driver.personale.var_ral_pct = {};
+    progetto.driver.personale.var_ral_pct[anno] = _parsePct(el.textContent);
+    el.textContent = _formatPct(progetto.driver.personale.var_ral_pct[anno]);
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function aggiungiVarOrganico() {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.personale) return;
+    if (!progetto.driver.personale.variazioni_organico) progetto.driver.personale.variazioni_organico = [];
+    var primoAnno = (progetto.meta.anni_previsione && progetto.meta.anni_previsione[0]) || (progetto.meta.anno_base + 1);
+    progetto.driver.personale.variazioni_organico.push({ anno: primoAnno, delta: 0, da_mese: 1 });
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function rimuoviVarOrganico(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.personale || !progetto.driver.personale.variazioni_organico) return;
+    progetto.driver.personale.variazioni_organico.splice(idx, 1);
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function _handleVarOrgField(el, idx, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.personale || !progetto.driver.personale.variazioni_organico) return;
+    var v = progetto.driver.personale.variazioni_organico[idx];
+    if (!v) return;
+
+    var val = parseInt((el.textContent || '').replace(/[^\d-]/g, ''), 10) || 0;
+    v[campo] = val;
+    if (campo === 'da_mese') v.da_mese = Math.max(1, Math.min(12, val));
+    el.textContent = v[campo] || '';
     Projects.segnaModificato();
     _renderDriver();
   }
@@ -1934,6 +2081,13 @@ const UI = (() => {
     _handleCustomLabelBlur,
     // Immobilizzazioni
     _handleImmobField,
+    // Personale
+    ciclaTipoCosto,
+    _handlePersField,
+    _handlePersRalAnno,
+    aggiungiVarOrganico,
+    rimuoviVarOrganico,
+    _handleVarOrgField,
     // Driver patrimoniali
     aggiungiFinanziamento,
     rimuoviFinanziamento,

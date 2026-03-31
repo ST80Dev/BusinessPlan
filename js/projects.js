@@ -68,8 +68,15 @@ const Projects = (() => {
       driver: {
         ricavi:     [],    // [{ id, voce_ce, label, base_annuale, crescita_annua, profilo_stagionale[12] }]
         costi:      [],    // [{ id, voce_ce, label, tipo_driver, pct_ricavi, var_pct_annua, importo_fisso, soggetto_inflazione }]
-        finanziamenti_essere: [],  // [{ id, descrizione, capitale_residuo, tasso_annuo, durata_mesi, tipo_ammortamento, data_inizio_rata }]
-        smobilizzo: [],            // [{ voce_sp, label, saldo, mesi_incasso }]
+        personale: {
+          headcount:          0,      // N. dipendenti anno base
+          ral_media:          0,      // Retribuzione annua lorda media
+          coeff_oneri:        0.32,   // Coefficiente oneri sociali (default 32%)
+          var_ral_pct:        _creaParamAnnuale(anniPrev, 0),  // Variazione RAL media % per anno
+          variazioni_organico: []     // [{ anno, delta, da_mese }] es. { anno: 2025, delta: +2, da_mese: 6 }
+        },
+        finanziamenti_essere: [],
+        smobilizzo: [],
         circolante: { dso: 60, dpo: 45, dio: 30 },
         fiscale: {
           aliquota_ires: 0.24,
@@ -152,9 +159,7 @@ const Projects = (() => {
     { parent: 'ce.B.8',  label: 'Canoni di leasing',            tipo: 'fisso' },
     { parent: 'ce.B.8',  label: 'Noleggi',                      tipo: 'fisso' },
     // B.9 Personale (voci standard schema)
-    { parent: 'ce.B.9a', label: 'Salari e stipendi',            tipo: 'personale' },
-    { parent: 'ce.B.9b', label: 'Oneri sociali',                tipo: 'personale' },
-    { parent: 'ce.B.9c', label: 'Trattamento di fine rapporto', tipo: 'personale' },
+    // B.9 Personale: gestito dal pannello organico (headcount × RAL)
     // B.11 Variazione rimanenze
     { parent: 'ce.B.11', label: 'Variazione rimanenze materie prime', tipo: 'fisso' },
     // B.14 Oneri diversi
@@ -193,11 +198,11 @@ const Projects = (() => {
       if (nodoB && nodoB.children) {
         nodoB.children.forEach(function(figlio) {
           if (figlio.id === 'ce.B.10') return; // ammortamenti gestiti da investimenti
+          if (figlio.id === 'ce.B.9') return;  // personale gestito dal pannello organico
           if (figlio.children) {
-            // Sottomastro con figli (es. ce.B.9 Personale)
+            // Sottomastro con figli
             figlio.children.forEach(function(sotto) {
-              var isPersonale = sotto.id.indexOf('ce.B.9') === 0;
-              var drv = creaDriverCosto(sotto.id, sotto.label, isPersonale ? 'personale' : 'fisso');
+              var drv = creaDriverCosto(sotto.id, sotto.label, 'fisso');
               progetto.driver.costi.push(drv);
             });
           } else {
