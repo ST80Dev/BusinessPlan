@@ -80,8 +80,10 @@ const UI = (() => {
       case 'driver':
         _renderDriver();
         break;
-      case 'eventi':
       case 'prospetti':
+        _renderProspetti();
+        break;
+      case 'eventi':
       case 'dashboard':
         content.innerHTML = _renderPlaceholder(titoli[sezione]);
         break;
@@ -1959,6 +1961,219 @@ const UI = (() => {
     _renderDriver();
   }
 
+  /* ══════════════════════════════════════════════════════════
+     PROSPETTI FUTURI — Rendering proiezioni
+     ══════════════════════════════════════════════════════════ */
+
+  let _prospettiTab = 'prosp-ce';
+
+  function _renderProspetti() {
+    var content = document.getElementById('content');
+    var progetto = Projects.getProgetto();
+    if (!content || !progetto) return;
+
+    // Ricalcola proiezioni
+    Engine.calcolaProiezioni(progetto);
+
+    var anniPrev = progetto.meta.anni_previsione || [];
+    var proiezioni = progetto.proiezioni.annuali || {};
+
+    var html = '';
+
+    // Tabs
+    html += '<div class="tabs" id="prosp-tabs">';
+    html += '<div class="tab-item' + (_prospettiTab === 'prosp-ce' ? ' active' : '') + '" data-tab="prosp-ce" onclick="UI.switchProspTab(\'prosp-ce\')">Conto Economico</div>';
+    html += '<div class="tab-item' + (_prospettiTab === 'prosp-sp' ? ' active' : '') + '" data-tab="prosp-sp" onclick="UI.switchProspTab(\'prosp-sp\')">Stato Patrimoniale</div>';
+    html += '<div class="tab-item' + (_prospettiTab === 'prosp-cf' ? ' active' : '') + '" data-tab="prosp-cf" onclick="UI.switchProspTab(\'prosp-cf\')">Rendiconto Finanziario</div>';
+    html += '</div>';
+
+    // CE previsionale
+    html += '<div class="tab-pane' + (_prospettiTab === 'prosp-ce' ? ' active' : '') + '" id="prosp-ce">';
+    html += _renderProspettoCE(anniPrev, proiezioni, progetto);
+    html += '</div>';
+
+    // SP previsionale
+    html += '<div class="tab-pane' + (_prospettiTab === 'prosp-sp' ? ' active' : '') + '" id="prosp-sp">';
+    html += _renderProspettoSP(anniPrev, proiezioni, progetto);
+    html += '</div>';
+
+    // Cash flow
+    html += '<div class="tab-pane' + (_prospettiTab === 'prosp-cf' ? ' active' : '') + '" id="prosp-cf">';
+    html += _renderProspettoCF(anniPrev, proiezioni, progetto);
+    html += '</div>';
+
+    content.innerHTML = html;
+  }
+
+  function switchProspTab(tabId) {
+    _prospettiTab = tabId;
+    document.querySelectorAll('#prosp-tabs .tab-item').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.tab === tabId);
+    });
+    document.querySelectorAll('#content > .tab-pane').forEach(function(el) {
+      el.classList.toggle('active', el.id === tabId);
+    });
+  }
+
+  /* ── CE Previsionale ─────────────────────────────────────── */
+
+  function _renderProspettoCE(anniPrev, proiezioni, progetto) {
+    var nAnni = anniPrev.length;
+    var colW = Math.max(100, Math.floor(600 / nAnni));
+    var html = '<div style="overflow-x:auto">';
+    html += '<table class="schema-table"><colgroup><col style="width:auto">';
+    for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
+    html += '</colgroup>';
+
+    // Header anni
+    html += '<thead><tr class="row-mastro"><td>Conto Economico</td>';
+    for (var h = 0; h < nAnni; h++) html += '<td class="cell-amount">' + anniPrev[h] + '</td>';
+    html += '</tr></thead><tbody>';
+
+    // Righe CE
+    var voci = [
+      { key: 'valore_produzione',     label: 'A. Valore della produzione',   bold: true },
+      { key: 'costi_totale',          label: 'B.6-8,11-14 Costi operativi',  indent: 1 },
+      { key: 'personale_totale',      label: 'B.9 Costo del personale',      indent: 1 },
+      { key: 'ebitda',                label: 'EBITDA',                        bold: true, highlight: true },
+      { key: 'ammortamenti',          label: 'B.10 Ammortamenti',            indent: 1 },
+      { key: 'ebit',                  label: 'EBIT (A-B)',                   bold: true },
+      { key: 'oneri_finanziari',      label: 'C.17 Oneri finanziari',        indent: 1 },
+      { key: 'risultato_ante_imposte',label: 'Risultato ante imposte',       bold: true },
+      { key: 'ires',                  label: 'IRES',                         indent: 1 },
+      { key: 'irap',                  label: 'IRAP',                         indent: 1 },
+      { key: 'utile_netto',           label: 'Utile (perdita) netto',        bold: true, highlight: true }
+    ];
+
+    voci.forEach(function(v) {
+      var cls = v.bold ? 'row-totale' : 'row-conto';
+      if (v.highlight) cls = 'row-totale';
+      var pad = v.indent ? 'padding-left:24px' : '';
+      html += '<tr class="' + cls + '"><td style="' + pad + '">' + v.label + '</td>';
+      for (var a = 0; a < nAnni; a++) {
+        var ce = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].ce;
+        var val = ce ? (ce[v.key] || 0) : 0;
+        var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
+        html += '<td class="cell-amount"><span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span></td>';
+      }
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  /* ── SP Previsionale ─────────────────────────────────────── */
+
+  function _renderProspettoSP(anniPrev, proiezioni, progetto) {
+    var nAnni = anniPrev.length;
+    var colW = Math.max(100, Math.floor(600 / nAnni));
+    var html = '<div style="overflow-x:auto">';
+    html += '<table class="schema-table"><colgroup><col style="width:auto">';
+    for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
+    html += '</colgroup>';
+
+    html += '<thead><tr class="row-mastro"><td>Stato Patrimoniale</td>';
+    for (var h = 0; h < nAnni; h++) html += '<td class="cell-amount">' + anniPrev[h] + '</td>';
+    html += '</tr></thead><tbody>';
+
+    var vociAtt = [
+      { key: 'immob_immateriali_nette', label: 'B.I Immobilizzazioni immateriali', indent: 1 },
+      { key: 'immob_materiali_nette',   label: 'B.II Immobilizzazioni materiali',  indent: 1 },
+      { key: 'immob_finanziarie',       label: 'B.III Immobilizzazioni finanziarie', indent: 1 },
+      { key: 'immobilizzazioni_nette',  label: 'B. Totale immobilizzazioni',       bold: true },
+      { key: 'rimanenze',              label: 'C.I Rimanenze',                     indent: 1 },
+      { key: 'crediti_clienti',        label: 'C.II Crediti verso clienti',         indent: 1 },
+      { key: 'altri_crediti',          label: 'C.II Altri crediti',                 indent: 1 },
+      { key: 'attivo_circolante',      label: 'C. Attivo circolante',              bold: true },
+      { key: 'cassa',                  label: 'C.IV Disponibilità liquide',         indent: 1 },
+      { key: 'totale_attivo',          label: 'TOTALE ATTIVO',                     bold: true, highlight: true }
+    ];
+
+    var vociPass = [
+      { key: 'patrimonio_netto',  label: 'A. Patrimonio netto',   bold: true },
+      { key: 'tfr',               label: 'C. TFR',                indent: 1 },
+      { key: 'debiti_finanziari', label: 'D.4 Debiti finanziari', indent: 1 },
+      { key: 'debiti_fornitori',  label: 'D.7 Debiti fornitori',  indent: 1 },
+      { key: 'debiti_tributari',  label: 'D.12 Debiti tributari', indent: 1 },
+      { key: 'altri_debiti',     label: 'Altre passività',        indent: 1 },
+      { key: 'totale_passivo',   label: 'TOTALE PASSIVO + PN',   bold: true, highlight: true }
+    ];
+
+    // Sezione Attivo
+    html += '<tr class="row-sottomastro"><td colspan="' + (nAnni + 1) + '" style="font-weight:700">ATTIVO</td></tr>';
+    vociAtt.forEach(function(v) { html += _prospettoRow(v, anniPrev, proiezioni, 'sp'); });
+
+    // Sezione Passivo
+    html += '<tr class="row-sottomastro"><td colspan="' + (nAnni + 1) + '" style="font-weight:700">PASSIVO E PATRIMONIO NETTO</td></tr>';
+    vociPass.forEach(function(v) { html += _prospettoRow(v, anniPrev, proiezioni, 'sp'); });
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  /* ── Rendiconto Finanziario ──────────────────────────────── */
+
+  function _renderProspettoCF(anniPrev, proiezioni, progetto) {
+    var nAnni = anniPrev.length;
+    var colW = Math.max(100, Math.floor(600 / nAnni));
+    var html = '<div style="overflow-x:auto">';
+    html += '<table class="schema-table"><colgroup><col style="width:auto">';
+    for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
+    html += '</colgroup>';
+
+    html += '<thead><tr class="row-mastro"><td>Rendiconto Finanziario</td>';
+    for (var h = 0; h < nAnni; h++) html += '<td class="cell-amount">' + anniPrev[h] + '</td>';
+    html += '</tr></thead><tbody>';
+
+    var voci = [
+      { key: 'utile_netto',          label: 'Utile netto',                     indent: 1 },
+      { key: 'ammortamenti',         label: '+ Ammortamenti',                  indent: 1 },
+      { key: 'var_crediti',          label: '+/- Var. crediti clienti',        indent: 1 },
+      { key: 'var_rimanenze',        label: '+/- Var. rimanenze',             indent: 1 },
+      { key: 'var_debiti_fornitori', label: '+/- Var. debiti fornitori',      indent: 1 },
+      { key: 'var_debiti_tributari', label: '+/- Var. debiti tributari',      indent: 1 },
+      { key: 'var_tfr',             label: '+/- Var. TFR',                    indent: 1 },
+      { key: 'flusso_operativo',    label: 'Flusso area operativa',           bold: true },
+      { key: 'flusso_investimenti', label: 'Flusso area investimenti',        bold: true },
+      { key: 'rimborso_finanziamenti', label: '- Rimborso finanziamenti',     indent: 1 },
+      { key: 'flusso_finanziario',  label: 'Flusso area finanziaria',         bold: true },
+      { key: 'flusso_iva',          label: 'Flusso IVA',                      indent: 1 },
+      { key: 'flusso_netto',        label: 'FLUSSO DI CASSA NETTO',          bold: true, highlight: true }
+    ];
+
+    voci.forEach(function(v) { html += _prospettoRow(v, anniPrev, proiezioni, 'cash_flow'); });
+
+    // Riga cassa finale
+    html += '<tr class="row-totale"><td>Disponibilità liquide fine periodo</td>';
+    for (var a = 0; a < nAnni; a++) {
+      var sp = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].sp;
+      var val = sp ? sp.cassa : 0;
+      var valCls = val < 0 ? ' negative' : '';
+      html += '<td class="cell-amount"><span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span></td>';
+    }
+    html += '</tr>';
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  /* ── Helper riga prospetto ───────────────────────────────── */
+
+  function _prospettoRow(v, anniPrev, proiezioni, sezione) {
+    var cls = v.highlight ? 'row-totale' : (v.bold ? 'row-totale' : 'row-conto');
+    var pad = v.indent ? 'padding-left:24px' : '';
+    var html = '<tr class="' + cls + '"><td style="' + pad + '">' + v.label + '</td>';
+    for (var a = 0; a < anniPrev.length; a++) {
+      var data = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])][sezione];
+      var val = data ? (data[v.key] || 0) : 0;
+      var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
+      html += '<td class="cell-amount"><span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span></td>';
+    }
+    html += '</tr>';
+    return html;
+  }
+
   /* ── Immobilizzazioni dettaglio (lordo/fondo/netto) ────────── */
 
   /** Voci di immobilizzazione che mostrano costo storico + fondo. */
@@ -2153,6 +2368,8 @@ const UI = (() => {
     _handleCustomLabelBlur,
     // Immobilizzazioni
     _handleImmobField,
+    // Prospetti
+    switchProspTab,
     // Costi
     ciclaTipoCosto,
     _toggleCatMenu,
