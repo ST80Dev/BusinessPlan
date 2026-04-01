@@ -153,12 +153,13 @@ const Engine = (() => {
   }
 
   /* ══════════════════════════════════════════════════════════
-     MOTORE BASE — Proiezioni annuali senza eventi
+     MOTORE — Proiezioni annuali con eventi
      ══════════════════════════════════════════════════════════ */
 
   /**
    * Calcola tutte le proiezioni annuali del progetto.
    * Popola progetto.proiezioni.annuali con CE, SP e cash flow per ogni anno.
+   * Integra gli eventi pianificati (nuovi finanziamenti, investimenti, variazioni, ecc.).
    * @param {Object} progetto
    */
   function calcolaProiezioni(progetto) {
@@ -169,10 +170,20 @@ const Engine = (() => {
     var anniPrev = p.meta.anni_previsione || [];
     var driver = p.driver;
     var fisc = driver.fiscale || {};
-    var isCostitutenda = p.meta.scenario === 'costituenda';
+    var eventi = p.eventi || [];
 
     if (!p.proiezioni) p.proiezioni = {};
     p.proiezioni.annuali = {};
+
+    // Pre-calcola eventi: moltiplicatori ricavi/costi strutturali cumulativi
+    var multRicaviStrutt = 1;    // moltiplicatore strutturale ricavi cumulativo
+    var multCostiMPStrutt = 1;   // moltiplicatore strutturale costi materie prime
+    // Per costi variabili e gestione strutturali tracciamo per driver_id
+    var multCostiVarStrutt = {};  // { driver_id: moltiplicatore }
+    var costiGestOverride = {};   // { driver_id: { azione, importo_nuovo, variazione_pct } } — ultimo override attivo
+
+    // Investimenti cumulativi (portati avanti anno per anno)
+    var investimentiCumulativi = []; // { categoria, importo, aliquota, anno_acquisto, fondo: 0 }
 
     // Stato SP portato avanti anno per anno
     var spPrev = _inizializzaSP(p, annoBase);
@@ -182,20 +193,168 @@ const Engine = (() => {
       var annoStr = String(anno);
       var inflazione = (fisc.inflazione && fisc.inflazione[annoStr]) || 0;
 
-      // 1. RICAVI
+      // ── Elabora eventi per questo anno ──
+      var nuoviFinAnno = [];      // nuovi finanziamenti che partono quest'anno
+      var investimentiAnno = [];   // nuovi investimenti in questo anno
+      var varPersonaleAnno = [];   // variazioni personale
+      var opSociAnno = [];         // operazioni soci
+      var multRicaviPunt = 1;      // moltiplicatore puntuale ricavi (solo quest'anno)
+      var multCostiMPPunt = 1;     // moltiplicatore puntuale costi MP
+      var multCostiVarPunt = {};   // { driver_id: molt } puntuale
+
+      for (var e = 0; e < eventi.length; e++) {
+        var evt = eventi[e];
+        if (!evt || !evt.tipo) continue;
+
+        switch (evt.tipo) {
+          case 'nuovo_finanziamento':
+            // Attivo se data_inizio cade in questo anno o prima
+            if (_evtDataInAnno(evt.data_inizio, anno, annoBase)) {
+              nuoviFinAnno.push(evt);
+            }
+            break;
+
+          case 'nuovo_investimento':
+            if (evt.anno === anno) {
+              investimentiAnno.push(evt);
+            }
+            break;
+
+          case 'variazione_ricavi':
+            if (evt.anno === anno) {
+              if (evt.modalita === 'strutturale') {
+                multRicaviStrutt *= (1 + (evt.variazione_pct || 0));
+              } else {
+                multRicaviPunt *= (1 + (evt.variazione_pct || 0));
+              }
+            }
+            break;
+
+          case 'variazione_costi_mp':
+            if (evt.anno === anno) {
+              if (evt.modalita === 'strutturale') {
+                multCostiMPStrutt *= (1 + (evt.variazione_pct || 0));
+              } else {
+                multCostiMPPunt *= (1 + (evt.variazione_pct || 0));
+              }
+            }
+            break;
+
+          case 'variazione_costi_var':
+            if (evt.anno === anno && evt.driver_id) {
+              if (evt.modalita === 'strutturale') {
+                if (!multCostiVarStrutt[evt.driver_id]) multCostiVarStrutt[evt.driver_id] = 1;
+                multCostiVarStrutt[evt.driver_id] *= (1 + (evt.variazione_pct || 0));
+              } else {
+                if (!multCostiVarPunt[evt.driver_id]) multCostiVarPunt[evt.driver_id] = 1;
+                multCostiVarPunt[evt.driver_id] *= (1 + (evt.variazione_pct || 0));
+              }
+            }
+            break;
+
+          case 'andamento_costo_gestione':
+            if (evt.anno <= anno && evt.driver_id) {
+              // L'ultimo evento per driver_id che sia <= anno è quello attivo
+              costiGestOverride[evt.driver_id] = {
+                azione: evt.azione,
+                importo_nuovo: evt.importo_nuovo || 0,
+                variazione_pct: evt.variazione_pct || 0,
+                anno_evento: evt.anno
+              };
+            }
+            break;
+
+          case 'variazione_personale':
+            if (evt.anno === anno) {
+              varPersonaleAnno.push(evt);
+            }
+            break;
+
+          case 'operazione_soci':
+            if (evt.anno === anno) {
+              opSociAnno.push(evt);
+            }
+            break;
+        }
+      }
+
+      // 1. RICAVI (con moltiplicatori eventi)
       var ricavi = _calcolaRicaviAnno(driver.ricavi, anno, annoBase, inflazione);
+      ricavi.totale = Math.round(ricavi.totale * multRicaviStrutt * multRicaviPunt);
 
-      // 2. COSTI (non personale)
-      var costi = _calcolaCostiAnno(driver.costi, ricavi.totale, anno, annoBase, inflazione);
+      // 2. COSTI (con eventi: variazione MP, costi variabili, costi gestione)
+      var costi = _calcolaCostiAnnoConEventi(driver.costi, ricavi.totale, anno, annoBase, inflazione,
+        multCostiMPStrutt * multCostiMPPunt, multCostiVarStrutt, multCostiVarPunt, costiGestOverride);
 
-      // 3. PERSONALE
-      var pers = calcolaPersonaleAnno(driver.personale, anno, annoBase);
+      // 3. PERSONALE (con variazioni da eventi)
+      var persDriver = driver.personale;
+      // Crea variazioni temporanee combinando driver + eventi
+      var varOrgTemp = (persDriver.variazioni_organico || []).slice();
+      for (var vp = 0; vp < varPersonaleAnno.length; vp++) {
+        varOrgTemp.push({
+          anno: varPersonaleAnno[vp].anno,
+          delta: varPersonaleAnno[vp].delta || 0,
+          da_mese: varPersonaleAnno[vp].mese || 1
+        });
+      }
+      var persTemp = {
+        headcount: persDriver.headcount,
+        ral_media: persDriver.ral_media,
+        coeff_oneri: persDriver.coeff_oneri,
+        var_ral_pct: persDriver.var_ral_pct,
+        variazioni_organico: varOrgTemp
+      };
+      var pers = calcolaPersonaleAnno(persTemp, anno, annoBase);
 
-      // 4. AMMORTAMENTI (da immobilizzazioni esistenti)
+      // 4. AMMORTAMENTI (da immobilizzazioni esistenti + nuovi investimenti cumulativi)
       var ammort = _calcolaAmmortamentiAnno(p.immobilizzazioni, spPrev);
+      // Ammortamenti da investimenti degli anni precedenti
+      var ammortEvtImmat = 0, ammortEvtMat = 0;
+      for (var ic = 0; ic < investimentiCumulativi.length; ic++) {
+        var inv = investimentiCumulativi[ic];
+        if (inv.anno_acquisto >= anno) continue; // ammortamento parte dall'anno successivo
+        var quotaInv = Math.round(inv.importo * inv.aliquota);
+        var nettoInv = inv.importo - inv.fondo;
+        if (quotaInv > nettoInv) quotaInv = Math.max(0, nettoInv);
+        if (inv.categoria.indexOf('sp.BI.') === 0) {
+          ammortEvtImmat += quotaInv;
+        } else {
+          ammortEvtMat += quotaInv;
+        }
+        inv.fondo += quotaInv;
+      }
+      ammort.immateriali += ammortEvtImmat;
+      ammort.materiali += ammortEvtMat;
+      ammort.quota_annua += ammortEvtImmat + ammortEvtMat;
 
-      // 5. ONERI FINANZIARI (da finanziamenti in essere)
+      // Registra nuovi investimenti di quest'anno (ammortamento partirà dall'anno prossimo)
+      var investimentiCassaAnno = 0;
+      var ivaInvestimentiAnno = 0;
+      for (var ni = 0; ni < investimentiAnno.length; ni++) {
+        var nInv = investimentiAnno[ni];
+        investimentiCumulativi.push({
+          categoria: nInv.categoria, importo: nInv.importo,
+          aliquota: nInv.aliquota_ammortamento || 0,
+          anno_acquisto: anno, fondo: 0
+        });
+        investimentiCassaAnno += nInv.importo;
+        ivaInvestimentiAnno += Math.round(nInv.importo * (nInv.iva_pct || 0));
+      }
+
+      // 5. ONERI FINANZIARI (finanziamenti in essere + nuovi)
       var finanz = _calcolaFinanziamentiAnno(driver.finanziamenti_essere, anno, annoBase);
+      // Nuovi finanziamenti: calcola interessi e rimborso
+      var nuoviFinInteressi = 0, nuoviFinCapitale = 0, nuoviFinDebito = 0;
+      for (var nf = 0; nf < nuoviFinAnno.length; nf++) {
+        var fin = nuoviFinAnno[nf];
+        var nfResult = _calcolaFinanziamentoSingolo(fin, anno);
+        nuoviFinInteressi += nfResult.interessi;
+        nuoviFinCapitale += nfResult.capitale;
+        nuoviFinDebito += nfResult.residuo;
+      }
+      finanz.interessi_totale += nuoviFinInteressi;
+      finanz.capitale_rimborsato += nuoviFinCapitale;
+      finanz.uscita_cassa += nuoviFinInteressi + nuoviFinCapitale;
 
       // 6. CE
       var ce = {};
@@ -217,21 +376,76 @@ const Engine = (() => {
 
       // 7. IMPOSTE
       ce.ires = Math.max(0, Math.round(ce.risultato_ante_imposte * (fisc.aliquota_ires || 0.24)));
-      // Base IRAP: valore produzione - costi produzione (esclusi oneri finanziari e personale dipendente)
       var baseIrap = ce.valore_produzione - ce.costi_totale - ce.ammortamenti;
       ce.irap = Math.max(0, Math.round(baseIrap * (fisc.aliquota_irap || 0.039)));
       ce.imposte = ce.ires + ce.irap;
       ce.utile_netto = ce.risultato_ante_imposte - ce.imposte;
 
-      // 8. IVA
+      // 8. IVA (inclusa IVA credito da investimenti)
       var iva = _calcolaIvaAnno(ricavi.totale, costi, driver, fisc);
+      iva.iva_credito += ivaInvestimentiAnno;
+      iva.saldo = iva.iva_debito - iva.iva_credito;
+      iva.da_versare = iva.saldo > 0 ? iva.saldo : 0;
+      iva.a_credito = iva.saldo < 0 ? -iva.saldo : 0;
       ce.iva = iva;
 
       // 9. SP
       var sp = _calcolaSPAnno(spPrev, ce, finanz, ammort, driver, anno, annoBase, p);
 
+      // SP: aggiungi investimenti netti dell'anno
+      var invImmatAnno = 0, invMatAnno = 0;
+      for (var ii = 0; ii < investimentiAnno.length; ii++) {
+        var inv2 = investimentiAnno[ii];
+        if (inv2.categoria.indexOf('sp.BI.') === 0) {
+          invImmatAnno += inv2.importo;
+        } else {
+          invMatAnno += inv2.importo;
+        }
+      }
+      sp.immob_immateriali_nette += invImmatAnno;
+      sp.immob_materiali_nette += invMatAnno;
+      sp.immobilizzazioni_nette += invImmatAnno + invMatAnno;
+
+      // SP: nuovi finanziamenti aumentano debiti
+      sp.debiti_finanziari += nuoviFinDebito;
+
+      // SP: operazioni soci
+      var versCapitaleAnno = 0, finSociNettoAnno = 0;
+      for (var os = 0; os < opSociAnno.length; os++) {
+        var op = opSociAnno[os];
+        if (op.sottotipo === 'versamento_capitale') {
+          versCapitaleAnno += (op.importo || 0);
+        } else if (op.sottotipo === 'finanziamento_soci') {
+          finSociNettoAnno += (op.importo || 0);
+        } else if (op.sottotipo === 'rimborso_soci') {
+          finSociNettoAnno -= (op.importo || 0);
+        }
+      }
+      sp.patrimonio_netto += versCapitaleAnno;
+      sp.altri_debiti += finSociNettoAnno;
+
       // 10. RENDICONTO FINANZIARIO
       var cf = _calcolaCashFlowAnno(ce, sp, spPrev, finanz);
+
+      // CF: investimenti
+      cf.investimenti = investimentiCassaAnno;
+      cf.flusso_investimenti = -investimentiCassaAnno;
+
+      // CF: nuovi finanziamenti erogati
+      var nuoviFinErogati = 0;
+      for (var ne = 0; ne < nuoviFinAnno.length; ne++) {
+        nuoviFinErogati += nuoviFinAnno[ne].importo || 0;
+      }
+      cf.nuovi_finanziamenti = nuoviFinErogati;
+
+      // CF: operazioni soci (entrata/uscita cassa)
+      cf.versamenti_soci = versCapitaleAnno + Math.max(0, finSociNettoAnno);
+      cf.rimborsi_soci = Math.abs(Math.min(0, finSociNettoAnno));
+      cf.flusso_finanziario = cf.rimborso_finanziamenti + cf.nuovi_finanziamenti +
+        cf.versamenti_soci - cf.rimborsi_soci - cf.dividendi;
+
+      // Ricalcola flusso netto con tutti gli aggiustamenti
+      cf.flusso_netto = cf.flusso_operativo + cf.flusso_investimenti + cf.flusso_finanziario + cf.flusso_iva;
 
       // Aggiorna cassa nello SP
       sp.cassa = spPrev.cassa + cf.flusso_netto;
@@ -596,6 +810,150 @@ const Engine = (() => {
   /* ── Smobilizzo crediti/debiti (primi mesi) ──────────────── */
   // TODO: implementare effetto mensile dello smobilizzo nei primi mesi
   // Per ora i crediti/debiti storici vengono sostituiti dai valori DSO/DPO
+
+  /* ── Helper eventi ───────────────────────────────────────── */
+
+  /**
+   * Verifica se la data_inizio di un finanziamento (formato MM/AAAA) è <= anno dato.
+   * Restituisce true se il finanziamento è attivo per quell'anno.
+   */
+  function _evtDataInAnno(dataStr, anno, annoBase) {
+    if (!dataStr) return false;
+    var parts = String(dataStr).split('/');
+    if (parts.length !== 2) return false;
+    var annoEvt = parseInt(parts[1], 10);
+    return !isNaN(annoEvt) && annoEvt <= anno;
+  }
+
+  /**
+   * Calcola costi annuali con applicazione degli eventi (variazioni MP, costi variabili, costi gestione).
+   */
+  function _calcolaCostiAnnoConEventi(driverCosti, ricaviTotale, anno, annoBase, inflazione,
+      multMP, multCostiVarStrutt, multCostiVarPunt, costiGestOverride) {
+    var totale = 0;
+    var totaleIvaCredito = 0;
+    var dettaglio = [];
+
+    (driverCosti || []).forEach(function(drv) {
+      if (drv.usa_var_personale) return;
+
+      var importo = 0;
+      if (drv.tipo_driver === 'pct_ricavi') {
+        var pct = drv.pct_ricavi || 0;
+        var anniDiff = anno - annoBase;
+        if (drv.var_pct_annua && anniDiff > 0) {
+          pct = pct + (drv.var_pct_annua * anniDiff);
+        }
+        importo = Math.round(ricaviTotale * pct);
+
+        // Evento: variazione costi variabili per questo driver
+        var multVar = (multCostiVarStrutt[drv.id] || 1) * (multCostiVarPunt[drv.id] || 1);
+        importo = Math.round(importo * multVar);
+      } else {
+        var base = drv.importo_fisso || 0;
+        var anniDiff2 = anno - annoBase;
+        if (drv.soggetto_inflazione && inflazione && anniDiff2 > 0) {
+          importo = Math.round(base * Math.pow(1 + inflazione, anniDiff2));
+        } else {
+          importo = base;
+        }
+      }
+
+      // Evento: andamento costi gestione override
+      var override = costiGestOverride[drv.id];
+      if (override) {
+        switch (override.azione) {
+          case 'cessato':
+            importo = 0;
+            break;
+          case 'attivato':
+            importo = override.importo_nuovo || 0;
+            break;
+          case 'aumentato':
+            importo = override.importo_nuovo || importo;
+            break;
+          case 'variazione':
+            importo = Math.round(importo * (1 + (override.variazione_pct || 0)));
+            break;
+        }
+      }
+
+      // Evento: variazione costi materie prime (B.6)
+      if (drv.voce_ce && drv.voce_ce.indexOf('ce.B.6') === 0) {
+        importo = Math.round(importo * multMP);
+      }
+
+      var ivaPct = drv.iva_pct || 0;
+      var ivaCredito = Math.round(importo * ivaPct);
+      totaleIvaCredito += ivaCredito;
+
+      totale += importo;
+      dettaglio.push({ id: drv.id, label: drv.label, importo: importo, iva_credito: ivaCredito });
+    });
+
+    return { totale: totale, iva_credito: totaleIvaCredito, dettaglio: dettaglio };
+  }
+
+  /**
+   * Calcola interessi e rimborso capitale per un singolo nuovo finanziamento (evento).
+   * Simile a _calcolaFinanziamentiAnno ma per un singolo finanziamento con data_inizio.
+   */
+  function _calcolaFinanziamentoSingolo(fin, annoCalc) {
+    if (!fin.importo || !fin.tasso_annuo || !fin.durata_mesi || !fin.data_inizio) {
+      return { interessi: 0, capitale: 0, residuo: fin.importo || 0 };
+    }
+
+    var parts = String(fin.data_inizio).split('/');
+    if (parts.length !== 2) return { interessi: 0, capitale: 0, residuo: fin.importo || 0 };
+    var meseInizio = parseInt(parts[0], 10) || 1;
+    var annoInizio = parseInt(parts[1], 10);
+    if (isNaN(annoInizio)) return { interessi: 0, capitale: 0, residuo: fin.importo || 0 };
+
+    var tassoMese = fin.tasso_annuo / 12;
+    var cap = fin.importo;
+    var dur = fin.durata_mesi;
+    var capResiduo = cap;
+
+    // Mese assoluto 0 = mese inizio finanziamento
+    var meseAssInizioAnno = (annoCalc - annoInizio) * 12 + (1 - meseInizio);
+    var meseAssFineAnno = meseAssInizioAnno + 11;
+
+    // Simula dalla partenza fino a inizio anno
+    for (var m = 0; m < meseAssInizioAnno && m < dur; m++) {
+      if (capResiduo <= 0) break;
+      if (fin.tipo_ammortamento === 'italiano') {
+        capResiduo -= cap / dur;
+      } else {
+        var rata = cap * tassoMese / (1 - Math.pow(1 + tassoMese, -dur));
+        var qInt = capResiduo * tassoMese;
+        capResiduo -= (rata - qInt);
+      }
+    }
+
+    var interessiAnno = 0, capitaleAnno = 0;
+    for (var mm = Math.max(0, meseAssInizioAnno); mm <= meseAssFineAnno && mm < dur; mm++) {
+      if (capResiduo <= 0) break;
+      if (fin.tipo_ammortamento === 'italiano') {
+        var qCap = cap / dur;
+        interessiAnno += capResiduo * tassoMese;
+        capitaleAnno += qCap;
+        capResiduo -= qCap;
+      } else {
+        var rataF = cap * tassoMese / (1 - Math.pow(1 + tassoMese, -dur));
+        var qIntF = capResiduo * tassoMese;
+        var qCapF = rataF - qIntF;
+        interessiAnno += qIntF;
+        capitaleAnno += qCapF;
+        capResiduo -= qCapF;
+      }
+    }
+
+    return {
+      interessi: Math.round(interessiAnno),
+      capitale: Math.round(capitaleAnno),
+      residuo: Math.max(0, Math.round(capResiduo))
+    };
+  }
 
   /* ── API pubblica ────────────────────────────────────────── */
   return {

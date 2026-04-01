@@ -84,6 +84,8 @@ const UI = (() => {
         _renderProspetti();
         break;
       case 'eventi':
+        _renderEventi();
+        break;
       case 'dashboard':
         content.innerHTML = _renderPlaceholder(titoli[sezione]);
         break;
@@ -1962,6 +1964,518 @@ const UI = (() => {
   }
 
   /* ══════════════════════════════════════════════════════════
+     EVENTI — Pianificazione eventi futuri
+     ══════════════════════════════════════════════════════════ */
+
+  let _eventiTab = 'evt-finanziamenti';
+
+  function _renderEventi() {
+    var content = document.getElementById('content');
+    var progetto = Projects.getProgetto();
+    if (!content || !progetto) return;
+    if (!progetto.eventi) progetto.eventi = [];
+
+    var html = '';
+
+    // Tabs
+    html += '<div class="tabs" id="eventi-tabs">';
+    html += _evtTabItem('evt-finanziamenti', 'Finanziamenti');
+    html += _evtTabItem('evt-investimenti', 'Investimenti');
+    html += _evtTabItem('evt-ricavi', 'Ricavi');
+    html += _evtTabItem('evt-costi-mp', 'Mat. Prime');
+    html += _evtTabItem('evt-costi-var', 'Costi Var.');
+    html += _evtTabItem('evt-costi-gest', 'Costi Gest.');
+    html += _evtTabItem('evt-personale', 'Personale');
+    html += _evtTabItem('evt-soci', 'Soci');
+    html += '</div>';
+
+    // Tab panes
+    html += '<div class="tab-pane' + (_eventiTab === 'evt-finanziamenti' ? ' active' : '') + '" id="evt-finanziamenti">';
+    html += _renderEvtFinanziamenti(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_eventiTab === 'evt-investimenti' ? ' active' : '') + '" id="evt-investimenti">';
+    html += _renderEvtInvestimenti(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_eventiTab === 'evt-ricavi' ? ' active' : '') + '" id="evt-ricavi">';
+    html += _renderEvtRicavi(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_eventiTab === 'evt-costi-mp' ? ' active' : '') + '" id="evt-costi-mp">';
+    html += _renderEvtCostiMP(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_eventiTab === 'evt-costi-var' ? ' active' : '') + '" id="evt-costi-var">';
+    html += _renderEvtCostiVar(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_eventiTab === 'evt-costi-gest' ? ' active' : '') + '" id="evt-costi-gest">';
+    html += _renderEvtCostiGestione(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_eventiTab === 'evt-personale' ? ' active' : '') + '" id="evt-personale">';
+    html += _renderEvtPersonale(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_eventiTab === 'evt-soci' ? ' active' : '') + '" id="evt-soci">';
+    html += _renderEvtSoci(progetto);
+    html += '</div>';
+
+    content.innerHTML = html;
+  }
+
+  function _evtTabItem(id, label) {
+    return '<div class="tab-item tab-item-sm' + (_eventiTab === id ? ' active' : '') + '" data-tab="' + id + '" onclick="UI.switchEventiTab(\'' + id + '\')">' + label + '</div>';
+  }
+
+  function switchEventiTab(tabId) {
+    _eventiTab = tabId;
+    document.querySelectorAll('#eventi-tabs .tab-item').forEach(function(el) {
+      el.classList.toggle('active', el.dataset.tab === tabId);
+    });
+    document.querySelectorAll('#content > .tab-pane').forEach(function(el) {
+      el.classList.toggle('active', el.id === tabId);
+    });
+  }
+
+  /* ── Helper: filtra eventi per tipo ────────────────────── */
+
+  function _eventiPerTipo(progetto, tipo) {
+    var result = [];
+    for (var i = 0; i < progetto.eventi.length; i++) {
+      if (progetto.eventi[i].tipo === tipo) {
+        result.push({ evt: progetto.eventi[i], idx: i });
+      }
+    }
+    return result;
+  }
+
+  function aggiungiEvento(tipo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    if (!progetto.eventi) progetto.eventi = [];
+    progetto.eventi.push(Projects.creaEvento(tipo, progetto));
+    Projects.segnaModificato();
+    _renderEventi();
+  }
+
+  function rimuoviEvento(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi) return;
+    progetto.eventi.splice(idx, 1);
+    Projects.segnaModificato();
+    _renderEventi();
+  }
+
+  function _handleEvtField(el, idx, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi || !progetto.eventi[idx]) return;
+    var evt = progetto.eventi[idx];
+    var raw = (el.textContent || '').trim();
+
+    if (campo === 'descrizione' || campo === 'data_inizio') {
+      evt[campo] = raw;
+    } else if (campo === 'tasso_annuo' || campo === 'variazione_pct' || campo === 'iva_pct' || campo === 'aliquota_ammortamento') {
+      evt[campo] = _parsePct(raw);
+      el.textContent = _formatPct(evt[campo]);
+    } else if (campo === 'anno' || campo === 'mese' || campo === 'durata_mesi' || campo === 'delta') {
+      var val = parseInt(raw, 10) || 0;
+      if (campo === 'mese') val = Math.max(1, Math.min(12, val));
+      evt[campo] = val;
+      el.textContent = String(val);
+    } else {
+      // importo, importo_nuovo, ral_nuovi, etc.
+      evt[campo] = _parseImporto(raw);
+      el.textContent = _formatImporto(evt[campo]);
+    }
+    Projects.segnaModificato();
+  }
+
+  /* ── Bottoni ciclici per campi enum ────────────────────── */
+
+  function ciclaEvtTipoAmm(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi[idx]) return;
+    var evt = progetto.eventi[idx];
+    evt.tipo_ammortamento = evt.tipo_ammortamento === 'francese' ? 'italiano' : 'francese';
+    Projects.segnaModificato();
+    _renderEventi();
+  }
+
+  function ciclaEvtModalita(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi[idx]) return;
+    var evt = progetto.eventi[idx];
+    evt.modalita = evt.modalita === 'strutturale' ? 'puntuale' : 'strutturale';
+    Projects.segnaModificato();
+    _renderEventi();
+  }
+
+  function ciclaEvtAzione(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi[idx]) return;
+    var evt = progetto.eventi[idx];
+    var azioni = ['variazione', 'cessato', 'aumentato', 'attivato'];
+    var pos = azioni.indexOf(evt.azione);
+    evt.azione = azioni[(pos + 1) % azioni.length];
+    Projects.segnaModificato();
+    _renderEventi();
+  }
+
+  function ciclaEvtSottotipo(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi[idx]) return;
+    var evt = progetto.eventi[idx];
+    var tipi = ['versamento_capitale', 'finanziamento_soci', 'rimborso_soci'];
+    var pos = tipi.indexOf(evt.sottotipo);
+    evt.sottotipo = tipi[(pos + 1) % tipi.length];
+    Projects.segnaModificato();
+    _renderEventi();
+  }
+
+  function ciclaEvtCategoria(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi[idx]) return;
+    var evt = progetto.eventi[idx];
+    var cats = Projects.CATEGORIE_INVESTIMENTO;
+    var pos = 0;
+    for (var c = 0; c < cats.length; c++) {
+      if (cats[c].id === evt.categoria) { pos = c; break; }
+    }
+    evt.categoria = cats[(pos + 1) % cats.length].id;
+    Projects.segnaModificato();
+    _renderEventi();
+  }
+
+  function ciclaEvtDriver(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi[idx]) return;
+    var evt = progetto.eventi[idx];
+    var drivers;
+    if (evt.tipo === 'variazione_costi_var') {
+      drivers = (progetto.driver.costi || []).filter(function(d) { return d.tipo_driver === 'pct_ricavi'; });
+    } else {
+      drivers = (progetto.driver.costi || []).filter(function(d) { return d.tipo_driver === 'fisso' && !d.usa_var_personale; });
+    }
+    if (drivers.length === 0) return;
+    var pos = -1;
+    for (var d = 0; d < drivers.length; d++) {
+      if (drivers[d].id === evt.driver_id) { pos = d; break; }
+    }
+    evt.driver_id = drivers[(pos + 1) % drivers.length].id;
+    Projects.segnaModificato();
+    _renderEventi();
+  }
+
+  function _labelDriverById(progetto, driverId) {
+    if (!driverId) return '(seleziona)';
+    var costi = progetto.driver.costi || [];
+    for (var i = 0; i < costi.length; i++) {
+      if (costi[i].id === driverId) return costi[i].label;
+    }
+    return '(seleziona)';
+  }
+
+  function _labelCategoria(catId) {
+    var cats = Projects.CATEGORIE_INVESTIMENTO;
+    for (var i = 0; i < cats.length; i++) {
+      if (cats[i].id === catId) return cats[i].label;
+    }
+    return catId;
+  }
+
+  var _SOTTOTIPO_LABELS = {
+    versamento_capitale: 'Versamento c/capitale',
+    finanziamento_soci: 'Finanziamento soci',
+    rimborso_soci: 'Rimborso a soci'
+  };
+
+  var _AZIONE_LABELS = {
+    variazione: 'Variazione %',
+    cessato: 'Cessato',
+    aumentato: 'Aumentato',
+    attivato: 'Attivato'
+  };
+
+  /* ── Tab 1: Nuovi Finanziamenti ────────────────────────── */
+
+  function _renderEvtFinanziamenti(progetto) {
+    var items = _eventiPerTipo(progetto, 'nuovo_finanziamento');
+    var html = '';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Nuovi Finanziamenti</h3>';
+    html += '<div class="form-hint mb-8">Mutui e finanziamenti che verranno accesi nel periodo previsionale. Impattano debiti finanziari (SP), interessi passivi (CE) e cash flow.</div>';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'nuovo_finanziamento\')">+ Aggiungi finanziamento</div>';
+    html += '</div></div>';
+
+    if (items.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessun nuovo finanziamento pianificato.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:120px"><col style="width:80px"><col style="width:80px"><col style="width:100px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Importo</td><td class="cell-amount">Tasso %</td><td class="cell-amount">Durata mesi</td><td class="cell-amount">Tipo amm.</td><td class="cell-amount">Data inizio</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i].evt, idx = items[i].idx;
+        var tipoLabel = e.tipo_ammortamento === 'italiano' ? 'Italiano' : 'Francese';
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'tasso_annuo\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.tasso_annuo) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'durata_mesi\')" onkeydown="UI._handleAmountKey(event)">' + (e.durata_mesi || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtTipoAmm(' + idx + ')">' + tipoLabel + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" style="font-size:12px" data-placeholder="MM/AAAA" onblur="UI._handleEvtField(this,' + idx + ',\'data_inizio\')" onkeydown="UI._handleAmountKey(event)">' + _escapeHtml(e.data_inizio || '') + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+
+  /* ── Tab 2: Nuovi Investimenti ─────────────────────────── */
+
+  function _renderEvtInvestimenti(progetto) {
+    var items = _eventiPerTipo(progetto, 'nuovo_investimento');
+    var html = '';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Nuovi Investimenti</h3>';
+    html += '<div class="form-hint mb-8">Acquisti di beni strumentali nel periodo previsionale. Impattano immobilizzazioni (SP), ammortamenti (CE), IVA a credito e cash flow.</div>';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'nuovo_investimento\')">+ Aggiungi investimento</div>';
+    html += '</div></div>';
+
+    if (items.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessun nuovo investimento pianificato.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:160px"><col style="width:60px"><col style="width:60px"><col style="width:120px"><col style="width:70px"><col style="width:80px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Categoria</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Importo</td><td class="cell-amount">IVA %</td><td class="cell-amount">Aliq. amm. %</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i].evt, idx = items[i].idx;
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:120px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="font-size:11px;white-space:nowrap" onclick="UI.ciclaEvtCategoria(' + idx + ')">' + _escapeHtml(_labelCategoria(e.categoria)) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="22%" onblur="UI._handleEvtField(this,' + idx + ',\'iva_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.iva_pct) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'aliquota_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.aliquota_ammortamento) + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+
+  /* ── Tab 3: Variazione Ricavi ──────────────────────────── */
+
+  function _renderEvtRicavi(progetto) {
+    var items = _eventiPerTipo(progetto, 'variazione_ricavi');
+    var html = '';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione Ricavi</h3>';
+    html += '<div class="form-hint mb-8">Aumento o diminuzione percentuale dei ricavi. <b>Puntuale</b>: effetto solo nell\'anno indicato. <b>Strutturale</b>: effetto permanente dal mese/anno indicato in poi.</div>';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'variazione_ricavi\')">+ Aggiungi variazione</div>';
+    html += '</div></div>';
+
+    if (items.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessuna variazione ricavi pianificata.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Modalità</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i].evt, idx = items[i].idx;
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtModalita(' + idx + ')">' + (e.modalita === 'puntuale' ? 'Puntuale' : 'Strutturale') + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+
+  /* ── Tab 4: Variazione Costi Materie Prime ─────────────── */
+
+  function _renderEvtCostiMP(progetto) {
+    var items = _eventiPerTipo(progetto, 'variazione_costi_mp');
+    var html = '';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione Costi Materie Prime</h3>';
+    html += '<div class="form-hint mb-8">Aumento o diminuzione percentuale dei costi di acquisto materie prime e materiali (voci B.6 del CE). Incide sul costo del venduto.</div>';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'variazione_costi_mp\')">+ Aggiungi variazione</div>';
+    html += '</div></div>';
+
+    if (items.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessuna variazione costi materie prime pianificata.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Modalità</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i].evt, idx = items[i].idx;
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtModalita(' + idx + ')">' + (e.modalita === 'puntuale' ? 'Puntuale' : 'Strutturale') + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+
+  /* ── Tab 5: Variazione Costi Variabili ─────────────────── */
+
+  function _renderEvtCostiVar(progetto) {
+    var items = _eventiPerTipo(progetto, 'variazione_costi_var');
+    var html = '';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione Costi Variabili</h3>';
+    html += '<div class="form-hint mb-8">Variazione % dei costi già categorizzati come variabili (% sul fatturato). Clicca sul nome del driver per selezionare la voce di costo da modificare.</div>';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'variazione_costi_var\')">+ Aggiungi variazione</div>';
+    html += '</div></div>';
+
+    if (items.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessuna variazione costi variabili pianificata.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Driver costo</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Modalità</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i].evt, idx = items[i].idx;
+        html += '<tr class="row-conto">';
+        html += '<td><div class="btn btn-ghost btn-sm" style="text-align:left;font-size:12px;white-space:nowrap" onclick="UI.ciclaEvtDriver(' + idx + ')">' + _escapeHtml(_labelDriverById(progetto, e.driver_id)) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtModalita(' + idx + ')">' + (e.modalita === 'puntuale' ? 'Puntuale' : 'Strutturale') + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+
+  /* ── Tab 6: Andamento Costi di Gestione ────────────────── */
+
+  function _renderEvtCostiGestione(progetto) {
+    var items = _eventiPerTipo(progetto, 'andamento_costo_gestione');
+    var html = '';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Andamento Costi di Gestione</h3>';
+    html += '<div class="form-hint mb-8">Gestione puntuale dei singoli costi fissi (Servizi, Amministrativi, Locazioni, ecc.). Oltre all\'inflazione, è possibile definire la cessazione, l\'aumento, l\'attivazione o la variazione % di un costo specifico da un determinato mese/anno.</div>';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'andamento_costo_gestione\')">+ Aggiungi evento</div>';
+    html += '</div></div>';
+
+    if (items.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessun evento su costi di gestione pianificato.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:100px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Driver costo</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Azione</td><td class="cell-amount">Nuovo importo</td><td class="cell-amount">Variazione %</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i].evt, idx = items[i].idx;
+        html += '<tr class="row-conto">';
+        html += '<td><div class="btn btn-ghost btn-sm" style="text-align:left;font-size:12px;white-space:nowrap" onclick="UI.ciclaEvtDriver(' + idx + ')">' + _escapeHtml(_labelDriverById(progetto, e.driver_id)) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtAzione(' + idx + ')">' + (_AZIONE_LABELS[e.azione] || e.azione) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo_nuovo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo_nuovo ? _formatImporto(e.importo_nuovo) : '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+
+  /* ── Tab 7: Variazione Personale ───────────────────────── */
+
+  function _renderEvtPersonale(progetto) {
+    var items = _eventiPerTipo(progetto, 'variazione_personale');
+    var html = '';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione Personale</h3>';
+    html += '<div class="form-hint mb-8">Aumento o diminuzione del numero di dipendenti dal mese/anno indicato. Il campo RAL è opzionale: se lasciato a 0 si usa la RAL media del progetto.</div>';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'variazione_personale\')">+ Aggiungi variazione</div>';
+    html += '</div></div>';
+
+    if (items.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessuna variazione di personale pianificata.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:120px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Delta (+/-)</td><td class="cell-amount">RAL nuovi</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i].evt, idx = items[i].idx;
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'delta\')" onkeydown="UI._handleAmountKey(event)">' + (e.delta || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'ral_nuovi\')" onkeydown="UI._handleAmountKey(event)">' + (e.ral_nuovi ? _formatImporto(e.ral_nuovi) : '') + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+
+  /* ── Tab 8: Versamenti/Finanziamenti Soci ──────────────── */
+
+  function _renderEvtSoci(progetto) {
+    var items = _eventiPerTipo(progetto, 'operazione_soci');
+    var html = '';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Versamenti e Finanziamenti Soci</h3>';
+    html += '<div class="form-hint mb-8">Versamenti in conto capitale (incrementano il patrimonio netto), finanziamenti soci (debiti verso soci) e rimborsi ai soci. Impattano SP e cash flow.</div>';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'operazione_soci\')">+ Aggiungi operazione</div>';
+    html += '</div></div>';
+
+    if (items.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessuna operazione soci pianificata.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:170px"><col style="width:120px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Tipo operazione</td><td class="cell-amount">Importo</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i].evt, idx = items[i].idx;
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="font-size:11px;white-space:nowrap" onclick="UI.ciclaEvtSottotipo(' + idx + ')">' + (_SOTTOTIPO_LABELS[e.sottotipo] || e.sottotipo) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+
+  /* ══════════════════════════════════════════════════════════
      PROSPETTI FUTURI — Rendering proiezioni
      ══════════════════════════════════════════════════════════ */
 
@@ -2386,7 +2900,18 @@ const UI = (() => {
     aggiungiSmobilizzo,
     rimuoviSmobilizzo,
     importaSmobilizzoDaSP,
-    _handleSmobField
+    _handleSmobField,
+    // Fase 4 — eventi
+    switchEventiTab,
+    aggiungiEvento,
+    rimuoviEvento,
+    _handleEvtField,
+    ciclaEvtTipoAmm,
+    ciclaEvtModalita,
+    ciclaEvtAzione,
+    ciclaEvtSottotipo,
+    ciclaEvtCategoria,
+    ciclaEvtDriver
   };
 
 })();

@@ -134,6 +134,79 @@ const Projects = (() => {
   }
 
   /* ──────────────────────────────────────────────────────────
+     Categorie investimento (mapping voce SP → label)
+     ────────────────────────────────────────────────────────── */
+
+  const CATEGORIE_INVESTIMENTO = [
+    { id: 'sp.BII.1', label: 'Terreni e fabbricati' },
+    { id: 'sp.BII.2', label: 'Impianti e macchinari' },
+    { id: 'sp.BII.3', label: 'Attrezzature industriali e commerciali' },
+    { id: 'sp.BII.4', label: 'Altri beni materiali' },
+    { id: 'sp.BI.1',  label: 'Costi d\'impianto e ampliamento' },
+    { id: 'sp.BI.2',  label: 'Ricerca & Sviluppo' },
+    { id: 'sp.BI.7',  label: 'Altre immobilizzazioni immateriali' }
+  ];
+
+  /* ──────────────────────────────────────────────────────────
+     Creazione eventi
+     ────────────────────────────────────────────────────────── */
+
+  let _nextEvtId = 1;
+
+  /**
+   * Crea un evento con valori default per la tipologia indicata.
+   * @param {string} tipo - tipo evento
+   * @param {Object} progetto - progetto corrente (per anno base)
+   * @returns {Object}
+   */
+  function creaEvento(tipo, progetto) {
+    var primoAnno = (progetto && progetto.meta && progetto.meta.anni_previsione && progetto.meta.anni_previsione[0])
+      ? progetto.meta.anni_previsione[0]
+      : new Date().getFullYear();
+    var base = { tipo: tipo, id: 'evt_' + Date.now() + '_' + (_nextEvtId++), descrizione: '' };
+
+    switch (tipo) {
+      case 'nuovo_finanziamento':
+        return Object.assign(base, {
+          importo: 0, tasso_annuo: 0, durata_mesi: 60,
+          tipo_ammortamento: 'francese', data_inizio: ''
+        });
+      case 'nuovo_investimento':
+        return Object.assign(base, {
+          categoria: 'sp.BII.2', anno: primoAnno, mese: 1,
+          importo: 0, iva_pct: 0.22, aliquota_ammortamento: 0
+        });
+      case 'variazione_ricavi':
+        return Object.assign(base, {
+          anno: primoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
+        });
+      case 'variazione_costi_mp':
+        return Object.assign(base, {
+          anno: primoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
+        });
+      case 'variazione_costi_var':
+        return Object.assign(base, {
+          driver_id: '', anno: primoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
+        });
+      case 'andamento_costo_gestione':
+        return Object.assign(base, {
+          driver_id: '', anno: primoAnno, mese: 1,
+          azione: 'variazione', importo_nuovo: 0, variazione_pct: 0
+        });
+      case 'variazione_personale':
+        return Object.assign(base, {
+          anno: primoAnno, mese: 1, delta: 0, ral_nuovi: 0
+        });
+      case 'operazione_soci':
+        return Object.assign(base, {
+          anno: primoAnno, mese: 1, importo: 0, sottotipo: 'versamento_capitale'
+        });
+      default:
+        return base;
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────
      Conti tipici di dettaglio per pre-popolamento
      ────────────────────────────────────────────────────────── */
 
@@ -724,7 +797,10 @@ const Projects = (() => {
     // Fase 3 — driver
     creaDriverRicavo,
     creaDriverCosto,
-    sincronizzaDriverDaCE
+    sincronizzaDriverDaCE,
+    // Fase 4 — eventi
+    creaEvento,
+    CATEGORIE_INVESTIMENTO
   };
 
 })();
