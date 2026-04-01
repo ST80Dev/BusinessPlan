@@ -57,6 +57,7 @@ const Projects = (() => {
         anni_previsione:    anniPrev,
         scenario:           meta.scenario,       // 'sp_ce' | 'sp_only' | 'costituenda'
         modalita:           meta.modalita,        // 'rapida' | 'analitica'
+        mese_avvio:         meta.mese_avvio || 1, // Mese di inizio attività (1-12, default gennaio)
         creato:             oggi,
         modificato:         oggi,
         stato:              'in_lavorazione'      // 'in_lavorazione' | 'completato'
@@ -380,6 +381,10 @@ const Projects = (() => {
     const modalitaEl = document.querySelector('#np-modalita .toggle-item.active');
     const modalita   = modalitaEl ? modalitaEl.dataset.value : 'rapida';
 
+    // Mese avvio (solo costituenda)
+    const meseAvvioEl = document.getElementById('np-mese-avvio');
+    const meseAvvio = scenario === 'costituenda' ? parseInt((meseAvvioEl ? meseAvvioEl.value : '1'), 10) : 1;
+
     // Validazione
     const errori = [];
     if (!cliente) errori.push('Il nome cliente è obbligatorio.');
@@ -391,7 +396,7 @@ const Projects = (() => {
       return;
     }
 
-    const meta = { cliente, settore, anno_base: annoBase, anni_previsione: anniPrev, scenario, modalita };
+    const meta = { cliente, settore, anno_base: annoBase, anni_previsione: anniPrev, scenario, modalita, mese_avvio: meseAvvio };
     const progetto = _creaStruttura(meta);
 
     // Imposta come progetto corrente

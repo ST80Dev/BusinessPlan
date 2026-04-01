@@ -196,8 +196,15 @@ const Schema = (() => {
     {
       id: 'spc.PN', label: 'Patrimonio netto iniziale', tipo: 'mastro', segno: +1, computed: true,
       children: [
-        { id: 'spc.PN.1', label: 'Capitale sociale versato',               tipo: 'conto', segno: +1, editabile: true },
-        { id: 'spc.PN.2', label: 'Versamenti in conto capitale soci',      tipo: 'conto', segno: +1, editabile: true }
+        { id: 'spc.PN.1', label: 'Capitale sociale sottoscritto',          tipo: 'conto', segno: +1, editabile: true },
+        { id: 'spc.PN.2', label: 'di cui: versato',                        tipo: 'conto', segno: +1, editabile: true },
+        { id: 'spc.PN.3', label: 'Versamenti in conto capitale soci',      tipo: 'conto', segno: +1, editabile: true }
+      ]
+    },
+    {
+      id: 'spc.CRED', label: 'Crediti verso soci per versamenti dovuti', tipo: 'mastro', segno: +1, computed: true,
+      children: [
+        { id: 'spc.CRED.1', label: 'Crediti vs soci (capitale sottoscritto non versato)', tipo: 'conto', segno: +1, editabile: true }
       ]
     },
     {
@@ -219,6 +226,13 @@ const Schema = (() => {
         { id: 'spc.INV.1', label: 'Immobilizzazioni materiali (macchinari, arredi, veicoli)',       tipo: 'conto', segno: +1, editabile: true },
         { id: 'spc.INV.2', label: 'Immobilizzazioni immateriali (licenze, software, avviamento)',   tipo: 'conto', segno: +1, editabile: true },
         { id: 'spc.INV.3', label: 'Partecipazioni e depositi cauzionali',                           tipo: 'conto', segno: +1, editabile: true }
+      ]
+    },
+    {
+      id: 'spc.SPESE', label: 'Spese di avvio', tipo: 'mastro', segno: +1, computed: true,
+      children: [
+        { id: 'spc.SPESE.1', label: 'Spese di costituzione (notaio, CCIAA, bolli)',                 tipo: 'conto', segno: +1, editabile: true },
+        { id: 'spc.SPESE.2', label: 'Caparre e depositi cauzionali (locazioni, utenze)',             tipo: 'conto', segno: +1, editabile: true }
       ]
     }
   ];

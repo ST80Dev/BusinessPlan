@@ -398,17 +398,20 @@ const UI = (() => {
     var hintEl  = document.getElementById('np-anno-hint');
     var anniHint = document.getElementById('np-anni-hint');
     var annoField = document.getElementById('np-anno-base');
+    var meseGroup = document.getElementById('np-mese-avvio-group');
 
     if (scenario === 'costituenda') {
       if (labelEl) labelEl.textContent = 'Anno di inizio attività *';
       if (hintEl)  hintEl.textContent  = 'Primo anno operativo della nuova società';
       if (anniHint) anniHint.textContent = 'Da 1 a 8 anni di previsione';
       if (annoField) annoField.dataset.placeholder = 'Es. 2025';
+      if (meseGroup) meseGroup.classList.remove('hidden');
     } else {
       if (labelEl) labelEl.textContent = 'Anno base (storico) *';
       if (hintEl)  hintEl.textContent  = "Anno dell'ultimo bilancio approvato";
       if (anniHint) anniHint.textContent = "Da 1 a 8 anni oltre l'anno base";
       if (annoField) annoField.dataset.placeholder = 'Es. 2024';
+      if (meseGroup) meseGroup.classList.add('hidden');
     }
   }
 
@@ -1230,9 +1233,8 @@ const UI = (() => {
         return spCompilato ? '<span class="tab-dot partial"></span>' : '';
       }
       case 'drv-personale': {
-        var ok = d.personale && d.personale.headcount > 0;
-        if (ok) return '<span class="tab-dot complete"></span>';
-        return spCompilato ? '<span class="tab-dot partial"></span>' : '';
+        // Personale è sempre "compilata" — 0 dipendenti è un valore valido
+        return d.personale ? '<span class="tab-dot complete"></span>' : '';
       }
       case 'drv-patrimoniali':
         return (d.finanziamenti_essere && d.finanziamenti_essere.length > 0) ? '<span class="tab-dot complete"></span>' : '';
@@ -3610,8 +3612,8 @@ const UI = (() => {
 
   function _formatPct(val) {
     if (val === null || val === undefined || val === 0) return '';
-    // Converti in forma percentuale per display
-    var pct = Math.abs(val) < 1 ? val * 100 : val;
+    // Storage sempre decimale (0.05 = 5%), display sempre *100
+    var pct = val * 100;
     var str = pct % 1 === 0 ? String(pct) : pct.toFixed(2).replace('.', ',').replace(/,?0+$/, '');
     return str + '%';
   }
@@ -3621,8 +3623,8 @@ const UI = (() => {
     var clean = str.replace(/%/g, '').replace(',', '.').trim();
     var val = parseFloat(clean);
     if (isNaN(val)) return 0;
-    // Restituisce sempre in forma decimale (es. "24" o "24%" -> 0.24)
-    return Math.abs(val) > 1 ? val / 100 : val;
+    // Input sempre in forma percentuale (es. "24" o "24%" -> 0.24, "150" -> 1.50)
+    return val / 100;
   }
 
   function _formatDec(val) {
@@ -3672,9 +3674,9 @@ const UI = (() => {
       case 'driver': {
         var hasRicavi = d.ricavi && d.ricavi.some(function(r) { return r.base_annuale > 0; });
         var hasCosti = d.costi && d.costi.some(function(c) { return c.importo_fisso > 0 || c.pct_ricavi > 0; });
-        var hasPers = d.personale && d.personale.headcount > 0;
-        var n = (hasRicavi ? 1 : 0) + (hasCosti ? 1 : 0) + (hasPers ? 1 : 0);
-        if (n === 3) return { status: 'complete', count: 3 };
+        // Personale: 0 dipendenti è un valore valido, non conta come mancante
+        var n = (hasRicavi ? 1 : 0) + (hasCosti ? 1 : 0);
+        if (n === 2) return { status: 'complete', count: 2 };
         if (n > 0) return { status: 'partial', count: n };
         // Nessun driver: mostra warning se SP è già compilato
         if (_isSpCompilato(progetto)) return { status: 'partial', count: 0 };

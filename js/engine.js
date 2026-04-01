@@ -516,11 +516,18 @@ const Engine = (() => {
 
     if (progetto.meta.scenario === 'costituenda' && storico.sp_avvio) {
       var av = storico.sp_avvio;
-      sp.patrimonio_netto = (av['spc.PN.1'] || 0) + (av['spc.PN.2'] || 0);
+      // PN: capitale versato + versamenti c/capitale (sottoscritto è informativo)
+      sp.patrimonio_netto = (av['spc.PN.2'] || 0) + (av['spc.PN.3'] || 0);
       sp.debiti_finanziari = (av['spc.FIN.1'] || 0) + (av['spc.FIN.2'] || 0);
       sp.cassa = av['spc.LIQ.1'] || 0;
       sp.immobilizzazioni_nette = (av['spc.INV.1'] || 0) + (av['spc.INV.2'] || 0) + (av['spc.INV.3'] || 0);
-      sp.totale_attivo = sp.immobilizzazioni_nette + sp.cassa;
+      // Crediti vs soci per versamenti dovuti
+      sp.crediti_soci = av['spc.CRED.1'] || 0;
+      // Spese di avvio: capitalizzate come immobilizzazioni immateriali
+      sp.immob_immateriali_nette = (sp.immob_immateriali_nette || 0) +
+        (av['spc.SPESE.1'] || 0) + (av['spc.SPESE.2'] || 0);
+      sp.immobilizzazioni_nette += (av['spc.SPESE.1'] || 0) + (av['spc.SPESE.2'] || 0);
+      sp.totale_attivo = sp.immobilizzazioni_nette + sp.cassa + sp.crediti_soci;
       sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari;
     } else if (storico.sp) {
       var att = storico.sp.attivo || {};
