@@ -620,10 +620,31 @@ const UI = (() => {
       <span class="scenario-banner-text">${bc.text}</span>
     </div>`;
 
-    // Tabs
+    // Tabs con indicatori completamento
+    var st = progetto.storico[String(anno)];
+    var spDot = '', ceDot = '';
+
+    if (scenario === 'costituenda') {
+      if (st && st.sp_avvio && _haValoriNonZero(st.sp_avvio)) spDot = '<span class="tab-dot complete"></span>';
+    } else {
+      if (st && st.sp) {
+        var spHaDati = _haValoriNonZero(st.sp.attivo) || _haValoriNonZero(st.sp.passivo);
+        if (spHaDati) {
+          var totAtt = _sommaValori(st.sp.attivo);
+          var totPass = _sommaValori(st.sp.passivo);
+          spDot = Math.abs(totAtt - totPass) > 1
+            ? '<span class="tab-dot error"></span>'
+            : '<span class="tab-dot complete"></span>';
+        }
+      }
+    }
+    if (!ceDisabled && st && st.ce && _haValoriNonZero(st.ce)) {
+      ceDot = '<span class="tab-dot complete"></span>';
+    }
+
     html += `<div class="tabs" id="dati-tabs">
-      <div class="tab-item${_datiTab === 'tab-sp' ? ' active' : ''}" data-tab="tab-sp" onclick="UI.switchDatiTab('tab-sp')">Stato Patrimoniale</div>
-      <div class="tab-item${_datiTab === 'tab-ce' ? ' active' : ''}${ceDisabled ? ' disabled' : ''}" data-tab="tab-ce" onclick="UI.switchDatiTab('tab-ce')">Conto Economico</div>
+      <div class="tab-item${_datiTab === 'tab-sp' ? ' active' : ''}" data-tab="tab-sp" onclick="UI.switchDatiTab('tab-sp')">Stato Patrimoniale${spDot}</div>
+      <div class="tab-item${_datiTab === 'tab-ce' ? ' active' : ''}${ceDisabled ? ' disabled' : ''}" data-tab="tab-ce" onclick="UI.switchDatiTab('tab-ce')">Conto Economico${ceDot}</div>
     </div>`;
 
     // Toolbar
@@ -1157,12 +1178,12 @@ const UI = (() => {
 
     // Tabs
     html += '<div class="tabs" id="driver-tabs">';
-    html += _driverTabItem('drv-ricavi', 'Ricavi');
-    html += _driverTabItem('drv-costi', 'Costi');
-    html += _driverTabItem('drv-personale', 'Personale');
-    html += _driverTabItem('drv-circolante', 'Circolante');
-    html += _driverTabItem('drv-patrimoniali', 'Patrimoniali');
-    html += _driverTabItem('drv-fiscale', 'Fiscale');
+    html += _driverTabItem('drv-ricavi', 'Ricavi', progetto);
+    html += _driverTabItem('drv-costi', 'Costi', progetto);
+    html += _driverTabItem('drv-personale', 'Personale', progetto);
+    html += _driverTabItem('drv-circolante', 'Circolante', progetto);
+    html += _driverTabItem('drv-patrimoniali', 'Patrimoniali', progetto);
+    html += _driverTabItem('drv-fiscale', 'Fiscale', progetto);
     html += '</div>';
 
     // Tab panes
@@ -1193,8 +1214,25 @@ const UI = (() => {
     content.innerHTML = html;
   }
 
-  function _driverTabItem(id, label) {
-    return '<div class="tab-item' + (_driverTab === id ? ' active' : '') + '" data-tab="' + id + '" onclick="UI.switchDriverTab(\'' + id + '\')">' + label + '</div>';
+  function _driverTabDot(progetto, id) {
+    var d = progetto.driver;
+    switch (id) {
+      case 'drv-ricavi':
+        return (d.ricavi && d.ricavi.some(function(r) { return r.base_annuale > 0; })) ? '<span class="tab-dot complete"></span>' : '';
+      case 'drv-costi':
+        return (d.costi && d.costi.some(function(c) { return c.importo_fisso > 0 || c.pct_ricavi > 0; })) ? '<span class="tab-dot complete"></span>' : '';
+      case 'drv-personale':
+        return (d.personale && d.personale.headcount > 0) ? '<span class="tab-dot complete"></span>' : '';
+      case 'drv-patrimoniali':
+        return (d.finanziamenti_essere && d.finanziamenti_essere.length > 0) ? '<span class="tab-dot complete"></span>' : '';
+      default:
+        return '';
+    }
+  }
+
+  function _driverTabItem(id, label, progetto) {
+    var dot = progetto ? _driverTabDot(progetto, id) : '';
+    return '<div class="tab-item' + (_driverTab === id ? ' active' : '') + '" data-tab="' + id + '" onclick="UI.switchDriverTab(\'' + id + '\')">' + label + dot + '</div>';
   }
 
   function switchDriverTab(tabId) {
@@ -2180,15 +2218,15 @@ const UI = (() => {
 
     // Tabs
     html += '<div class="tabs" id="eventi-tabs">';
-    html += _evtTabItem('evt-finanziamenti', 'Finanziamenti');
-    html += _evtTabItem('evt-investimenti', 'Investimenti');
-    html += _evtTabItem('evt-ricavi', 'Ricavi');
-    html += _evtTabItem('evt-costi-mp', 'Mat. Prime');
-    html += _evtTabItem('evt-costi-var', 'Costi Var.');
-    html += _evtTabItem('evt-costi-gest', 'Costi Gest.');
-    html += _evtTabItem('evt-personale', 'Personale');
-    html += _evtTabItem('evt-magazzino', 'Magazzino');
-    html += _evtTabItem('evt-soci', 'Soci');
+    html += _evtTabItem('evt-finanziamenti', 'Finanziamenti', progetto);
+    html += _evtTabItem('evt-investimenti', 'Investimenti', progetto);
+    html += _evtTabItem('evt-ricavi', 'Ricavi', progetto);
+    html += _evtTabItem('evt-costi-mp', 'Mat. Prime', progetto);
+    html += _evtTabItem('evt-costi-var', 'Costi Var.', progetto);
+    html += _evtTabItem('evt-costi-gest', 'Costi Gest.', progetto);
+    html += _evtTabItem('evt-personale', 'Personale', progetto);
+    html += _evtTabItem('evt-magazzino', 'Magazzino', progetto);
+    html += _evtTabItem('evt-soci', 'Soci', progetto);
     html += '</div>';
 
     // Tab panes
@@ -2231,8 +2269,32 @@ const UI = (() => {
     content.innerHTML = html;
   }
 
-  function _evtTabItem(id, label) {
-    return '<div class="tab-item tab-item-sm' + (_eventiTab === id ? ' active' : '') + '" data-tab="' + id + '" onclick="UI.switchEventiTab(\'' + id + '\')">' + label + '</div>';
+  var _EVT_TAB_TIPI = {
+    'evt-finanziamenti': ['nuovo_finanziamento'],
+    'evt-investimenti':  ['nuovo_investimento'],
+    'evt-ricavi':        ['variazione_ricavi'],
+    'evt-costi-mp':      ['variazione_costi_mp'],
+    'evt-costi-var':     ['variazione_costi_var'],
+    'evt-costi-gest':    ['andamento_costo_gestione'],
+    'evt-personale':     ['variazione_personale'],
+    'evt-magazzino':     ['utilizzo_rimanenze'],
+    'evt-soci':          ['operazione_soci']
+  };
+
+  function _contaEventiPerTab(progetto, tabId) {
+    var tipi = _EVT_TAB_TIPI[tabId];
+    if (!tipi || !progetto.eventi) return 0;
+    var n = 0;
+    for (var i = 0; i < progetto.eventi.length; i++) {
+      if (tipi.indexOf(progetto.eventi[i].tipo) >= 0) n++;
+    }
+    return n;
+  }
+
+  function _evtTabItem(id, label, progetto) {
+    var cnt = _contaEventiPerTab(progetto, id);
+    var badge = cnt > 0 ? '<span class="tab-badge">' + cnt + '</span>' : '';
+    return '<div class="tab-item tab-item-sm' + (_eventiTab === id ? ' active' : '') + '" data-tab="' + id + '" onclick="UI.switchEventiTab(\'' + id + '\')">' + label + badge + '</div>';
   }
 
   function switchEventiTab(tabId) {
@@ -3611,13 +3673,6 @@ const UI = (() => {
         return { status: cnt > 0 ? 'complete' : 'empty', count: cnt };
       }
 
-      case 'prospetti':
-      case 'dashboard': {
-        var ha = progetto.proiezioni && progetto.proiezioni.annuali &&
-                 Object.keys(progetto.proiezioni.annuali).length > 0;
-        return { status: ha ? 'complete' : 'empty', count: 0 };
-      }
-
       default:
         return { status: 'empty', count: 0 };
     }
@@ -3649,15 +3704,13 @@ const UI = (() => {
   /** Genera HTML per l'indicatore status nella sidebar */
   function _renderStatusIndicator(info) {
     var html = '';
-    // Dot di stato (non per eventi che usano solo badge)
-    if (info.status !== 'empty' || info.count === 0) {
-      html += '<span class="sidebar-nav-dot ' + info.status + '"></span>';
-    } else {
-      html += '<span class="sidebar-nav-dot empty"></span>';
-    }
-    // Badge contatore per eventi
+    // Badge contatore (per eventi) — se presente, mostra solo il badge, no dot
     if (info.count > 0) {
-      html = '<span class="sidebar-nav-badge">' + info.count + '</span>' + html;
+      return '<span class="sidebar-nav-badge">' + info.count + '</span>';
+    }
+    // Dot di stato: solo se non empty (sezioni facoltative non mostrano dot vuoto)
+    if (info.status !== 'empty') {
+      html += '<span class="sidebar-nav-dot ' + info.status + '"></span>';
     }
     return html;
   }
@@ -3671,7 +3724,7 @@ const UI = (() => {
   function _aggiornaIndicatoriSidebar() {
     var p = Projects.getProgetto();
     if (!p) return;
-    var sezioni = ['dati-partenza', 'driver', 'eventi', 'prospetti', 'dashboard'];
+    var sezioni = ['dati-partenza', 'driver', 'eventi'];
     for (var i = 0; i < sezioni.length; i++) {
       var el = document.getElementById('nav-status-' + sezioni[i]);
       if (!el) continue;

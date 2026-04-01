@@ -863,6 +863,40 @@ html, body {
   font-size: 12px;
 }
 
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  line-height: 1;
+  margin-left: 4px;
+  vertical-align: middle;
+  background: var(--color-accent);
+  color: white;
+}
+.tab-badge.muted {
+  background: var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.tab-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+.tab-dot.complete { background: var(--color-success); }
+.tab-dot.partial  { background: var(--color-warning); }
+.tab-dot.error    { background: var(--color-error); }
+
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
 
