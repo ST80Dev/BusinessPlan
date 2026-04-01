@@ -807,6 +807,11 @@ html, body {
   pointer-events: none;
 }
 
+.tab-item-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
 
