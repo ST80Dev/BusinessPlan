@@ -44,6 +44,9 @@ const UI = (() => {
     // Se non c'e progetto aperto, solo home e accessibile
     if (sezione !== 'home' && !Projects.getProgetto()) return;
 
+    // Cleanup chart dashboard prima di cambiare sezione
+    _destroyDashboardCharts();
+
     _sezioneCorrente = sezione;
 
     // Aggiorna sidebar
@@ -87,7 +90,7 @@ const UI = (() => {
         _renderEventi();
         break;
       case 'dashboard':
-        content.innerHTML = _renderPlaceholder(titoli[sezione]);
+        _renderDashboard();
         break;
       default:
         content.innerHTML = '';
@@ -256,6 +259,9 @@ const UI = (() => {
 
     // Aggiorna status bar
     aggiornaStatusBar('pronto');
+
+    // Aggiorna indicatori sidebar
+    _aggiornaIndicatoriSidebar();
 
     // Naviga alla sezione dati di partenza
     navigate('dati-partenza');
@@ -1037,6 +1043,7 @@ const UI = (() => {
 
     _ricalcolaTotali();
     _aggiornaQuadratura();
+    _scheduleAggiornaIndicatori();
   }
 
   function _handleAmountKey(e) {
@@ -1645,6 +1652,7 @@ const UI = (() => {
     }
     Projects.segnaModificato();
     _renderDriver();
+    _scheduleAggiornaIndicatori();
   }
 
   function _handlePersRalAnno(el, anno) {
@@ -2106,6 +2114,7 @@ const UI = (() => {
       el.textContent = _formatPct(pct);
     }
     Projects.segnaModificato();
+    _scheduleAggiornaIndicatori();
   }
 
   function _handleCircolanteField(el, campo) {
@@ -2115,6 +2124,7 @@ const UI = (() => {
     progetto.driver.circolante[campo] = val;
     el.textContent = val || '';
     Projects.segnaModificato();
+    _scheduleAggiornaIndicatori();
   }
 
   function _handleFiscaleField(el, campo) {
@@ -2254,6 +2264,7 @@ const UI = (() => {
     progetto.eventi.push(Projects.creaEvento(tipo, progetto));
     Projects.segnaModificato();
     _renderEventi();
+    _scheduleAggiornaIndicatori();
   }
 
   function rimuoviEvento(idx) {
@@ -2262,6 +2273,7 @@ const UI = (() => {
     progetto.eventi.splice(idx, 1);
     Projects.segnaModificato();
     _renderEventi();
+    _scheduleAggiornaIndicatori();
   }
 
   function _handleEvtField(el, idx, campo) {
@@ -2747,6 +2759,7 @@ const UI = (() => {
 
     // Ricalcola proiezioni
     Engine.calcolaProiezioni(progetto);
+    _scheduleAggiornaIndicatori();
 
     var anniPrev = progetto.meta.anni_previsione || [];
     var proiezioni = progetto.proiezioni.annuali || {};
@@ -3053,6 +3066,332 @@ const UI = (() => {
     return pct.toFixed(1).replace('.', ',') + '%';
   }
 
+  /* ── Dashboard KPI ────────────────────────────────────────── */
+
+  var _dashboardCharts = [];
+
+  function _destroyDashboardCharts() {
+    for (var i = 0; i < _dashboardCharts.length; i++) {
+      if (_dashboardCharts[i]) _dashboardCharts[i].destroy();
+    }
+    _dashboardCharts = [];
+  }
+
+  function _getDashboardColors() {
+    var s = getComputedStyle(document.documentElement);
+    return {
+      accent:  s.getPropertyValue('--color-accent').trim()  || '#2A7AC7',
+      success: s.getPropertyValue('--color-success').trim() || '#27AE60',
+      warning: s.getPropertyValue('--color-warning').trim() || '#E67E22',
+      error:   s.getPropertyValue('--color-error').trim()   || '#C0392B',
+      muted:   s.getPropertyValue('--color-text-muted').trim() || '#8492A6',
+      sidebar: s.getPropertyValue('--color-sidebar-bg').trim() || '#1B3A5C',
+      text:    s.getPropertyValue('--color-text').trim() || '#2C3E50'
+    };
+  }
+
+  function _renderDashboard() {
+    _destroyDashboardCharts();
+
+    var content = document.getElementById('content');
+    var progetto = Projects.getProgetto();
+    if (!content || !progetto) return;
+
+    // Ricalcola proiezioni
+    Engine.calcolaProiezioni(progetto);
+    _scheduleAggiornaIndicatori();
+
+    var anniPrev = progetto.meta.anni_previsione || [];
+    var proj = progetto.proiezioni.annuali || {};
+
+    if (anniPrev.length === 0) {
+      content.innerHTML = '<div style="padding:40px;text-align:center;color:var(--color-text-muted)">Nessuna proiezione disponibile. Compilare Dati di partenza e Driver prima.</div>';
+      return;
+    }
+
+    // Helper dati
+    function g(anno, sez, key) {
+      var d = proj[String(anno)];
+      return d && d[sez] ? (d[sez][key] || 0) : 0;
+    }
+
+    // Calcola KPI per ogni anno
+    var kpis = [];
+    for (var i = 0; i < anniPrev.length; i++) {
+      var a = anniPrev[i];
+      var ricavi = g(a, 'ce', 'valore_produzione');
+      var ebitda = g(a, 'ce', 'ebitda');
+      var ebit = g(a, 'ce', 'ebit');
+      var utile = g(a, 'ce', 'utile_netto');
+      var pn = g(a, 'sp', 'patrimonio_netto');
+      var ta = g(a, 'sp', 'totale_attivo');
+      var debFin = g(a, 'sp', 'debiti_finanziari');
+      var cassa = g(a, 'sp', 'cassa');
+      var flussoOp = g(a, 'cash_flow', 'flusso_operativo');
+      var rimbFin = Math.abs(g(a, 'cash_flow', 'rimborso_finanziamenti'));
+      var oneriFin = g(a, 'ce', 'oneri_finanziari');
+      var crediti = g(a, 'sp', 'crediti_clienti');
+      var debForn = g(a, 'sp', 'debiti_fornitori');
+      var debTrib = g(a, 'sp', 'debiti_tributari');
+
+      var pfn = debFin - cassa;
+      var servDebito = rimbFin + oneriFin;
+      var debBreve = debForn + debTrib;
+
+      kpis.push({
+        anno: a,
+        ricavi: ricavi,
+        ebitda: ebitda,
+        ebitda_pct: ricavi ? ebitda / ricavi : 0,
+        ebit: ebit,
+        utile: utile,
+        roe: pn ? utile / pn : 0,
+        roi: ta ? ebit / ta : 0,
+        pfn_ebitda: (ebitda > 0) ? Math.round(pfn / ebitda * 10) / 10 : 0,
+        dscr: servDebito ? Math.round(flussoOp / servDebito * 100) / 100 : 0,
+        liquidita: debBreve ? Math.round((cassa + crediti) / debBreve * 100) / 100 : 0,
+        cassa: cassa,
+        pfn: pfn,
+        pn: pn,
+        dso: progetto.driver.circolante.dso,
+        dpo: progetto.driver.circolante.dpo
+      });
+    }
+
+    var last = kpis[kpis.length - 1];
+    var prev = kpis.length > 1 ? kpis[kpis.length - 2] : null;
+
+    // ─── KPI summary cards ───
+    function kpiCard(label, value, fmt, prevValue, alertClass) {
+      var cls = 'dashboard-kpi-card';
+      if (alertClass) cls += ' ' + alertClass;
+      var valCls = 'dashboard-kpi-value';
+      if (typeof value === 'number' && value < 0) valCls += ' negative';
+      var deltaHtml = '';
+      if (prev && prevValue !== undefined && prevValue !== null) {
+        var diff = value - prevValue;
+        var dcls = diff > 0 ? 'up' : (diff < 0 ? 'down' : 'flat');
+        var arrow = diff > 0 ? '\u2191' : (diff < 0 ? '\u2193' : '\u2192');
+        deltaHtml = '<span class="dashboard-kpi-delta ' + dcls + '">' + arrow + ' vs ' + prev.anno + '</span>';
+      }
+      return '<div class="' + cls + '">' +
+        '<span class="dashboard-kpi-label">' + label + '</span>' +
+        '<span class="' + valCls + '">' + fmt + '</span>' +
+        deltaHtml + '</div>';
+    }
+
+    function fmtI(v) { return _formatImporto(v); }
+    function fmtP(v) { return _formatPctValue(v); }
+    function fmtN(v) { return v === 0 ? '0' : (v % 1 === 0 ? String(v) : v.toFixed(1).replace('.', ',')); }
+
+    var html = '<div style="padding:20px">';
+
+    // Alert checks
+    var ebitdaAlert = last.ebitda < 0 ? 'alert-error' : '';
+    var pfnAlert = last.pfn_ebitda > 4 ? 'alert-warning' : '';
+    var pnAlert = last.pn < 0 ? 'alert-error' : '';
+    var cassaAlert = last.cassa < 0 ? 'alert-error' : '';
+    var dscrAlert = (last.dscr > 0 && last.dscr < 1) ? 'alert-warning' : '';
+
+    html += '<div class="dashboard-kpi-row">';
+    html += kpiCard('EBITDA', last.ebitda, fmtI(last.ebitda), prev ? prev.ebitda : null, ebitdaAlert);
+    html += kpiCard('EBITDA %', last.ebitda_pct, fmtP(last.ebitda_pct), prev ? prev.ebitda_pct : null, ebitdaAlert);
+    html += kpiCard('ROE', last.roe, fmtP(last.roe), prev ? prev.roe : null, '');
+    html += kpiCard('ROI', last.roi, fmtP(last.roi), prev ? prev.roi : null, '');
+    html += kpiCard('PFN/EBITDA', last.pfn_ebitda, fmtN(last.pfn_ebitda) + 'x', prev ? prev.pfn_ebitda : null, pfnAlert);
+    html += kpiCard('DSCR', last.dscr, fmtN(last.dscr) + 'x', prev ? prev.dscr : null, dscrAlert);
+    html += kpiCard('Liquidità', last.liquidita, fmtN(last.liquidita) + 'x', prev ? prev.liquidita : null, '');
+    html += kpiCard('PN', last.pn, fmtI(last.pn), prev ? prev.pn : null, pnAlert);
+    html += '</div>';
+
+    // ─── Chart cards ───
+    html += '<div class="dashboard-grid">';
+
+    html += '<div class="dashboard-card"><div class="dashboard-card-title">Ricavi &amp; EBITDA</div><div class="dashboard-chart-container"><canvas id="chart-ricavi-ebitda"></canvas></div></div>';
+    html += '<div class="dashboard-card"><div class="dashboard-card-title">Marginalità %</div><div class="dashboard-chart-container"><canvas id="chart-marginalita"></canvas></div></div>';
+    html += '<div class="dashboard-card"><div class="dashboard-card-title">PFN / EBITDA</div><div class="dashboard-chart-container"><canvas id="chart-pfn"></canvas></div></div>';
+    html += '<div class="dashboard-card"><div class="dashboard-card-title">Liquidità &amp; Cassa</div><div class="dashboard-chart-container"><canvas id="chart-cassa"></canvas></div></div>';
+    html += '<div class="dashboard-card"><div class="dashboard-card-title">DSCR</div><div class="dashboard-chart-container"><canvas id="chart-dscr"></canvas></div></div>';
+    html += '<div class="dashboard-card"><div class="dashboard-card-title">DSO vs DPO</div><div class="dashboard-chart-container"><canvas id="chart-dso-dpo"></canvas></div></div>';
+
+    html += '</div></div>';
+
+    content.innerHTML = html;
+
+    // ─── Inizializza grafici ───
+    _initDashboardCharts(anniPrev, kpis);
+  }
+
+  function _initDashboardCharts(anniPrev, kpis) {
+    var C = _getDashboardColors();
+    var labels = anniPrev.map(String);
+
+    var commonOpts = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, usePointStyle: true, pointStyle: 'circle' } },
+        tooltip: { callbacks: { label: function(ctx) {
+          var v = ctx.parsed.y;
+          if (v === null || v === undefined) return '';
+          if (Math.abs(v) >= 1000) return ctx.dataset.label + ': ' + _formatImporto(v);
+          return ctx.dataset.label + ': ' + (v % 1 === 0 ? String(v) : v.toFixed(2).replace('.', ','));
+        }}}
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: { ticks: { callback: function(v) {
+          if (Math.abs(v) >= 1000000) return Math.round(v / 1000000) + 'M';
+          if (Math.abs(v) >= 1000) return Math.round(v / 1000) + 'K';
+          return v;
+        }}}
+      }
+    };
+
+    function pctOpts() {
+      return {
+        responsive: true, maintainAspectRatio: false,
+        plugins: commonOpts.plugins,
+        scales: {
+          x: { grid: { display: false } },
+          y: { ticks: { callback: function(v) { return (v * 100).toFixed(0) + '%'; } } }
+        }
+      };
+    }
+
+    // 1. Ricavi & EBITDA (bar + line)
+    var ctx1 = document.getElementById('chart-ricavi-ebitda');
+    if (ctx1) {
+      _dashboardCharts.push(new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Ricavi', data: kpis.map(function(k) { return k.ricavi; }), backgroundColor: C.accent + '66', borderColor: C.accent, borderWidth: 1, order: 2 },
+            { label: 'EBITDA', data: kpis.map(function(k) { return k.ebitda; }), type: 'line', borderColor: C.success, backgroundColor: C.success + '22', fill: true, tension: 0.3, pointRadius: 4, order: 1 }
+          ]
+        },
+        options: commonOpts
+      }));
+    }
+
+    // 2. Marginalità %
+    var ctx2 = document.getElementById('chart-marginalita');
+    if (ctx2) {
+      _dashboardCharts.push(new Chart(ctx2, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'EBITDA %', data: kpis.map(function(k) { return k.ebitda_pct; }), borderColor: C.accent, tension: 0.3, pointRadius: 4 },
+            { label: 'ROE', data: kpis.map(function(k) { return k.roe; }), borderColor: C.success, tension: 0.3, pointRadius: 4 },
+            { label: 'ROI', data: kpis.map(function(k) { return k.roi; }), borderColor: C.warning, tension: 0.3, pointRadius: 4 }
+          ]
+        },
+        options: pctOpts()
+      }));
+    }
+
+    // 3. PFN/EBITDA
+    var ctx3 = document.getElementById('chart-pfn');
+    if (ctx3) {
+      _dashboardCharts.push(new Chart(ctx3, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'PFN/EBITDA', data: kpis.map(function(k) { return k.pfn_ebitda; }),
+              backgroundColor: kpis.map(function(k) { return k.pfn_ebitda > 4 ? C.warning + 'AA' : C.sidebar + '88'; }),
+              borderColor: kpis.map(function(k) { return k.pfn_ebitda > 4 ? C.warning : C.sidebar; }),
+              borderWidth: 1 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            annotation: undefined
+          },
+          scales: {
+            x: { grid: { display: false } },
+            y: { ticks: { callback: function(v) { return v + 'x'; } } }
+          }
+        }
+      }));
+    }
+
+    // 4. Cassa
+    var ctx4 = document.getElementById('chart-cassa');
+    if (ctx4) {
+      _dashboardCharts.push(new Chart(ctx4, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Saldo cassa', data: kpis.map(function(k) { return k.cassa; }),
+              borderColor: C.accent, backgroundColor: kpis.map(function(k) { return k.cassa < 0 ? C.error + '33' : C.accent + '22'; }),
+              fill: true, tension: 0.3, pointRadius: 5,
+              pointBackgroundColor: kpis.map(function(k) { return k.cassa < 0 ? C.error : C.accent; }) }
+          ]
+        },
+        options: commonOpts
+      }));
+    }
+
+    // 5. DSCR
+    var ctx5 = document.getElementById('chart-dscr');
+    if (ctx5) {
+      _dashboardCharts.push(new Chart(ctx5, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'DSCR', data: kpis.map(function(k) { return k.dscr; }),
+              backgroundColor: kpis.map(function(k) { return k.dscr < 1 ? C.warning + 'AA' : C.success + '88'; }),
+              borderColor: kpis.map(function(k) { return k.dscr < 1 ? C.warning : C.success; }),
+              borderWidth: 1 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { display: false } },
+            y: { ticks: { callback: function(v) { return v + 'x'; } },
+              suggestedMin: 0 }
+          }
+        }
+      }));
+    }
+
+    // 6. DSO vs DPO
+    var ctx6 = document.getElementById('chart-dso-dpo');
+    if (ctx6) {
+      _dashboardCharts.push(new Chart(ctx6, {
+        type: 'bar',
+        data: {
+          labels: ['DSO (gg incasso)', 'DPO (gg pagamento)'],
+          datasets: [{
+            label: 'Giorni',
+            data: [kpis[0].dso, kpis[0].dpo],
+            backgroundColor: [C.accent + '88', C.sidebar + '88'],
+            borderColor: [C.accent, C.sidebar],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { callback: function(v) { return v + ' gg'; } }, suggestedMin: 0 },
+            y: { grid: { display: false } }
+          }
+        }
+      }));
+    }
+  }
+
   /* ── Helper riga prospetto ───────────────────────────────── */
 
   function _prospettoRow(v, anniPrev, proiezioni, sezione) {
@@ -3216,6 +3555,129 @@ const UI = (() => {
   function _formatDec(val) {
     if (val === null || val === undefined) return '';
     return val % 1 === 0 ? String(val) : val.toFixed(2).replace('.', ',');
+  }
+
+  /* ── Indicatori progresso sidebar ─────────────────────────── */
+
+  var _sidebarTimer = null;
+
+  /**
+   * Valuta lo stato di completezza di una sezione del progetto.
+   * @returns {{ status: 'empty'|'partial'|'complete'|'error', count: number }}
+   */
+  function _valutaCompletezzaSezione(sezione, progetto) {
+    var m = progetto.meta;
+    var anno = String(m.anno_base);
+    var st = progetto.storico[anno];
+    var d = progetto.driver;
+
+    switch (sezione) {
+
+      case 'dati-partenza': {
+        var spOk = false, ceOk = false, ceApplicabile = (m.scenario === 'sp_ce');
+
+        if (m.scenario === 'costituenda') {
+          spOk = st && st.sp_avvio && _haValoriNonZero(st.sp_avvio);
+        } else {
+          spOk = st && st.sp && (_haValoriNonZero(st.sp.attivo) || _haValoriNonZero(st.sp.passivo));
+          // Quadratura check
+          if (spOk && st.sp) {
+            var totAtt = _sommaValori(st.sp.attivo);
+            var totPass = _sommaValori(st.sp.passivo);
+            if (Math.abs(totAtt - totPass) > 1) return { status: 'error', count: 0 };
+          }
+        }
+        if (ceApplicabile) {
+          ceOk = st && st.ce && _haValoriNonZero(st.ce);
+        }
+
+        if (!spOk && (!ceApplicabile || !ceOk)) return { status: 'empty', count: 0 };
+        if (ceApplicabile && (!spOk || !ceOk)) return { status: 'partial', count: 0 };
+        return { status: 'complete', count: 0 };
+      }
+
+      case 'driver': {
+        var hasRicavi = d.ricavi && d.ricavi.some(function(r) { return r.base_annuale > 0; });
+        var hasCosti = d.costi && d.costi.some(function(c) { return c.importo_fisso > 0 || c.pct_ricavi > 0; });
+        var hasPers = d.personale && d.personale.headcount > 0;
+        var n = (hasRicavi ? 1 : 0) + (hasCosti ? 1 : 0) + (hasPers ? 1 : 0);
+        if (n === 0) return { status: 'empty', count: 0 };
+        if (n < 3) return { status: 'partial', count: n };
+        return { status: 'complete', count: 3 };
+      }
+
+      case 'eventi': {
+        var cnt = progetto.eventi ? progetto.eventi.length : 0;
+        return { status: cnt > 0 ? 'complete' : 'empty', count: cnt };
+      }
+
+      case 'prospetti':
+      case 'dashboard': {
+        var ha = progetto.proiezioni && progetto.proiezioni.annuali &&
+                 Object.keys(progetto.proiezioni.annuali).length > 0;
+        return { status: ha ? 'complete' : 'empty', count: 0 };
+      }
+
+      default:
+        return { status: 'empty', count: 0 };
+    }
+  }
+
+  /** Controlla se un oggetto flat contiene almeno un valore numerico != 0 */
+  function _haValoriNonZero(obj) {
+    if (!obj) return false;
+    var keys = Object.keys(obj);
+    for (var i = 0; i < keys.length; i++) {
+      var v = obj[keys[i]];
+      if (typeof v === 'number' && v !== 0) return true;
+    }
+    return false;
+  }
+
+  /** Somma tutti i valori numerici di un oggetto flat */
+  function _sommaValori(obj) {
+    if (!obj) return 0;
+    var tot = 0;
+    var keys = Object.keys(obj);
+    for (var i = 0; i < keys.length; i++) {
+      var v = obj[keys[i]];
+      if (typeof v === 'number') tot += v;
+    }
+    return tot;
+  }
+
+  /** Genera HTML per l'indicatore status nella sidebar */
+  function _renderStatusIndicator(info) {
+    var html = '';
+    // Dot di stato (non per eventi che usano solo badge)
+    if (info.status !== 'empty' || info.count === 0) {
+      html += '<span class="sidebar-nav-dot ' + info.status + '"></span>';
+    } else {
+      html += '<span class="sidebar-nav-dot empty"></span>';
+    }
+    // Badge contatore per eventi
+    if (info.count > 0) {
+      html = '<span class="sidebar-nav-badge">' + info.count + '</span>' + html;
+    }
+    return html;
+  }
+
+  /** Aggiorna tutti gli indicatori nella sidebar (debounced) */
+  function _scheduleAggiornaIndicatori() {
+    clearTimeout(_sidebarTimer);
+    _sidebarTimer = setTimeout(_aggiornaIndicatoriSidebar, 300);
+  }
+
+  function _aggiornaIndicatoriSidebar() {
+    var p = Projects.getProgetto();
+    if (!p) return;
+    var sezioni = ['dati-partenza', 'driver', 'eventi', 'prospetti', 'dashboard'];
+    for (var i = 0; i < sezioni.length; i++) {
+      var el = document.getElementById('nav-status-' + sezioni[i]);
+      if (!el) continue;
+      var info = _valutaCompletezzaSezione(sezioni[i], p);
+      el.innerHTML = _renderStatusIndicator(info);
+    }
   }
 
   /* ── API pubblica ────────────────────────────────────────── */

@@ -45,30 +45,35 @@
       <div class="sidebar-nav-item disabled" data-section="dati-partenza" onclick="UI.navigate('dati-partenza')">
         <span class="sidebar-nav-icon">📋</span>
         <span>Dati di partenza</span>
+        <span class="sidebar-nav-status" id="nav-status-dati-partenza"></span>
       </div>
 
       <div class="sidebar-nav-item disabled" data-section="driver" onclick="UI.navigate('driver')">
         <span class="sidebar-nav-icon">⚙</span>
         <span>Driver &amp; Parametri</span>
+        <span class="sidebar-nav-status" id="nav-status-driver"></span>
       </div>
 
       <div class="sidebar-nav-item disabled" data-section="eventi" onclick="UI.navigate('eventi')">
         <span class="sidebar-nav-icon">📅</span>
         <span>Eventi</span>
+        <span class="sidebar-nav-status" id="nav-status-eventi"></span>
       </div>
 
       <div class="sidebar-nav-item disabled" data-section="prospetti" onclick="UI.navigate('prospetti')">
         <span class="sidebar-nav-icon">📊</span>
         <span>Prospetti futuri</span>
+        <span class="sidebar-nav-status" id="nav-status-prospetti"></span>
       </div>
 
       <div class="sidebar-nav-item disabled" data-section="dashboard" onclick="UI.navigate('dashboard')">
         <span class="sidebar-nav-icon">◈</span>
         <span>Dashboard KPI</span>
+        <span class="sidebar-nav-status" id="nav-status-dashboard"></span>
       </div>
     </div>
 
-    <div class="sidebar-footer">v1.0 · Fase 1</div>
+    <div class="sidebar-footer">v1.0 · Fase 8</div>
   </nav>
 
   <!-- ── Header ─────────────────────────────────────────── -->
@@ -293,6 +298,7 @@
 <!-- =====================================================
      SCRIPT — ordine di caricamento importante
      ===================================================== -->
+<script src="lib/chart.umd.js"></script>
 <script src="js/schema.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/projects.js"></script>
