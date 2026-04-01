@@ -245,6 +245,10 @@ const UI = (() => {
       metaEl.textContent = `${progetto.meta.anno_base} · ${scenarioLabels[progetto.meta.scenario] || progetto.meta.scenario}`;
     }
 
+    // Mostra link modifica
+    const editEl = document.getElementById('sidebar-project-edit');
+    if (editEl) editEl.classList.remove('hidden');
+
     // Abilita voci navigazione
     document.querySelectorAll('.sidebar-nav-item.disabled').forEach(el => {
       el.classList.remove('disabled');
@@ -287,6 +291,50 @@ const UI = (() => {
   function closeModal(id) {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Modifica dati cliente
+     ────────────────────────────────────────────────────────── */
+
+  /**
+   * Apre il modale di modifica dati cliente, pre-compilato con i valori attuali.
+   */
+  function apriModificaCliente() {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+
+    const meta = progetto.meta;
+
+    // Pre-compila i campi
+    const clienteEl = document.getElementById('mc-cliente');
+    const annoEl    = document.getElementById('mc-anno-base');
+    const anniEl    = document.getElementById('mc-anni-prev');
+
+    if (clienteEl) clienteEl.textContent = meta.cliente || '';
+    if (annoEl)    annoEl.textContent    = meta.anno_base;
+    if (anniEl)    anniEl.textContent    = meta.anni_previsione ? meta.anni_previsione.length : 3;
+
+    // Aggiorna label anno in base allo scenario
+    const labelEl = document.getElementById('mc-anno-label');
+    const hintEl  = document.getElementById('mc-anno-hint');
+    const anniHint = document.getElementById('mc-anni-hint');
+
+    if (meta.scenario === 'costituenda') {
+      if (labelEl) labelEl.textContent = 'Anno di inizio attività *';
+      if (hintEl)  hintEl.textContent  = 'Primo anno operativo della nuova società';
+      if (anniHint) anniHint.textContent = 'Da 1 a 8 anni di previsione';
+    } else {
+      if (labelEl) labelEl.textContent = 'Anno base (storico) *';
+      if (hintEl)  hintEl.textContent  = "Anno dell'ultimo bilancio approvato";
+      if (anniHint) anniHint.textContent = 'Da 1 a 8 anni oltre l\'anno base';
+    }
+
+    // Rimuovi errori precedenti
+    const prev = document.getElementById('modal-mc-error');
+    if (prev) prev.remove();
+
+    openModal('modal-modifica-cliente');
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -2129,6 +2177,7 @@ const UI = (() => {
     html += _evtTabItem('evt-costi-var', 'Costi Var.');
     html += _evtTabItem('evt-costi-gest', 'Costi Gest.');
     html += _evtTabItem('evt-personale', 'Personale');
+    html += _evtTabItem('evt-magazzino', 'Magazzino');
     html += _evtTabItem('evt-soci', 'Soci');
     html += '</div>';
 
@@ -2159,6 +2208,10 @@ const UI = (() => {
 
     html += '<div class="tab-pane' + (_eventiTab === 'evt-personale' ? ' active' : '') + '" id="evt-personale">';
     html += _renderEvtPersonale(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_eventiTab === 'evt-magazzino' ? ' active' : '') + '" id="evt-magazzino">';
+    html += _renderEvtMagazzino(progetto);
     html += '</div>';
 
     html += '<div class="tab-pane' + (_eventiTab === 'evt-soci' ? ' active' : '') + '" id="evt-soci">';
@@ -2222,7 +2275,10 @@ const UI = (() => {
     } else if (campo === 'tasso_annuo' || campo === 'variazione_pct' || campo === 'iva_pct' || campo === 'aliquota_ammortamento') {
       evt[campo] = _parsePct(raw);
       el.textContent = _formatPct(evt[campo]);
-    } else if (campo === 'anno' || campo === 'mese' || campo === 'durata_mesi' || campo === 'delta') {
+    } else if (campo === 'pct_utilizzo') {
+      evt[campo] = _parsePct(raw);
+      el.textContent = _formatPct(evt[campo]);
+    } else if (campo === 'anno' || campo === 'anno_fine' || campo === 'mese' || campo === 'durata_mesi' || campo === 'delta') {
       var val = parseInt(raw, 10) || 0;
       if (campo === 'mese') val = Math.max(1, Math.min(12, val));
       evt[campo] = val;
@@ -2381,6 +2437,7 @@ const UI = (() => {
 
   function _renderEvtInvestimenti(progetto) {
     var items = _eventiPerTipo(progetto, 'nuovo_investimento');
+    var ultimoAnno = _ultimoAnnoPiano(progetto);
     var html = '';
     html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Nuovi Investimenti</h3>';
     html += '<div class="form-hint mb-8">Acquisti di beni strumentali nel periodo previsionale. Impattano immobilizzazioni (SP), ammortamenti (CE), IVA a credito e cash flow.</div>';
@@ -2392,8 +2449,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessun nuovo investimento pianificato.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:160px"><col style="width:60px"><col style="width:60px"><col style="width:120px"><col style="width:70px"><col style="width:80px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Categoria</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Importo</td><td class="cell-amount">IVA %</td><td class="cell-amount">Aliq. amm. %</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:160px"><col style="width:60px"><col style="width:60px"><col style="width:120px"><col style="width:70px"><col style="width:80px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Categoria</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Importo</td><td class="cell-amount">IVA %</td><td class="cell-amount">Aliq. amm. %</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -2405,6 +2462,7 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="22%" onblur="UI._handleEvtField(this,' + idx + ',\'iva_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.iva_pct) + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'aliquota_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.aliquota_ammortamento) + '</div></td>';
+        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2417,6 +2475,7 @@ const UI = (() => {
 
   function _renderEvtRicavi(progetto) {
     var items = _eventiPerTipo(progetto, 'variazione_ricavi');
+    var ultimoAnno = _ultimoAnnoPiano(progetto);
     var html = '';
     html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione Ricavi</h3>';
     html += '<div class="form-hint mb-8">Aumento o diminuzione percentuale dei ricavi. <b>Puntuale</b>: effetto solo nell\'anno indicato. <b>Strutturale</b>: effetto permanente dal mese/anno indicato in poi.</div>';
@@ -2428,8 +2487,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessuna variazione ricavi pianificata.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Modalità</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Modalità</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -2439,6 +2498,7 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
         html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtModalita(' + idx + ')">' + (e.modalita === 'puntuale' ? 'Puntuale' : 'Strutturale') + '</div></td>';
+        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2451,6 +2511,7 @@ const UI = (() => {
 
   function _renderEvtCostiMP(progetto) {
     var items = _eventiPerTipo(progetto, 'variazione_costi_mp');
+    var ultimoAnno = _ultimoAnnoPiano(progetto);
     var html = '';
     html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione Costi Materie Prime</h3>';
     html += '<div class="form-hint mb-8">Aumento o diminuzione percentuale dei costi di acquisto materie prime e materiali (voci B.6 del CE). Incide sul costo del venduto.</div>';
@@ -2462,8 +2523,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessuna variazione costi materie prime pianificata.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Modalità</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Modalità</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -2473,6 +2534,7 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
         html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtModalita(' + idx + ')">' + (e.modalita === 'puntuale' ? 'Puntuale' : 'Strutturale') + '</div></td>';
+        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2485,6 +2547,7 @@ const UI = (() => {
 
   function _renderEvtCostiVar(progetto) {
     var items = _eventiPerTipo(progetto, 'variazione_costi_var');
+    var ultimoAnno = _ultimoAnnoPiano(progetto);
     var html = '';
     html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione Costi Variabili</h3>';
     html += '<div class="form-hint mb-8">Variazione % dei costi già categorizzati come variabili (% sul fatturato). Clicca sul nome del driver per selezionare la voce di costo da modificare.</div>';
@@ -2496,8 +2559,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessuna variazione costi variabili pianificata.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Driver costo</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Modalità</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Driver costo</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Modalità</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -2507,6 +2570,7 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
         html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtModalita(' + idx + ')">' + (e.modalita === 'puntuale' ? 'Puntuale' : 'Strutturale') + '</div></td>';
+        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2519,6 +2583,7 @@ const UI = (() => {
 
   function _renderEvtCostiGestione(progetto) {
     var items = _eventiPerTipo(progetto, 'andamento_costo_gestione');
+    var ultimoAnno = _ultimoAnnoPiano(progetto);
     var html = '';
     html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Andamento Costi di Gestione</h3>';
     html += '<div class="form-hint mb-8">Gestione puntuale dei singoli costi fissi (Servizi, Amministrativi, Locazioni, ecc.). Oltre all\'inflazione, è possibile definire la cessazione, l\'aumento, l\'attivazione o la variazione % di un costo specifico da un determinato mese/anno.</div>';
@@ -2530,8 +2595,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessun evento su costi di gestione pianificato.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:100px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Driver costo</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Azione</td><td class="cell-amount">Nuovo importo</td><td class="cell-amount">Variazione %</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:110px"><col style="width:100px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Driver costo</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Azione</td><td class="cell-amount">Nuovo importo</td><td class="cell-amount">Variazione %</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -2542,6 +2607,7 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtAzione(' + idx + ')">' + (_AZIONE_LABELS[e.azione] || e.azione) + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo_nuovo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo_nuovo ? _formatImporto(e.importo_nuovo) : '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
+        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2554,6 +2620,7 @@ const UI = (() => {
 
   function _renderEvtPersonale(progetto) {
     var items = _eventiPerTipo(progetto, 'variazione_personale');
+    var ultimoAnno = _ultimoAnnoPiano(progetto);
     var html = '';
     html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione Personale</h3>';
     html += '<div class="form-hint mb-8">Aumento o diminuzione del numero di dipendenti dal mese/anno indicato. Il campo RAL è opzionale: se lasciato a 0 si usa la RAL media del progetto.</div>';
@@ -2565,8 +2632,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessuna variazione di personale pianificata.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:120px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Delta (+/-)</td><td class="cell-amount">RAL nuovi</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:120px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Delta (+/-)</td><td class="cell-amount">RAL nuovi</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -2576,6 +2643,7 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'delta\')" onkeydown="UI._handleAmountKey(event)">' + (e.delta || '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'ral_nuovi\')" onkeydown="UI._handleAmountKey(event)">' + (e.ral_nuovi ? _formatImporto(e.ral_nuovi) : '') + '</div></td>';
+        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2584,10 +2652,57 @@ const UI = (() => {
     return html;
   }
 
-  /* ── Tab 8: Versamenti/Finanziamenti Soci ──────────────── */
+  /* ── Tab 8: Utilizzo Rimanenze (Magazzino) ──────────────── */
+
+  function _renderEvtMagazzino(progetto) {
+    var items = _eventiPerTipo(progetto, 'utilizzo_rimanenze');
+    var ultimoAnno = _ultimoAnnoPiano(progetto);
+    var html = '';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Utilizzo Rimanenze</h3>';
+    html += '<div class="form-hint mb-8">Smaltimento delle rimanenze di magazzino esistenti: la società decide di utilizzare una percentuale delle proprie rimanenze anziché acquistare nuove materie prime. Riduce il valore delle rimanenze (SP) e i costi di acquisto materie prime (CE).</div>';
+
+    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
+    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'utilizzo_rimanenze\')">+ Aggiungi utilizzo</div>';
+    html += '</div></div>';
+
+    if (items.length === 0) {
+      html += '<div class="projects-empty" style="padding:24px"><p>Nessun utilizzo rimanenze pianificato.</p></div>';
+    } else {
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:70px"><col style="width:100px"><col style="width:100px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Da anno</td><td class="cell-amount">% utilizzo</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
+
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i].evt, idx = items[i].idx;
+        html += '<tr class="row-conto">';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'pct_utilizzo\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.pct_utilizzo) + '</div></td>';
+        html += _renderAnnoFineCell(e, idx, ultimoAnno);
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+    }
+    return html;
+  }
+
+  /* ── Helper: cella "Fino a" per anno di fine evento ────── */
+
+  function _renderAnnoFineCell(evt, idx, ultimoAnno) {
+    var val = evt.anno_fine || ultimoAnno || '';
+    return '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="' + ultimoAnno + '" onblur="UI._handleEvtField(this,' + idx + ',\'anno_fine\')" onkeydown="UI._handleAmountKey(event)">' + val + '</div></td>';
+  }
+
+  function _ultimoAnnoPiano(progetto) {
+    var anni = progetto && progetto.meta && progetto.meta.anni_previsione;
+    return (anni && anni.length > 0) ? anni[anni.length - 1] : '';
+  }
+
+  /* ── Tab 9: Versamenti/Finanziamenti Soci ──────────────── */
 
   function _renderEvtSoci(progetto) {
     var items = _eventiPerTipo(progetto, 'operazione_soci');
+    var ultimoAnno = _ultimoAnnoPiano(progetto);
     var html = '';
     html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Versamenti e Finanziamenti Soci</h3>';
     html += '<div class="form-hint mb-8">Versamenti in conto capitale (incrementano il patrimonio netto), finanziamenti soci (debiti verso soci) e rimborsi ai soci. Impattano SP e cash flow.</div>';
@@ -2599,8 +2714,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessuna operazione soci pianificata.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:170px"><col style="width:120px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Tipo operazione</td><td class="cell-amount">Importo</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:170px"><col style="width:120px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Tipo operazione</td><td class="cell-amount">Importo</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -2610,6 +2725,7 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
         html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="font-size:11px;white-space:nowrap" onclick="UI.ciclaEvtSottotipo(' + idx + ')">' + (_SOTTOTIPO_LABELS[e.sottotipo] || e.sottotipo) + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
+        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -3115,6 +3231,7 @@ const UI = (() => {
     toggleSelect,
     aggiornaStatusBar,
     mostraNotifica,
+    apriModificaCliente,
     _apriDaRecente,
     // Fase 2
     switchDatiTab,

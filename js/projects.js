@@ -162,9 +162,9 @@ const Projects = (() => {
    * @returns {Object}
    */
   function creaEvento(tipo, progetto) {
-    var primoAnno = (progetto && progetto.meta && progetto.meta.anni_previsione && progetto.meta.anni_previsione[0])
-      ? progetto.meta.anni_previsione[0]
-      : new Date().getFullYear();
+    var anniPrev = (progetto && progetto.meta && progetto.meta.anni_previsione) || [];
+    var primoAnno = anniPrev[0] || new Date().getFullYear();
+    var ultimoAnno = anniPrev[anniPrev.length - 1] || primoAnno;
     var base = { tipo: tipo, id: 'evt_' + Date.now() + '_' + (_nextEvtId++), descrizione: '' };
 
     switch (tipo) {
@@ -175,33 +175,37 @@ const Projects = (() => {
         });
       case 'nuovo_investimento':
         return Object.assign(base, {
-          categoria: 'sp.BII.2', anno: primoAnno, mese: 1,
+          categoria: 'sp.BII.2', anno: primoAnno, anno_fine: ultimoAnno, mese: 1,
           importo: 0, iva_pct: 0.22, aliquota_ammortamento: 0
         });
       case 'variazione_ricavi':
         return Object.assign(base, {
-          anno: primoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
+          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
         });
       case 'variazione_costi_mp':
         return Object.assign(base, {
-          anno: primoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
+          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
         });
       case 'variazione_costi_var':
         return Object.assign(base, {
-          driver_id: '', anno: primoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
+          driver_id: '', anno: primoAnno, anno_fine: ultimoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
         });
       case 'andamento_costo_gestione':
         return Object.assign(base, {
-          driver_id: '', anno: primoAnno, mese: 1,
+          driver_id: '', anno: primoAnno, anno_fine: ultimoAnno, mese: 1,
           azione: 'variazione', importo_nuovo: 0, variazione_pct: 0
         });
       case 'variazione_personale':
         return Object.assign(base, {
-          anno: primoAnno, mese: 1, delta: 0, ral_nuovi: 0
+          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, delta: 0, ral_nuovi: 0
         });
       case 'operazione_soci':
         return Object.assign(base, {
-          anno: primoAnno, mese: 1, importo: 0, sottotipo: 'versamento_capitale'
+          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, importo: 0, sottotipo: 'versamento_capitale'
+        });
+      case 'utilizzo_rimanenze':
+        return Object.assign(base, {
+          anno: primoAnno, anno_fine: ultimoAnno, pct_utilizzo: 0
         });
       default:
         return base;
@@ -401,6 +405,135 @@ const Projects = (() => {
     UI.closeModal('modal-nuovo-progetto');
     _resetFormNuovoProgetto();
     UI.onProgettoAperto(progetto);
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Aggiornamento metadati cliente
+     ────────────────────────────────────────────────────────── */
+
+  /**
+   * Aggiorna ragione sociale, anno base e orizzonte anni del progetto corrente.
+   * Chiamato dal modale "Modifica dati cliente".
+   */
+  function aggiornaMetaDati() {
+    if (!_progettoCorrente) return;
+
+    const clienteEl = document.getElementById('mc-cliente');
+    const annoEl    = document.getElementById('mc-anno-base');
+    const anniEl    = document.getElementById('mc-anni-prev');
+
+    const cliente   = (clienteEl.textContent || '').trim();
+    const annoBase  = parseInt((annoEl.textContent || '').trim(), 10);
+    const anniPrev  = parseInt((anniEl.textContent || '1').trim(), 10);
+
+    // Validazione
+    const errori = [];
+    if (!cliente) errori.push('Il nome cliente è obbligatorio.');
+    if (isNaN(annoBase) || annoBase < 1900 || annoBase > 2100) errori.push('Anno base non valido.');
+    if (anniPrev < 1 || anniPrev > 8) errori.push('Anni previsionali deve essere tra 1 e 8.');
+
+    if (errori.length > 0) {
+      _mostraErroreModifica(errori.join('\n'));
+      return;
+    }
+
+    const meta = _progettoCorrente.meta;
+    const vecchioAnno = meta.anno_base;
+    const vecchiAnniPrev = meta.anni_previsione;
+    const isCostitutenda = meta.scenario === 'costituenda';
+
+    // Aggiorna ragione sociale
+    meta.cliente = cliente;
+
+    // Gestisci cambio anno base
+    if (annoBase !== vecchioAnno) {
+      // Sposta i dati storici dalla vecchia chiave alla nuova
+      const vecchiaChiave = String(vecchioAnno);
+      const nuovaChiave   = String(annoBase);
+      if (_progettoCorrente.storico[vecchiaChiave]) {
+        _progettoCorrente.storico[nuovaChiave] = _progettoCorrente.storico[vecchiaChiave];
+        delete _progettoCorrente.storico[vecchiaChiave];
+      }
+      meta.anno_base = annoBase;
+    }
+
+    // Ricalcola anni previsionali
+    const primoAnnoPrev = isCostitutenda ? 0 : 1;
+    const nuoviAnniPrev = [];
+    for (let i = primoAnnoPrev; i < primoAnnoPrev + anniPrev; i++) {
+      nuoviAnniPrev.push(annoBase + i);
+    }
+    meta.anni_previsione = nuoviAnniPrev;
+
+    // Aggiorna parametri annuali nei driver
+    _aggiornaParamAnnuali(_progettoCorrente, vecchiAnniPrev, nuoviAnniPrev);
+
+    meta.modificato = new Date().toISOString().split('T')[0];
+
+    _modificato = true;
+    _aggiungiRecente(_progettoCorrente);
+
+    UI.closeModal('modal-modifica-cliente');
+    UI.onProgettoAperto(_progettoCorrente);
+    UI.mostraNotifica('Dati cliente aggiornati.', 'success');
+  }
+
+  /**
+   * Aggiorna gli oggetti parametro annuale (inflazione, var_ral, ecc.)
+   * quando cambiano gli anni previsionali.
+   */
+  function _aggiornaParamAnnuali(progetto, vecchiAnni, nuoviAnni) {
+    var driver = progetto.driver;
+    if (!driver) return;
+
+    // Helper: migra un oggetto {anno: valore} mantenendo valori esistenti
+    function _migraParam(obj, valDefault) {
+      if (!obj || typeof obj !== 'object') return _creaParamAnnuale(nuoviAnni, valDefault || 0);
+      var nuovo = {};
+      nuoviAnni.forEach(function(a) {
+        var k = String(a);
+        nuovo[k] = obj[k] !== undefined ? obj[k] : (valDefault || 0);
+      });
+      return nuovo;
+    }
+
+    // Driver personale
+    if (driver.personale) {
+      driver.personale.var_ral_pct = _migraParam(driver.personale.var_ral_pct, 0);
+    }
+
+    // Driver fiscale
+    if (driver.fiscale) {
+      driver.fiscale.inflazione    = _migraParam(driver.fiscale.inflazione, 0.02);
+      driver.fiscale.var_personale = _migraParam(driver.fiscale.var_personale, 0);
+    }
+
+    // Driver ricavi — crescita_annua
+    if (driver.ricavi) {
+      driver.ricavi.forEach(function(drv) {
+        if (drv.crescita_annua) {
+          drv.crescita_annua = _migraParam(drv.crescita_annua, 0);
+        }
+      });
+    }
+  }
+
+  /**
+   * Mostra errore nel modale modifica cliente.
+   */
+  function _mostraErroreModifica(msg) {
+    var prev = document.getElementById('modal-mc-error');
+    if (prev) prev.remove();
+
+    var div = document.createElement('div');
+    div.id = 'modal-mc-error';
+    div.style.cssText = 'padding:10px 14px;border-radius:4px;font-size:13px;margin-bottom:12px;';
+    div.className = 'text-error';
+    div.style.background = 'var(--color-error-bg)';
+    div.textContent = msg;
+
+    var body = document.querySelector('#modal-modifica-cliente .modal-body');
+    if (body) body.prepend(div);
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -784,6 +917,7 @@ const Projects = (() => {
   /* ── API pubblica ────────────────────────────────────────── */
   return {
     creaProgetto,
+    aggiornaMetaDati,
     salvaProgetto,
     apriProgetto,
     caricaDaFile,
