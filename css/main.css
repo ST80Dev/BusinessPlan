@@ -640,6 +640,13 @@ html, body {
   box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 
+.form-select.form-select-sm {
+  min-height: 26px;
+  padding: 2px 6px;
+  font-size: 12px;
+  width: auto;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

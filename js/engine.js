@@ -212,8 +212,8 @@ const Engine = (() => {
 
         switch (evt.tipo) {
           case 'nuovo_finanziamento':
-            // Attivo se data_inizio cade in questo anno o prima
-            if (_evtDataInAnno(evt.data_inizio, anno, annoBase)) {
+            // Attivo se anno evento cade in questo anno o prima
+            if (evt.anno && evt.anno <= anno) {
               nuoviFinAnno.push(evt);
             }
             break;
@@ -289,12 +289,12 @@ const Engine = (() => {
       }
 
       // 1. RICAVI (con moltiplicatori eventi)
-      var ricavi = _calcolaRicaviAnno(driver.ricavi, anno, annoBase, inflazione);
+      var ricavi = _calcolaRicaviAnno(driver.ricavi, anno, annoBase, inflazione, p.meta);
       ricavi.totale = Math.round(ricavi.totale * multRicaviStrutt * multRicaviPunt);
 
       // 2. COSTI (con eventi: variazione MP, costi variabili, costi gestione)
       var costi = _calcolaCostiAnnoConEventi(driver.costi, ricavi.totale, anno, annoBase, inflazione,
-        multCostiMPStrutt * multCostiMPPunt, multCostiVarStrutt, multCostiVarPunt, costiGestOverride);
+        multCostiMPStrutt * multCostiMPPunt, multCostiVarStrutt, multCostiVarPunt, costiGestOverride, p.meta);
 
       // 3. PERSONALE (con variazioni da eventi)
       var persDriver = driver.personale;
@@ -318,13 +318,23 @@ const Engine = (() => {
 
       // 4. AMMORTAMENTI (da immobilizzazioni esistenti + nuovi investimenti cumulativi)
       var ammort = _calcolaAmmortamentiAnno(p.immobilizzazioni, spPrev);
-      // Ammortamenti da investimenti degli anni precedenti
+      // Ammortamenti da investimenti (incluso anno di acquisto con pro-rata dal mese)
       var ammortEvtImmat = 0, ammortEvtMat = 0;
       for (var ic = 0; ic < investimentiCumulativi.length; ic++) {
         var inv = investimentiCumulativi[ic];
-        if (inv.anno_acquisto >= anno) continue; // ammortamento parte dall'anno successivo
-        var quotaInv = Math.round(inv.importo * inv.aliquota);
         var nettoInv = inv.importo - inv.fondo;
+        if (nettoInv <= 0) continue; // già completamente ammortizzato
+        var quotaAnnuaInv = Math.round(inv.importo * inv.aliquota);
+        var quotaInv;
+        if (inv.anno_acquisto === anno) {
+          // Anno di acquisto: pro-rata dal mese di investimento
+          var mesiAmm = 13 - (inv.mese_acquisto || 1);
+          quotaInv = Math.round(quotaAnnuaInv * mesiAmm / 12);
+        } else if (inv.anno_acquisto < anno) {
+          quotaInv = quotaAnnuaInv;
+        } else {
+          continue; // investimento futuro
+        }
         if (quotaInv > nettoInv) quotaInv = Math.max(0, nettoInv);
         if (inv.categoria.indexOf('sp.BI.') === 0) {
           ammortEvtImmat += quotaInv;
@@ -337,7 +347,7 @@ const Engine = (() => {
       ammort.materiali += ammortEvtMat;
       ammort.quota_annua += ammortEvtImmat + ammortEvtMat;
 
-      // Registra nuovi investimenti di quest'anno (ammortamento partirà dall'anno prossimo)
+      // Registra nuovi investimenti di quest'anno (ammortamento calcolato sopra con pro-rata)
       var investimentiCassaAnno = 0;
       var ivaInvestimentiAnno = 0;
       for (var ni = 0; ni < investimentiAnno.length; ni++) {
@@ -345,7 +355,7 @@ const Engine = (() => {
         investimentiCumulativi.push({
           categoria: nInv.categoria, importo: nInv.importo,
           aliquota: nInv.aliquota_ammortamento || 0,
-          anno_acquisto: anno, fondo: 0
+          anno_acquisto: anno, mese_acquisto: nInv.mese || 1, fondo: 0
         });
         investimentiCassaAnno += nInv.importo;
         ivaInvestimentiAnno += Math.round(nInv.importo * (nInv.iva_pct || 0));
@@ -579,15 +589,27 @@ const Engine = (() => {
 
   /* ── Ricavi ──────────────────────────────────────────────── */
 
-  function _calcolaRicaviAnno(driverRicavi, anno, annoBase, inflazione) {
+  function _calcolaRicaviAnno(driverRicavi, anno, annoBase, inflazione, meta) {
     var totale = 0;
     var dettaglio = [];
+    var isCostitutenda = meta && meta.scenario === 'costituenda';
+    var meseAvvio = (meta && meta.mese_avvio) || 1;
+    var primoAnnoPrev = isCostitutenda ? annoBase : annoBase + 1;
 
     (driverRicavi || []).forEach(function(drv) {
       var base = drv.base_annuale || 0;
+      // Se base_tipo è 'mensile', converti a importo annuale
+      if (drv.base_tipo === 'mensile') {
+        if (isCostitutenda && anno === annoBase && meseAvvio > 1) {
+          // Primo anno costituenda: mesi operativi = 13 - mese_avvio
+          base = base * (13 - meseAvvio);
+        } else {
+          base = base * 12;
+        }
+      }
       // Crescita cumulativa anno su anno con % distinta per anno
       var importo = base;
-      for (var a = annoBase + 1; a <= anno; a++) {
+      for (var a = primoAnnoPrev; a <= anno; a++) {
         var crescita = 0;
         if (typeof drv.crescita_annua === 'object' && drv.crescita_annua) {
           crescita = drv.crescita_annua[String(a)] || 0;
@@ -606,10 +628,12 @@ const Engine = (() => {
 
   /* ── Costi ───────────────────────────────────────────────── */
 
-  function _calcolaCostiAnno(driverCosti, ricaviTotale, anno, annoBase, inflazione) {
+  function _calcolaCostiAnno(driverCosti, ricaviTotale, anno, annoBase, inflazione, meta) {
     var totale = 0;
     var totaleIvaCredito = 0;
     var dettaglio = [];
+    var isCostitutenda = meta && meta.scenario === 'costituenda';
+    var meseAvvio = (meta && meta.mese_avvio) || 1;
 
     (driverCosti || []).forEach(function(drv) {
       if (drv.usa_var_personale) return; // personale gestito a parte
@@ -626,6 +650,14 @@ const Engine = (() => {
       } else {
         // Importo fisso con inflazione
         var base = drv.importo_fisso || 0;
+        // Se base_tipo è 'mensile', converti a importo annuale
+        if (drv.base_tipo === 'mensile') {
+          if (isCostitutenda && anno === annoBase && meseAvvio > 1) {
+            base = base * (13 - meseAvvio);
+          } else {
+            base = base * 12;
+          }
+        }
         var anniDiff2 = anno - annoBase;
         if (drv.soggetto_inflazione && inflazione && anniDiff2 > 0) {
           importo = Math.round(base * Math.pow(1 + inflazione, anniDiff2));
@@ -698,19 +730,10 @@ const Engine = (() => {
       var capitaleAnno = 0;
       var capResiduo = cap;
 
-      // Simula i mesi fino a inizio anno corrente
+      // Simula i mesi fino a inizio anno corrente (solo italiano: quota capitale costante)
       for (var m = 0; m < mesiPassati && m < durRes; m++) {
-        if (fin.tipo_ammortamento === 'italiano') {
-          var quotaCap = cap / durRes;
-          var quotaInt = capResiduo * tassoMese;
-          capResiduo -= quotaCap;
-        } else {
-          // Francese
-          var rata = cap * tassoMese / (1 - Math.pow(1 + tassoMese, -durRes));
-          var quotaInt2 = capResiduo * tassoMese;
-          var quotaCap2 = rata - quotaInt2;
-          capResiduo -= quotaCap2;
-        }
+        var quotaCap = cap / durRes;
+        capResiduo -= quotaCap;
       }
 
       // Calcola i 12 mesi dell'anno corrente
@@ -718,20 +741,11 @@ const Engine = (() => {
         var meseAbs = mesiPassati + mm;
         if (meseAbs >= durRes || capResiduo <= 0) break;
 
-        if (fin.tipo_ammortamento === 'italiano') {
-          var qCap = cap / durRes;
-          var qInt = capResiduo * tassoMese;
-          interessiAnno += qInt;
-          capitaleAnno += qCap;
-          capResiduo -= qCap;
-        } else {
-          var rataF = cap * tassoMese / (1 - Math.pow(1 + tassoMese, -durRes));
-          var qIntF = capResiduo * tassoMese;
-          var qCapF = rataF - qIntF;
-          interessiAnno += qIntF;
-          capitaleAnno += qCapF;
-          capResiduo -= qCapF;
-        }
+        var qCap = cap / durRes;
+        var qInt = capResiduo * tassoMese;
+        interessiAnno += qInt;
+        capitaleAnno += qCap;
+        capResiduo -= qCap;
       }
 
       interessiTotale += Math.round(interessiAnno);
@@ -850,25 +864,15 @@ const Engine = (() => {
   /* ── Helper eventi ───────────────────────────────────────── */
 
   /**
-   * Verifica se la data_inizio di un finanziamento (formato MM/AAAA) è <= anno dato.
-   * Restituisce true se il finanziamento è attivo per quell'anno.
-   */
-  function _evtDataInAnno(dataStr, anno, annoBase) {
-    if (!dataStr) return false;
-    var parts = String(dataStr).split('/');
-    if (parts.length !== 2) return false;
-    var annoEvt = parseInt(parts[1], 10);
-    return !isNaN(annoEvt) && annoEvt <= anno;
-  }
-
-  /**
    * Calcola costi annuali con applicazione degli eventi (variazioni MP, costi variabili, costi gestione).
    */
   function _calcolaCostiAnnoConEventi(driverCosti, ricaviTotale, anno, annoBase, inflazione,
-      multMP, multCostiVarStrutt, multCostiVarPunt, costiGestOverride) {
+      multMP, multCostiVarStrutt, multCostiVarPunt, costiGestOverride, meta) {
     var totale = 0;
     var totaleIvaCredito = 0;
     var dettaglio = [];
+    var isCostitutenda = meta && meta.scenario === 'costituenda';
+    var meseAvvio = (meta && meta.mese_avvio) || 1;
 
     (driverCosti || []).forEach(function(drv) {
       if (drv.usa_var_personale) return;
@@ -887,6 +891,14 @@ const Engine = (() => {
         importo = Math.round(importo * multVar);
       } else {
         var base = drv.importo_fisso || 0;
+        // Se base_tipo è 'mensile', converti a importo annuale
+        if (drv.base_tipo === 'mensile') {
+          if (isCostitutenda && anno === annoBase && meseAvvio > 1) {
+            base = base * (13 - meseAvvio);
+          } else {
+            base = base * 12;
+          }
+        }
         var anniDiff2 = anno - annoBase;
         if (drv.soggetto_inflazione && inflazione && anniDiff2 > 0) {
           importo = Math.round(base * Math.pow(1 + inflazione, anniDiff2));
@@ -935,15 +947,12 @@ const Engine = (() => {
    * Simile a _calcolaFinanziamentiAnno ma per un singolo finanziamento con data_inizio.
    */
   function _calcolaFinanziamentoSingolo(fin, annoCalc) {
-    if (!fin.importo || !fin.tasso_annuo || !fin.durata_mesi || !fin.data_inizio) {
+    if (!fin.importo || !fin.tasso_annuo || !fin.durata_mesi || !fin.anno) {
       return { interessi: 0, capitale: 0, residuo: fin.importo || 0 };
     }
 
-    var parts = String(fin.data_inizio).split('/');
-    if (parts.length !== 2) return { interessi: 0, capitale: 0, residuo: fin.importo || 0 };
-    var meseInizio = parseInt(parts[0], 10) || 1;
-    var annoInizio = parseInt(parts[1], 10);
-    if (isNaN(annoInizio)) return { interessi: 0, capitale: 0, residuo: fin.importo || 0 };
+    var meseInizio = fin.mese || 1;
+    var annoInizio = fin.anno;
 
     var tassoMese = fin.tasso_annuo / 12;
     var cap = fin.importo;
@@ -954,34 +963,19 @@ const Engine = (() => {
     var meseAssInizioAnno = (annoCalc - annoInizio) * 12 + (1 - meseInizio);
     var meseAssFineAnno = meseAssInizioAnno + 11;
 
-    // Simula dalla partenza fino a inizio anno
+    // Simula dalla partenza fino a inizio anno (solo italiano: quota capitale costante)
     for (var m = 0; m < meseAssInizioAnno && m < dur; m++) {
       if (capResiduo <= 0) break;
-      if (fin.tipo_ammortamento === 'italiano') {
-        capResiduo -= cap / dur;
-      } else {
-        var rata = cap * tassoMese / (1 - Math.pow(1 + tassoMese, -dur));
-        var qInt = capResiduo * tassoMese;
-        capResiduo -= (rata - qInt);
-      }
+      capResiduo -= cap / dur;
     }
 
     var interessiAnno = 0, capitaleAnno = 0;
     for (var mm = Math.max(0, meseAssInizioAnno); mm <= meseAssFineAnno && mm < dur; mm++) {
       if (capResiduo <= 0) break;
-      if (fin.tipo_ammortamento === 'italiano') {
-        var qCap = cap / dur;
-        interessiAnno += capResiduo * tassoMese;
-        capitaleAnno += qCap;
-        capResiduo -= qCap;
-      } else {
-        var rataF = cap * tassoMese / (1 - Math.pow(1 + tassoMese, -dur));
-        var qIntF = capResiduo * tassoMese;
-        var qCapF = rataF - qIntF;
-        interessiAnno += qIntF;
-        capitaleAnno += qCapF;
-        capResiduo -= qCapF;
-      }
+      var qCap = cap / dur;
+      interessiAnno += capResiduo * tassoMese;
+      capitaleAnno += qCap;
+      capResiduo -= qCap;
     }
 
     return {

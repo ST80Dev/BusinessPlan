@@ -172,7 +172,7 @@ const Projects = (() => {
       case 'nuovo_finanziamento':
         return Object.assign(base, {
           importo: 0, tasso_annuo: 0, durata_mesi: 60,
-          tipo_ammortamento: 'francese', data_inizio: ''
+          tipo_ammortamento: 'italiano', anno: primoAnno, mese: 1
         });
       case 'nuovo_investimento':
         return Object.assign(base, {
@@ -322,6 +322,7 @@ const Projects = (() => {
       voce_ce:             voceCe,
       label:               label,
       base_annuale:        baseAnnuale || 0,
+      base_tipo:           'annuale',   // 'annuale' | 'mensile'
       crescita_annua:      {}    // { "2026": 0.05, "2027": 0.05, ... } per anno
     };
   }
@@ -347,6 +348,7 @@ const Projects = (() => {
       pct_ricavi:            tipoDriver === 'pct_ricavi' ? 0 : null,
       var_pct_annua:         tipoDriver === 'pct_ricavi' ? 0 : null,
       importo_fisso:         tipoDriver !== 'pct_ricavi' ? 0 : null,
+      base_tipo:             'annuale',   // 'annuale' | 'mensile'
       soggetto_inflazione:   !isPersonale && tipoDriver === 'fisso',
       usa_var_personale:     isPersonale,
       iva_pct:               ivaDefault
