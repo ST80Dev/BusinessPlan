@@ -342,10 +342,17 @@ const Engine = (() => {
 
     (driverRicavi || []).forEach(function(drv) {
       var base = drv.base_annuale || 0;
-      // Crescita cumulativa anno su anno
-      var anniDiff = anno - annoBase;
-      var crescita = drv.crescita_annua || 0;
-      var importo = base * Math.pow(1 + crescita, anniDiff);
+      // Crescita cumulativa anno su anno con % distinta per anno
+      var importo = base;
+      for (var a = annoBase + 1; a <= anno; a++) {
+        var crescita = 0;
+        if (typeof drv.crescita_annua === 'object' && drv.crescita_annua) {
+          crescita = drv.crescita_annua[String(a)] || 0;
+        } else if (typeof drv.crescita_annua === 'number') {
+          crescita = drv.crescita_annua; // retrocompatibilita
+        }
+        importo = importo * (1 + crescita);
+      }
       importo = Math.round(importo);
       totale += importo;
       dettaglio.push({ id: drv.id, label: drv.label, importo: importo });
