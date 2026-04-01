@@ -30,6 +30,7 @@
     <div class="sidebar-project-info" id="sidebar-project-info">
       <div class="sidebar-project-name text-muted" id="sidebar-project-name">Nessun progetto</div>
       <div class="sidebar-project-meta" id="sidebar-project-meta">—</div>
+      <div class="sidebar-project-edit hidden" id="sidebar-project-edit" onclick="UI.apriModificaCliente()" title="Modifica dati cliente">✎ Modifica</div>
     </div>
 
     <!-- Navigazione principale -->
@@ -210,6 +211,60 @@
     </div>
   </div>
 </div><!-- /#modal-nuovo-progetto -->
+
+<!-- =====================================================
+     MODALE MODIFICA DATI CLIENTE
+     ===================================================== -->
+<div class="modal-overlay hidden" id="modal-modifica-cliente">
+  <div class="modal" style="width:480px">
+    <div class="modal-header">
+      <span class="modal-title">Modifica dati cliente</span>
+      <div class="modal-close" onclick="UI.closeModal('modal-modifica-cliente')">✕</div>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Nome cliente -->
+      <div class="form-group">
+        <span class="form-label required">Nome cliente / Ragione sociale</span>
+        <div class="form-field"
+             contenteditable="true"
+             id="mc-cliente"
+             data-placeholder="Es. Rossi Srl"
+             spellcheck="false"></div>
+      </div>
+
+      <!-- Anno base + Anni previsionali -->
+      <div class="form-row">
+        <div class="form-group">
+          <span class="form-label required" id="mc-anno-label">Anno base (storico)</span>
+          <div class="form-field"
+               contenteditable="true"
+               id="mc-anno-base"
+               data-placeholder="Es. 2024"
+               spellcheck="false"></div>
+          <div class="form-hint" id="mc-anno-hint">Anno dell'ultimo bilancio approvato</div>
+        </div>
+
+        <div class="form-group">
+          <span class="form-label required">Anni previsionali</span>
+          <div class="stepper">
+            <div class="stepper-btn" onclick="UI.stepperChange('mc-anni-prev', -1)">−</div>
+            <div class="stepper-value" id="mc-anni-prev">3</div>
+            <div class="stepper-btn" onclick="UI.stepperChange('mc-anni-prev', +1)">+</div>
+          </div>
+          <div class="form-hint" id="mc-anni-hint">Da 1 a 8 anni oltre l'anno base</div>
+        </div>
+      </div>
+
+    </div><!-- /.modal-body -->
+
+    <div class="modal-footer">
+      <div class="btn btn-secondary" onclick="UI.closeModal('modal-modifica-cliente')">Annulla</div>
+      <div class="btn btn-primary" onclick="Projects.aggiornaMetaDati()">Salva modifiche</div>
+    </div>
+  </div>
+</div>
 
 <!-- =====================================================
      MODALE CONFERMA ELIMINAZIONE

@@ -404,6 +404,135 @@ const Projects = (() => {
   }
 
   /* ──────────────────────────────────────────────────────────
+     Aggiornamento metadati cliente
+     ────────────────────────────────────────────────────────── */
+
+  /**
+   * Aggiorna ragione sociale, anno base e orizzonte anni del progetto corrente.
+   * Chiamato dal modale "Modifica dati cliente".
+   */
+  function aggiornaMetaDati() {
+    if (!_progettoCorrente) return;
+
+    const clienteEl = document.getElementById('mc-cliente');
+    const annoEl    = document.getElementById('mc-anno-base');
+    const anniEl    = document.getElementById('mc-anni-prev');
+
+    const cliente   = (clienteEl.textContent || '').trim();
+    const annoBase  = parseInt((annoEl.textContent || '').trim(), 10);
+    const anniPrev  = parseInt((anniEl.textContent || '1').trim(), 10);
+
+    // Validazione
+    const errori = [];
+    if (!cliente) errori.push('Il nome cliente è obbligatorio.');
+    if (isNaN(annoBase) || annoBase < 1900 || annoBase > 2100) errori.push('Anno base non valido.');
+    if (anniPrev < 1 || anniPrev > 8) errori.push('Anni previsionali deve essere tra 1 e 8.');
+
+    if (errori.length > 0) {
+      _mostraErroreModifica(errori.join('\n'));
+      return;
+    }
+
+    const meta = _progettoCorrente.meta;
+    const vecchioAnno = meta.anno_base;
+    const vecchiAnniPrev = meta.anni_previsione;
+    const isCostitutenda = meta.scenario === 'costituenda';
+
+    // Aggiorna ragione sociale
+    meta.cliente = cliente;
+
+    // Gestisci cambio anno base
+    if (annoBase !== vecchioAnno) {
+      // Sposta i dati storici dalla vecchia chiave alla nuova
+      const vecchiaChiave = String(vecchioAnno);
+      const nuovaChiave   = String(annoBase);
+      if (_progettoCorrente.storico[vecchiaChiave]) {
+        _progettoCorrente.storico[nuovaChiave] = _progettoCorrente.storico[vecchiaChiave];
+        delete _progettoCorrente.storico[vecchiaChiave];
+      }
+      meta.anno_base = annoBase;
+    }
+
+    // Ricalcola anni previsionali
+    const primoAnnoPrev = isCostitutenda ? 0 : 1;
+    const nuoviAnniPrev = [];
+    for (let i = primoAnnoPrev; i < primoAnnoPrev + anniPrev; i++) {
+      nuoviAnniPrev.push(annoBase + i);
+    }
+    meta.anni_previsione = nuoviAnniPrev;
+
+    // Aggiorna parametri annuali nei driver
+    _aggiornaParamAnnuali(_progettoCorrente, vecchiAnniPrev, nuoviAnniPrev);
+
+    meta.modificato = new Date().toISOString().split('T')[0];
+
+    _modificato = true;
+    _aggiungiRecente(_progettoCorrente);
+
+    UI.closeModal('modal-modifica-cliente');
+    UI.onProgettoAperto(_progettoCorrente);
+    UI.mostraNotifica('Dati cliente aggiornati.', 'success');
+  }
+
+  /**
+   * Aggiorna gli oggetti parametro annuale (inflazione, var_ral, ecc.)
+   * quando cambiano gli anni previsionali.
+   */
+  function _aggiornaParamAnnuali(progetto, vecchiAnni, nuoviAnni) {
+    var driver = progetto.driver;
+    if (!driver) return;
+
+    // Helper: migra un oggetto {anno: valore} mantenendo valori esistenti
+    function _migraParam(obj, valDefault) {
+      if (!obj || typeof obj !== 'object') return _creaParamAnnuale(nuoviAnni, valDefault || 0);
+      var nuovo = {};
+      nuoviAnni.forEach(function(a) {
+        var k = String(a);
+        nuovo[k] = obj[k] !== undefined ? obj[k] : (valDefault || 0);
+      });
+      return nuovo;
+    }
+
+    // Driver personale
+    if (driver.personale) {
+      driver.personale.var_ral_pct = _migraParam(driver.personale.var_ral_pct, 0);
+    }
+
+    // Driver fiscale
+    if (driver.fiscale) {
+      driver.fiscale.inflazione    = _migraParam(driver.fiscale.inflazione, 0.02);
+      driver.fiscale.var_personale = _migraParam(driver.fiscale.var_personale, 0);
+    }
+
+    // Driver ricavi — crescita_annua
+    if (driver.ricavi) {
+      driver.ricavi.forEach(function(drv) {
+        if (drv.crescita_annua) {
+          drv.crescita_annua = _migraParam(drv.crescita_annua, 0);
+        }
+      });
+    }
+  }
+
+  /**
+   * Mostra errore nel modale modifica cliente.
+   */
+  function _mostraErroreModifica(msg) {
+    var prev = document.getElementById('modal-mc-error');
+    if (prev) prev.remove();
+
+    var div = document.createElement('div');
+    div.id = 'modal-mc-error';
+    div.style.cssText = 'padding:10px 14px;border-radius:4px;font-size:13px;margin-bottom:12px;';
+    div.className = 'text-error';
+    div.style.background = 'var(--color-error-bg)';
+    div.textContent = msg;
+
+    var body = document.querySelector('#modal-modifica-cliente .modal-body');
+    if (body) body.prepend(div);
+  }
+
+  /* ──────────────────────────────────────────────────────────
      Salvataggio (download JSON)
      ────────────────────────────────────────────────────────── */
 
@@ -784,6 +913,7 @@ const Projects = (() => {
   /* ── API pubblica ────────────────────────────────────────── */
   return {
     creaProgetto,
+    aggiornaMetaDati,
     salvaProgetto,
     apriProgetto,
     caricaDaFile,

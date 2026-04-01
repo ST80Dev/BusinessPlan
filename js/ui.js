@@ -245,6 +245,10 @@ const UI = (() => {
       metaEl.textContent = `${progetto.meta.anno_base} · ${scenarioLabels[progetto.meta.scenario] || progetto.meta.scenario}`;
     }
 
+    // Mostra link modifica
+    const editEl = document.getElementById('sidebar-project-edit');
+    if (editEl) editEl.classList.remove('hidden');
+
     // Abilita voci navigazione
     document.querySelectorAll('.sidebar-nav-item.disabled').forEach(el => {
       el.classList.remove('disabled');
@@ -287,6 +291,50 @@ const UI = (() => {
   function closeModal(id) {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Modifica dati cliente
+     ────────────────────────────────────────────────────────── */
+
+  /**
+   * Apre il modale di modifica dati cliente, pre-compilato con i valori attuali.
+   */
+  function apriModificaCliente() {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+
+    const meta = progetto.meta;
+
+    // Pre-compila i campi
+    const clienteEl = document.getElementById('mc-cliente');
+    const annoEl    = document.getElementById('mc-anno-base');
+    const anniEl    = document.getElementById('mc-anni-prev');
+
+    if (clienteEl) clienteEl.textContent = meta.cliente || '';
+    if (annoEl)    annoEl.textContent    = meta.anno_base;
+    if (anniEl)    anniEl.textContent    = meta.anni_previsione ? meta.anni_previsione.length : 3;
+
+    // Aggiorna label anno in base allo scenario
+    const labelEl = document.getElementById('mc-anno-label');
+    const hintEl  = document.getElementById('mc-anno-hint');
+    const anniHint = document.getElementById('mc-anni-hint');
+
+    if (meta.scenario === 'costituenda') {
+      if (labelEl) labelEl.textContent = 'Anno di inizio attività *';
+      if (hintEl)  hintEl.textContent  = 'Primo anno operativo della nuova società';
+      if (anniHint) anniHint.textContent = 'Da 1 a 8 anni di previsione';
+    } else {
+      if (labelEl) labelEl.textContent = 'Anno base (storico) *';
+      if (hintEl)  hintEl.textContent  = "Anno dell'ultimo bilancio approvato";
+      if (anniHint) anniHint.textContent = 'Da 1 a 8 anni oltre l\'anno base';
+    }
+
+    // Rimuovi errori precedenti
+    const prev = document.getElementById('modal-mc-error');
+    if (prev) prev.remove();
+
+    openModal('modal-modifica-cliente');
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -3115,6 +3163,7 @@ const UI = (() => {
     toggleSelect,
     aggiornaStatusBar,
     mostraNotifica,
+    apriModificaCliente,
     _apriDaRecente,
     // Fase 2
     switchDatiTab,
