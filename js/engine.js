@@ -198,6 +198,7 @@ const Engine = (() => {
       var investimentiAnno = [];   // nuovi investimenti in questo anno
       var varPersonaleAnno = [];   // variazioni personale
       var opSociAnno = [];         // operazioni soci
+      var utilizzoRimanenzeAnno = []; // utilizzo rimanenze attive quest'anno
       var multRicaviPunt = 1;      // moltiplicatore puntuale ricavi (solo quest'anno)
       var multCostiMPPunt = 1;     // moltiplicatore puntuale costi MP
       var multCostiVarPunt = {};   // { driver_id: molt } puntuale
@@ -205,6 +206,9 @@ const Engine = (() => {
       for (var e = 0; e < eventi.length; e++) {
         var evt = eventi[e];
         if (!evt || !evt.tipo) continue;
+
+        // Calcola anno_fine effettivo (default: nessun limite per compatibilità)
+        var evtAnnoFine = evt.anno_fine || Infinity;
 
         switch (evt.tipo) {
           case 'nuovo_finanziamento':
@@ -215,13 +219,13 @@ const Engine = (() => {
             break;
 
           case 'nuovo_investimento':
-            if (evt.anno === anno) {
+            if (evt.anno === anno && anno <= evtAnnoFine) {
               investimentiAnno.push(evt);
             }
             break;
 
           case 'variazione_ricavi':
-            if (evt.anno === anno) {
+            if (evt.anno === anno && anno <= evtAnnoFine) {
               if (evt.modalita === 'strutturale') {
                 multRicaviStrutt *= (1 + (evt.variazione_pct || 0));
               } else {
@@ -231,7 +235,7 @@ const Engine = (() => {
             break;
 
           case 'variazione_costi_mp':
-            if (evt.anno === anno) {
+            if (evt.anno === anno && anno <= evtAnnoFine) {
               if (evt.modalita === 'strutturale') {
                 multCostiMPStrutt *= (1 + (evt.variazione_pct || 0));
               } else {
@@ -241,7 +245,7 @@ const Engine = (() => {
             break;
 
           case 'variazione_costi_var':
-            if (evt.anno === anno && evt.driver_id) {
+            if (evt.anno === anno && anno <= evtAnnoFine && evt.driver_id) {
               if (evt.modalita === 'strutturale') {
                 if (!multCostiVarStrutt[evt.driver_id]) multCostiVarStrutt[evt.driver_id] = 1;
                 multCostiVarStrutt[evt.driver_id] *= (1 + (evt.variazione_pct || 0));
@@ -253,7 +257,7 @@ const Engine = (() => {
             break;
 
           case 'andamento_costo_gestione':
-            if (evt.anno <= anno && evt.driver_id) {
+            if (evt.anno <= anno && anno <= evtAnnoFine && evt.driver_id) {
               // L'ultimo evento per driver_id che sia <= anno è quello attivo
               costiGestOverride[evt.driver_id] = {
                 azione: evt.azione,
@@ -265,14 +269,20 @@ const Engine = (() => {
             break;
 
           case 'variazione_personale':
-            if (evt.anno === anno) {
+            if (evt.anno === anno && anno <= evtAnnoFine) {
               varPersonaleAnno.push(evt);
             }
             break;
 
           case 'operazione_soci':
-            if (evt.anno === anno) {
+            if (evt.anno === anno && anno <= evtAnnoFine) {
               opSociAnno.push(evt);
+            }
+            break;
+
+          case 'utilizzo_rimanenze':
+            if (evt.anno <= anno && anno <= evtAnnoFine && evt.pct_utilizzo) {
+              utilizzoRimanenzeAnno.push(evt);
             }
             break;
         }
@@ -408,6 +418,18 @@ const Engine = (() => {
 
       // SP: nuovi finanziamenti aumentano debiti
       sp.debiti_finanziari += nuoviFinDebito;
+
+      // SP: utilizzo rimanenze — riduce rimanenze e costi MP
+      if (utilizzoRimanenzeAnno.length > 0) {
+        var pctTotale = 0;
+        for (var ur = 0; ur < utilizzoRimanenzeAnno.length; ur++) {
+          pctTotale += (utilizzoRimanenzeAnno[ur].pct_utilizzo || 0);
+        }
+        pctTotale = Math.min(pctTotale, 1); // max 100%
+        var valoreUtilizzato = Math.round(sp.rimanenze * pctTotale);
+        sp.rimanenze -= valoreUtilizzato;
+        sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
+      }
 
       // SP: operazioni soci
       var versCapitaleAnno = 0, finSociNettoAnno = 0;

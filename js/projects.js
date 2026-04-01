@@ -162,9 +162,9 @@ const Projects = (() => {
    * @returns {Object}
    */
   function creaEvento(tipo, progetto) {
-    var primoAnno = (progetto && progetto.meta && progetto.meta.anni_previsione && progetto.meta.anni_previsione[0])
-      ? progetto.meta.anni_previsione[0]
-      : new Date().getFullYear();
+    var anniPrev = (progetto && progetto.meta && progetto.meta.anni_previsione) || [];
+    var primoAnno = anniPrev[0] || new Date().getFullYear();
+    var ultimoAnno = anniPrev[anniPrev.length - 1] || primoAnno;
     var base = { tipo: tipo, id: 'evt_' + Date.now() + '_' + (_nextEvtId++), descrizione: '' };
 
     switch (tipo) {
@@ -175,33 +175,37 @@ const Projects = (() => {
         });
       case 'nuovo_investimento':
         return Object.assign(base, {
-          categoria: 'sp.BII.2', anno: primoAnno, mese: 1,
+          categoria: 'sp.BII.2', anno: primoAnno, anno_fine: ultimoAnno, mese: 1,
           importo: 0, iva_pct: 0.22, aliquota_ammortamento: 0
         });
       case 'variazione_ricavi':
         return Object.assign(base, {
-          anno: primoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
+          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
         });
       case 'variazione_costi_mp':
         return Object.assign(base, {
-          anno: primoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
+          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
         });
       case 'variazione_costi_var':
         return Object.assign(base, {
-          driver_id: '', anno: primoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
+          driver_id: '', anno: primoAnno, anno_fine: ultimoAnno, mese: 1, variazione_pct: 0, modalita: 'strutturale'
         });
       case 'andamento_costo_gestione':
         return Object.assign(base, {
-          driver_id: '', anno: primoAnno, mese: 1,
+          driver_id: '', anno: primoAnno, anno_fine: ultimoAnno, mese: 1,
           azione: 'variazione', importo_nuovo: 0, variazione_pct: 0
         });
       case 'variazione_personale':
         return Object.assign(base, {
-          anno: primoAnno, mese: 1, delta: 0, ral_nuovi: 0
+          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, delta: 0, ral_nuovi: 0
         });
       case 'operazione_soci':
         return Object.assign(base, {
-          anno: primoAnno, mese: 1, importo: 0, sottotipo: 'versamento_capitale'
+          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, importo: 0, sottotipo: 'versamento_capitale'
+        });
+      case 'utilizzo_rimanenze':
+        return Object.assign(base, {
+          anno: primoAnno, anno_fine: ultimoAnno, pct_utilizzo: 0
         });
       default:
         return base;
