@@ -852,11 +852,71 @@ const UI = (() => {
   /* ── Toggle modalita rapida/analitica ────────────────────── */
 
   function toggleModalita(modo) {
-    const progetto = Projects.getProgetto();
+    var progetto = Projects.getProgetto();
     if (!progetto) return;
-    progetto.meta.modalita = modo;
+    if (progetto.meta.modalita === modo) return; // gia in questa modalita
+
+    var daRapida = progetto.meta.modalita === 'rapida' && modo === 'analitica';
+    var daAnalitica = progetto.meta.modalita === 'analitica' && modo === 'rapida';
+
+    var msg = '';
+    if (daRapida) {
+      msg = '<strong>Passaggio da Rapida ad Analitica</strong><br><br>' +
+        'I valori inseriti a livello aggregato (sottomastri SP e macro-voci CE) ' +
+        'resteranno salvati ma potrebbero non corrispondere alla somma dei conti ' +
+        'foglia dettagliati, che partono da zero.<br><br>' +
+        '<strong>Sezioni interessate:</strong><br>' +
+        '• SP Attivo: immobilizzazioni (B.I, B.II, B.III), circolante (C.I-C.IV)<br>' +
+        '• SP Passivo: patrimonio netto (A), debiti (D.1-D.14)<br>' +
+        '• CE: valore produzione (A), costi (B.6-B.14), area finanziaria (C, D)';
+    } else if (daAnalitica) {
+      msg = '<strong>Passaggio da Analitica a Rapida</strong><br><br>' +
+        'I conti foglia dettagliati e i conti personalizzati resteranno salvati ' +
+        'ma non saranno visibili. I totali dei sottomastri verranno mostrati ' +
+        'come valori aggregati editabili.<br><br>' +
+        '<strong>Sezioni interessate:</strong><br>' +
+        '• SP: i dettagli interni dei mastri saranno nascosti<br>' +
+        '• CE: le sotto-voci di Personale (B.9), Ammortamenti (B.10) e le voci ' +
+        'personalizzate aggiunte saranno nascoste<br>' +
+        '• Immobilizzazioni: il dettaglio costo/fondo/aliquota non sarà visibile';
+    }
+
+    // Mostra modale conferma
+    _pendingModalita = modo;
+    var overlay = document.getElementById('modal-cambio-modalita');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'modal-cambio-modalita';
+      overlay.className = 'modal-overlay';
+      var modal = document.createElement('div');
+      modal.className = 'modal';
+      modal.style.width = '480px';
+      modal.id = 'modal-cambio-modalita-inner';
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+    } else {
+      overlay.classList.remove('hidden');
+    }
+
+    document.getElementById('modal-cambio-modalita-inner').innerHTML =
+      '<div class="modal-header"><span class="modal-title">Cambio modalità</span>' +
+      '<div class="modal-close" onclick="UI.closeModal(\'modal-cambio-modalita\')">✕</div></div>' +
+      '<div class="modal-body"><div style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">' + msg + '</div></div>' +
+      '<div class="modal-footer">' +
+      '<div class="btn btn-secondary" onclick="UI.closeModal(\'modal-cambio-modalita\')">Annulla</div>' +
+      '<div class="btn btn-primary" onclick="UI._confermaToggleModalita()">Conferma</div></div>';
+  }
+
+  var _pendingModalita = null;
+
+  function _confermaToggleModalita() {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !_pendingModalita) return;
+    progetto.meta.modalita = _pendingModalita;
+    _pendingModalita = null;
     Projects.segnaModificato();
     _collapsed.clear();
+    closeModal('modal-cambio-modalita');
     _renderDatiPartenza();
   }
 
@@ -2068,6 +2128,7 @@ const UI = (() => {
     html += '<div class="tab-item' + (_prospettiTab === 'prosp-ce' ? ' active' : '') + '" data-tab="prosp-ce" onclick="UI.switchProspTab(\'prosp-ce\')">Conto Economico</div>';
     html += '<div class="tab-item' + (_prospettiTab === 'prosp-sp' ? ' active' : '') + '" data-tab="prosp-sp" onclick="UI.switchProspTab(\'prosp-sp\')">Stato Patrimoniale</div>';
     html += '<div class="tab-item' + (_prospettiTab === 'prosp-cf' ? ' active' : '') + '" data-tab="prosp-cf" onclick="UI.switchProspTab(\'prosp-cf\')">Rendiconto Finanziario</div>';
+    html += '<div class="tab-item' + (_prospettiTab === 'prosp-cruscotto' ? ' active' : '') + '" data-tab="prosp-cruscotto" onclick="UI.switchProspTab(\'prosp-cruscotto\')">Cruscotto</div>';
     html += '</div>';
 
     // CE previsionale
@@ -2083,6 +2144,11 @@ const UI = (() => {
     // Cash flow
     html += '<div class="tab-pane' + (_prospettiTab === 'prosp-cf' ? ' active' : '') + '" id="prosp-cf">';
     html += _renderProspettoCF(anniPrev, proiezioni, progetto);
+    html += '</div>';
+
+    // Cruscotto riepilogativo
+    html += '<div class="tab-pane' + (_prospettiTab === 'prosp-cruscotto' ? ' active' : '') + '" id="prosp-cruscotto">';
+    html += _renderCruscotto(anniPrev, proiezioni, progetto);
     html += '</div>';
 
     content.innerHTML = html;
@@ -2239,6 +2305,122 @@ const UI = (() => {
 
     html += '</tbody></table></div>';
     return html;
+  }
+
+  /* ── Cruscotto riepilogativo ───────────────────────────────── */
+
+  function _renderCruscotto(anniPrev, proiezioni, progetto) {
+    var nAnni = anniPrev.length;
+    var colW = Math.max(110, Math.floor(600 / nAnni));
+    var html = '<div style="overflow-x:auto">';
+
+    // Helper per creare una sezione del cruscotto
+    function sezione(titolo, righe) {
+      var s = '<table class="schema-table" style="margin-bottom:20px"><colgroup><col style="width:auto">';
+      for (var c = 0; c < nAnni; c++) s += '<col style="width:' + colW + 'px">';
+      s += '</colgroup>';
+      s += '<thead><tr class="row-mastro" style="background:var(--color-sidebar-bg);color:white"><td style="font-weight:700;text-transform:uppercase;letter-spacing:0.05em">' + titolo + '</td>';
+      for (var h = 0; h < nAnni; h++) s += '<td class="cell-amount" style="color:white;font-weight:700">' + anniPrev[h] + '</td>';
+      s += '</tr></thead><tbody>';
+      righe.forEach(function(r) {
+        var cls = r.bold ? 'row-totale' : 'row-conto';
+        var style = r.indent ? 'padding-left:20px' : '';
+        s += '<tr class="' + cls + '"><td style="' + style + '">' + r.label + '</td>';
+        for (var a = 0; a < nAnni; a++) {
+          var val = typeof r.values === 'function' ? r.values(anniPrev[a]) : 0;
+          var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
+          var fmt = r.pct ? _formatPctValue(val) : _formatImporto(val);
+          s += '<td class="cell-amount"><span class="amount-computed' + valCls + '">' + fmt + '</span></td>';
+        }
+        s += '</tr>';
+      });
+      s += '</tbody></table>';
+      return s;
+    }
+
+    function g(anno, sez, key) {
+      var d = proiezioni[String(anno)];
+      return d && d[sez] ? (d[sez][key] || 0) : 0;
+    }
+
+    // CONTO ECONOMICO SINTETICO
+    html += sezione('Conto Economico', [
+      { label: 'Fatturato e altri ricavi', values: function(a) { return g(a,'ce','valore_produzione'); } },
+      { label: 'Costi operativi', indent: true, values: function(a) { return g(a,'ce','costi_totale'); } },
+      { label: 'Costo del personale', indent: true, values: function(a) { return g(a,'ce','personale_totale'); } },
+      { label: 'EBITDA', bold: true, values: function(a) { return g(a,'ce','ebitda'); } },
+      { label: 'Ammortamenti', indent: true, values: function(a) { return g(a,'ce','ammortamenti'); } },
+      { label: 'Reddito operativo (EBIT)', bold: true, values: function(a) { return g(a,'ce','ebit'); } },
+      { label: 'Oneri finanziari', indent: true, values: function(a) { return g(a,'ce','oneri_finanziari'); } },
+      { label: 'Imposte (IRES + IRAP)', indent: true, values: function(a) { return g(a,'ce','imposte'); } },
+      { label: 'Reddito netto', bold: true, values: function(a) { return g(a,'ce','utile_netto'); } }
+    ]);
+
+    // FLUSSI FINANZIARI
+    html += sezione('Flussi Finanziari', [
+      { label: 'Flusso operativo', values: function(a) { return g(a,'cash_flow','flusso_operativo'); } },
+      { label: 'Flusso investimenti', values: function(a) { return g(a,'cash_flow','flusso_investimenti'); } },
+      { label: 'Flusso finanziario', values: function(a) { return g(a,'cash_flow','flusso_finanziario'); } },
+      { label: 'Flusso IVA', values: function(a) { return g(a,'cash_flow','flusso_iva'); } },
+      { label: 'Flusso netto', bold: true, values: function(a) { return g(a,'cash_flow','flusso_netto'); } },
+      { label: 'Saldo finale banca', bold: true, values: function(a) { return g(a,'sp','cassa'); } }
+    ]);
+
+    // INDICI / DSCR
+    html += sezione('Indici', [
+      { label: 'EBITDA %', pct: true, values: function(a) {
+        var ric = g(a,'ce','valore_produzione');
+        return ric ? g(a,'ce','ebitda') / ric : 0;
+      }},
+      { label: 'ROE (Utile / PN)', pct: true, values: function(a) {
+        var pn = g(a,'sp','patrimonio_netto');
+        return pn ? g(a,'ce','utile_netto') / pn : 0;
+      }},
+      { label: 'ROI (EBIT / Totale Attivo)', pct: true, values: function(a) {
+        var ta = g(a,'sp','totale_attivo');
+        return ta ? g(a,'ce','ebit') / ta : 0;
+      }},
+      { label: 'PFN / EBITDA', values: function(a) {
+        var ebitda = g(a,'ce','ebitda');
+        var pfn = g(a,'sp','debiti_finanziari') - g(a,'sp','cassa');
+        if (!ebitda || ebitda <= 0) return 0;
+        return Math.round(pfn / ebitda * 10) / 10;
+      }},
+      { label: 'DSCR (Flusso oper. / Servizio debito)', values: function(a) {
+        var flussoOp = g(a,'cash_flow','flusso_operativo');
+        var servDebito = Math.abs(g(a,'cash_flow','rimborso_finanziamenti')) + g(a,'ce','oneri_finanziari');
+        if (!servDebito) return 0;
+        return Math.round(flussoOp / servDebito * 100) / 100;
+      }}
+    ]);
+
+    // PATRIMONIALE SINTETICO
+    html += sezione('Patrimoniale', [
+      { label: 'Cassa e banca', values: function(a) { return g(a,'sp','cassa'); } },
+      { label: 'Crediti clienti', values: function(a) { return g(a,'sp','crediti_clienti'); } },
+      { label: 'Rimanenze', values: function(a) { return g(a,'sp','rimanenze'); } },
+      { label: 'Immobilizzazioni materiali', values: function(a) { return g(a,'sp','immob_materiali_nette'); } },
+      { label: 'Immobilizzazioni immateriali', values: function(a) { return g(a,'sp','immob_immateriali_nette'); } },
+      { label: 'Immobilizzazioni finanziarie', values: function(a) { return g(a,'sp','immob_finanziarie'); } },
+      { label: 'TOTALE ATTIVO', bold: true, values: function(a) { return g(a,'sp','totale_attivo'); } },
+      { label: 'Debiti finanziari', values: function(a) { return g(a,'sp','debiti_finanziari'); } },
+      { label: 'Debiti fornitori', values: function(a) { return g(a,'sp','debiti_fornitori'); } },
+      { label: 'Debiti tributari', values: function(a) { return g(a,'sp','debiti_tributari'); } },
+      { label: 'TFR', values: function(a) { return g(a,'sp','tfr'); } },
+      { label: 'Altre passività', values: function(a) { return g(a,'sp','altri_debiti'); } },
+      { label: 'Capitale netto', bold: true, values: function(a) { return g(a,'sp','patrimonio_netto'); } },
+      { label: 'TOTALE PASSIVO E PN', bold: true, values: function(a) { return g(a,'sp','totale_passivo'); } }
+    ]);
+
+    html += '</div>';
+    return html;
+  }
+
+  /** Formatta un valore come percentuale per il cruscotto (es. 0.15 -> "15,0%") */
+  function _formatPctValue(val) {
+    if (val === 0 || val === undefined || val === null) return '0%';
+    var pct = val * 100;
+    return pct.toFixed(1).replace('.', ',') + '%';
   }
 
   /* ── Helper riga prospetto ───────────────────────────────── */
@@ -2423,6 +2605,7 @@ const UI = (() => {
     // Fase 2
     switchDatiTab,
     toggleModalita,
+    _confermaToggleModalita,
     toggleCollapse,
     expandAll,
     collapseAll,
