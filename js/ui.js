@@ -1216,13 +1216,24 @@ const UI = (() => {
 
   function _driverTabDot(progetto, id) {
     var d = progetto.driver;
+    var spCompilato = _isSpCompilato(progetto);
+
     switch (id) {
-      case 'drv-ricavi':
-        return (d.ricavi && d.ricavi.some(function(r) { return r.base_annuale > 0; })) ? '<span class="tab-dot complete"></span>' : '';
-      case 'drv-costi':
-        return (d.costi && d.costi.some(function(c) { return c.importo_fisso > 0 || c.pct_ricavi > 0; })) ? '<span class="tab-dot complete"></span>' : '';
-      case 'drv-personale':
-        return (d.personale && d.personale.headcount > 0) ? '<span class="tab-dot complete"></span>' : '';
+      case 'drv-ricavi': {
+        var ok = d.ricavi && d.ricavi.some(function(r) { return r.base_annuale > 0; });
+        if (ok) return '<span class="tab-dot complete"></span>';
+        return spCompilato ? '<span class="tab-dot partial"></span>' : '';
+      }
+      case 'drv-costi': {
+        var ok = d.costi && d.costi.some(function(c) { return c.importo_fisso > 0 || c.pct_ricavi > 0; });
+        if (ok) return '<span class="tab-dot complete"></span>';
+        return spCompilato ? '<span class="tab-dot partial"></span>' : '';
+      }
+      case 'drv-personale': {
+        var ok = d.personale && d.personale.headcount > 0;
+        if (ok) return '<span class="tab-dot complete"></span>';
+        return spCompilato ? '<span class="tab-dot partial"></span>' : '';
+      }
       case 'drv-patrimoniali':
         return (d.finanziamenti_essere && d.finanziamenti_essere.length > 0) ? '<span class="tab-dot complete"></span>' : '';
       default:
@@ -3663,9 +3674,11 @@ const UI = (() => {
         var hasCosti = d.costi && d.costi.some(function(c) { return c.importo_fisso > 0 || c.pct_ricavi > 0; });
         var hasPers = d.personale && d.personale.headcount > 0;
         var n = (hasRicavi ? 1 : 0) + (hasCosti ? 1 : 0) + (hasPers ? 1 : 0);
-        if (n === 0) return { status: 'empty', count: 0 };
-        if (n < 3) return { status: 'partial', count: n };
-        return { status: 'complete', count: 3 };
+        if (n === 3) return { status: 'complete', count: 3 };
+        if (n > 0) return { status: 'partial', count: n };
+        // Nessun driver: mostra warning se SP è già compilato
+        if (_isSpCompilato(progetto)) return { status: 'partial', count: 0 };
+        return { status: 'empty', count: 0 };
       }
 
       case 'eventi': {
@@ -3676,6 +3689,17 @@ const UI = (() => {
       default:
         return { status: 'empty', count: 0 };
     }
+  }
+
+  /** Verifica se i dati di partenza SP sono stati compilati */
+  function _isSpCompilato(progetto) {
+    var anno = String(progetto.meta.anno_base);
+    var st = progetto.storico[anno];
+    if (!st) return false;
+    if (progetto.meta.scenario === 'costituenda') {
+      return st.sp_avvio && _haValoriNonZero(st.sp_avvio);
+    }
+    return st.sp && (_haValoriNonZero(st.sp.attivo) || _haValoriNonZero(st.sp.passivo));
   }
 
   /** Controlla se un oggetto flat contiene almeno un valore numerico != 0 */
