@@ -66,8 +66,10 @@ const Projects = (() => {
       immobilizzazioni: {},  // { 'sp.BI.1': { costo_storico, fondo_ammortamento, aliquota } }
       eventi:    [],
       driver: {
-        ricavi:     [],    // [{ id, voce_ce, label, base_annuale, crescita_annua, profilo_stagionale[12] }]
-        costi:      [],    // [{ id, voce_ce, label, tipo_driver, pct_ricavi, var_pct_annua, importo_fisso, soggetto_inflazione }]
+        ricavi:     [],    // [{ id, voce_ce, label, base_annuale, crescita_annua:{anno:pct} }]
+        stagionalita_attiva: false,
+        profilo_stagionale:  [8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34],
+        costi:      [],    // [{ id, voce_ce, label, tipo_driver, pct_ricavi, var_pct_annua, importo_fisso, soggetto_inflazione, iva_pct }]
         personale: {
           headcount:          0,      // N. dipendenti anno base
           ral_media:          0,      // Retribuzione annua lorda media
@@ -242,8 +244,7 @@ const Projects = (() => {
       voce_ce:             voceCe,
       label:               label,
       base_annuale:        baseAnnuale || 0,
-      crescita_annua:      0,
-      profilo_stagionale:  [8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34]
+      crescita_annua:      {}    // { "2026": 0.05, "2027": 0.05, ... } per anno
     };
   }
 

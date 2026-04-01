@@ -1094,10 +1094,26 @@ const UI = (() => {
 
   function _renderDriverRicavi(progetto) {
     var ricavi = progetto.driver.ricavi;
+    var anniPrev = progetto.meta.anni_previsione || [];
+    var nAnni = anniPrev.length;
     var html = '';
 
+    // Stagionalità globale
+    var stagAttiva = progetto.driver.stagionalita_attiva || false;
+    html += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Stagionalità:</span>';
+    html += '<div class="toggle-group" style="width:120px">';
+    html += '<div class="toggle-item' + (stagAttiva ? ' active' : '') + '" onclick="UI.toggleStagionalita(true)">Sì</div>';
+    html += '<div class="toggle-item' + (!stagAttiva ? ' active' : '') + '" onclick="UI.toggleStagionalita(false)">No</div>';
+    html += '</div>';
+    if (stagAttiva) {
+      html += '<div class="btn btn-ghost btn-sm" onclick="UI.editProfiloStagionale()">Configura profilo mensile</div>';
+    }
+    html += '</div>';
+
+    // Toolbar
     html += '<div class="section-toolbar"><div class="section-toolbar-left">';
-    html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Voci di ricavo previsionali</span>';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Voci di ricavo</span>';
     html += '</div><div class="section-toolbar-right">';
     html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiRicavo()">+ Aggiungi voce</div>';
     if (progetto.meta.scenario === 'sp_ce') {
@@ -1106,40 +1122,53 @@ const UI = (() => {
     html += '</div></div>';
 
     if (ricavi.length === 0) {
-      html += '<div class="projects-empty" style="padding:32px"><p>Nessuna voce di ricavo configurata.<br>';
-      if (progetto.meta.scenario === 'sp_ce') {
-        html += 'Clicca "Importa da CE" per popolare dai dati storici, oppure "Aggiungi voce" per crearne una nuova.';
-      } else {
-        html += 'Clicca "Aggiungi voce" per creare la prima voce di ricavo.';
-      }
-      html += '</p></div>';
+      html += '<div class="projects-empty" style="padding:32px"><p>Nessuna voce di ricavo configurata.</p></div>';
       return html;
     }
 
-    // Tabella ricavi
-    html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:140px"><col style="width:100px"><col style="width:120px"><col style="width:60px"></colgroup>';
-    html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Base annuale</td><td class="cell-amount">Crescita %/anno</td><td class="cell-amount">Profilo</td><td></td></tr></thead><tbody>';
+    // Griglia ricavi: Voce | Base | Anno1 | Anno2 | ... | ✕
+    var colW = Math.max(70, Math.floor(400 / nAnni));
+    html += '<div style="overflow-x:auto"><table class="schema-table"><colgroup><col style="width:auto"><col style="width:130px">';
+    for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
+    html += '<col style="width:40px"></colgroup>';
 
+    // Header: anni con pulsante "↓ applica a tutte"
+    html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Base annuale</td>';
+    for (var h = 0; h < nAnni; h++) {
+      html += '<td class="cell-amount" style="font-size:12px">' + anniPrev[h] + '<br>';
+      html += '<div class="add-conto-btn" style="font-size:10px;display:inline-flex;margin-top:2px" onclick="UI.applicaCrescitaColonna(' + h + ')">↓ a tutte</div>';
+      html += '</td>';
+    }
+    html += '<td></td></tr></thead><tbody>';
+
+    // Righe ricavi
     for (var i = 0; i < ricavi.length; i++) {
       var r = ricavi[i];
-      var profiloLabel = _isProfiloUniforme(r.profilo_stagionale) ? 'Uniforme' : 'Personalizzato';
-      html += '<tr class="row-conto" data-driver-idx="' + i + '">';
-      html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:200px;font-family:var(--font-ui)" data-field="label" data-idx="' + i + '" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'label\')">' + _escapeHtml(r.label) + '</div></td>';
-      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-field="base_annuale" data-idx="' + i + '" data-placeholder="0" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'base_annuale\')" onkeydown="UI._handleAmountKey(event)">' + (r.base_annuale ? _formatImporto(r.base_annuale) : '') + '</div></td>';
-      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-field="crescita_annua" data-idx="' + i + '" data-placeholder="0" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'crescita_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(r.crescita_annua) + '</div></td>';
-      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.editProfiloStagionale(' + i + ')">' + profiloLabel + '</div></td>';
+      var crescita = (typeof r.crescita_annua === 'object' && r.crescita_annua) ? r.crescita_annua : {};
+
+      html += '<tr class="row-conto">';
+      // Label
+      html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'label\')">' + _escapeHtml(r.label) + '</div></td>';
+      // Base annuale
+      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'base_annuale\')" onkeydown="UI._handleAmountKey(event)">' + (r.base_annuale ? _formatImporto(r.base_annuale) : '') + '</div></td>';
+      // % per ogni anno + pulsante "→ a tutti gli anni"
+      for (var a = 0; a < nAnni; a++) {
+        var annoStr = String(anniPrev[a]);
+        var pctAnno = crescita[annoStr] || 0;
+        html += '<td class="cell-amount"><div style="display:flex;align-items:center;gap:2px">';
+        html += '<div class="amount-field" contenteditable="true" style="width:50px" data-placeholder="0%" onblur="UI._handleRicavoCrescitaAnno(this,' + i + ',\'' + annoStr + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(pctAnno) + '</div>';
+        if (a === 0) {
+          html += '<div class="add-conto-btn" style="font-size:10px;padding:1px 3px" onclick="UI.applicaCrescitaRiga(' + i + ',\'' + annoStr + '\')" title="Applica a tutti gli anni">→</div>';
+        }
+        html += '</div></td>';
+      }
+      // Elimina
       html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'ricavi\',' + i + ')">✕</div></td>';
       html += '</tr>';
     }
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
 
     return html;
-  }
-
-  function _isProfiloUniforme(profilo) {
-    if (!profilo || profilo.length !== 12) return true;
-    var ref = 100 / 12;
-    return profilo.every(function(v) { return Math.abs(v - ref) < 0.1; });
   }
 
   function aggiungiRicavo() {
@@ -1147,6 +1176,64 @@ const UI = (() => {
     if (!progetto) return;
     var drv = Projects.creaDriverRicavo(null, 'Nuova voce ricavo', 0);
     progetto.driver.ricavi.push(drv);
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function toggleStagionalita(val) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    progetto.driver.stagionalita_attiva = val;
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function _handleRicavoCrescitaAnno(el, idx, annoStr) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var r = progetto.driver.ricavi[idx];
+    if (!r) return;
+    if (typeof r.crescita_annua !== 'object' || !r.crescita_annua) r.crescita_annua = {};
+    var val = _parsePct(el.textContent);
+    r.crescita_annua[annoStr] = val;
+    el.textContent = _formatPct(val);
+    Projects.segnaModificato();
+  }
+
+  /** Applica la % del primo anno a tutti gli anni per una voce ricavo. */
+  function applicaCrescitaRiga(idx, primoAnnoStr) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var r = progetto.driver.ricavi[idx];
+    if (!r) return;
+    if (typeof r.crescita_annua !== 'object' || !r.crescita_annua) r.crescita_annua = {};
+    var val = r.crescita_annua[primoAnnoStr] || 0;
+    (progetto.meta.anni_previsione || []).forEach(function(a) {
+      r.crescita_annua[String(a)] = val;
+    });
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  /** Applica la % della prima voce a tutte le voci per un anno. */
+  function applicaCrescitaColonna(annoIdx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var anniPrev = progetto.meta.anni_previsione || [];
+    var annoStr = String(anniPrev[annoIdx]);
+    var ricavi = progetto.driver.ricavi;
+    if (ricavi.length === 0) return;
+
+    // Prendi il valore della prima voce per quell'anno
+    var prima = ricavi[0];
+    var crescitaPrima = (typeof prima.crescita_annua === 'object' && prima.crescita_annua) ? prima.crescita_annua : {};
+    var val = crescitaPrima[annoStr] || 0;
+
+    // Applica a tutte le voci
+    ricavi.forEach(function(r) {
+      if (typeof r.crescita_annua !== 'object' || !r.crescita_annua) r.crescita_annua = {};
+      r.crescita_annua[annoStr] = val;
+    });
     Projects.segnaModificato();
     _renderDriver();
   }
@@ -1809,16 +1896,14 @@ const UI = (() => {
 
   /* ── Profilo stagionale (modale inline) ──────────────────── */
 
-  function editProfiloStagionale(idx) {
+  function editProfiloStagionale() {
     var progetto = Projects.getProgetto();
     if (!progetto) return;
-    var r = progetto.driver.ricavi[idx];
-    if (!r) return;
 
     var mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-    var profilo = r.profilo_stagionale || [];
+    var profilo = progetto.driver.profilo_stagionale || [];
 
-    var html = '<div class="modal-header"><span class="modal-title">Profilo stagionale — ' + _escapeHtml(r.label) + '</span>';
+    var html = '<div class="modal-header"><span class="modal-title">Profilo stagionale (globale)</span>';
     html += '<div class="modal-close" onclick="UI.closeModal(\'modal-profilo\')">✕</div></div>';
 
     html += '<div class="modal-body">';
@@ -1837,7 +1922,7 @@ const UI = (() => {
 
     html += '<div class="modal-footer">';
     html += '<div class="btn btn-secondary" onclick="UI.closeModal(\'modal-profilo\')">Annulla</div>';
-    html += '<div class="btn btn-primary" onclick="UI._salvaProfiloStagionale(' + idx + ')">Salva</div>';
+    html += '<div class="btn btn-primary" onclick="UI._salvaProfiloStagionale()">Salva</div>';
     html += '</div>';
 
     // Crea modale se non esiste
@@ -1867,11 +1952,9 @@ const UI = (() => {
     }
   }
 
-  function _salvaProfiloStagionale(idx) {
+  function _salvaProfiloStagionale() {
     var progetto = Projects.getProgetto();
     if (!progetto) return;
-    var r = progetto.driver.ricavi[idx];
-    if (!r) return;
 
     var profilo = [];
     var somma = 0;
@@ -1887,7 +1970,7 @@ const UI = (() => {
       return;
     }
 
-    r.profilo_stagionale = profilo;
+    progetto.driver.profilo_stagionale = profilo;
     Projects.segnaModificato();
     closeModal('modal-profilo');
     _renderDriver();
@@ -1907,7 +1990,7 @@ const UI = (() => {
       var val = _parseImporto(el.textContent);
       arr[idx][campo] = val;
       el.textContent = val !== 0 ? _formatImporto(val) : '';
-    } else if (campo === 'crescita_annua' || campo === 'pct_ricavi' || campo === 'var_pct_annua' || campo === 'iva_pct') {
+    } else if (campo === 'pct_ricavi' || campo === 'var_pct_annua' || campo === 'iva_pct') {
       var pct = _parsePct(el.textContent);
       arr[idx][campo] = pct;
       el.textContent = _formatPct(pct);
@@ -2368,6 +2451,11 @@ const UI = (() => {
     _handleCustomLabelBlur,
     // Immobilizzazioni
     _handleImmobField,
+    // Ricavi
+    toggleStagionalita,
+    _handleRicavoCrescitaAnno,
+    applicaCrescitaRiga,
+    applicaCrescitaColonna,
     // Prospetti
     switchProspTab,
     // Costi
