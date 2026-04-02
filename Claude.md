@@ -2,6 +2,7 @@
 
 ### Prassi Git e GitHub
 
+- Puoi scrivere piani nei file dedicati senza chiedere il permesso a ogni sessione
 - Lavora sempre su un **branch dedicato** (mai direttamente su main)
 - Al termine delle modifiche: **commit → push → Pull Request verso main**
 - **IMPORTANTE — una PR per gruppo di modifiche**:
