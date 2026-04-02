@@ -647,7 +647,7 @@ const Engine = (() => {
           base = base * 12;
         }
       }
-      // Crescita cumulativa anno su anno con % distinta per anno
+      // Crescita cumulativa anno su anno con % distinta per anno + inflazione composta
       var importo = base;
       for (var a = primoAnnoPrev; a <= anno; a++) {
         var crescita = 0;
@@ -657,6 +657,8 @@ const Engine = (() => {
           crescita = drv.crescita_annua; // retrocompatibilita
         }
         importo = importo * (1 + crescita);
+        // Inflazione composta sui ricavi (come per i costi)
+        if (inflazione) importo = importo * (1 + inflazione);
       }
       importo = Math.round(importo);
       totale += importo;
