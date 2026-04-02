@@ -486,7 +486,8 @@ const Engine = (() => {
       // Aggiorna cassa nello SP
       sp.cassa = spPrev.cassa + cf.flusso_netto;
       sp.totale_attivo = sp.immobilizzazioni_nette + sp.attivo_circolante + sp.cassa;
-      sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.altri_debiti + sp.tfr;
+      sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.debiti_fornitori +
+        sp.debiti_tributari + sp.altri_debiti + sp.tfr;
 
       p.proiezioni.annuali[annoStr] = {
         ce: ce,
