@@ -1759,6 +1759,16 @@ const UI = (() => {
     html += '<div class="form-group" style="min-width:120px"><span class="form-label">Coeff. oneri %</span>';
     html += '<div class="form-field" contenteditable="true" style="width:80px;text-align:right;font-family:var(--font-mono)" data-placeholder="32" onblur="UI._handlePersField(this,\'coeff_oneri\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(pers.coeff_oneri) + '</div></div>';
 
+    var ha13 = pers.tredicesima !== false;
+    var ha14 = pers.quattordicesima !== false;
+    html += '<div class="form-group" style="min-width:80px"><span class="form-label">13ª mens.</span>';
+    html += '<select style="width:60px;font-family:var(--font-mono);padding:4px" onchange="UI._handlePersToggle(\'tredicesima\',this.value)">';
+    html += '<option value="1"' + (ha13 ? ' selected' : '') + '>SI</option><option value="0"' + (!ha13 ? ' selected' : '') + '>NO</option></select></div>';
+
+    html += '<div class="form-group" style="min-width:80px"><span class="form-label">14ª mens.</span>';
+    html += '<select style="width:60px;font-family:var(--font-mono);padding:4px" onchange="UI._handlePersToggle(\'quattordicesima\',this.value)">';
+    html += '<option value="1"' + (ha14 ? ' selected' : '') + '>SI</option><option value="0"' + (!ha14 ? ' selected' : '') + '>NO</option></select></div>';
+
     html += '</div>';
 
     // Variazione RAL per anno
@@ -1802,7 +1812,8 @@ const UI = (() => {
     if (!progetto || !progetto.driver.personale) return;
     var pers = progetto.driver.personale;
     if (campo === 'headcount') {
-      pers.headcount = parseInt((el.textContent || '').replace(/\D/g, ''), 10) || 0;
+      pers.headcount = parseFloat((el.textContent || '').replace(',', '.')) || 0;
+      pers.headcount = Math.round(pers.headcount * 10) / 10;
       el.textContent = pers.headcount || '';
     } else if (campo === 'ral_media') {
       pers.ral_media = _parseImporto(el.textContent);
@@ -1811,6 +1822,15 @@ const UI = (() => {
       pers.coeff_oneri = _parsePct(el.textContent);
       el.textContent = _formatPct(pers.coeff_oneri);
     }
+    Projects.segnaModificato();
+    _renderDriver();
+    _scheduleAggiornaIndicatori();
+  }
+
+  function _handlePersToggle(campo, val) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.driver.personale) return;
+    progetto.driver.personale[campo] = (val === '1');
     Projects.segnaModificato();
     _renderDriver();
     _scheduleAggiornaIndicatori();
@@ -2462,13 +2482,23 @@ const UI = (() => {
 
     if (campo === 'descrizione' || campo === 'data_inizio') {
       evt[campo] = raw;
-    } else if (campo === 'tasso_annuo' || campo === 'variazione_pct' || campo === 'iva_pct' || campo === 'aliquota_ammortamento') {
+    } else if (campo === 'anni_ammortamento') {
+      var v = parseFloat(raw.replace(',', '.')) || 0;
+      evt.anni_ammortamento = Math.round(v * 10) / 10;
+      // retrocompat: aggiorna anche aliquota interna
+      evt.aliquota_ammortamento = v > 0 ? 1 / v : 0;
+      el.textContent = evt.anni_ammortamento || '';
+    } else if (campo === 'tasso_annuo' || campo === 'variazione_pct' || campo === 'iva_pct') {
       evt[campo] = _parsePct(raw);
       el.textContent = _formatPct(evt[campo]);
     } else if (campo === 'pct_utilizzo') {
       evt[campo] = _parsePct(raw);
       el.textContent = _formatPct(evt[campo]);
-    } else if (campo === 'anno' || campo === 'anno_fine' || campo === 'mese' || campo === 'durata_mesi' || campo === 'delta') {
+    } else if (campo === 'delta') {
+      var vd = parseFloat(raw.replace(',', '.')) || 0;
+      evt[campo] = Math.round(vd * 10) / 10;
+      el.textContent = evt[campo] || '';
+    } else if (campo === 'anno' || campo === 'anno_fine' || campo === 'mese' || campo === 'durata_mesi') {
       var val = parseInt(raw, 10) || 0;
       if (campo === 'mese') val = Math.max(1, Math.min(12, val));
       evt[campo] = val;
@@ -2819,7 +2849,7 @@ const UI = (() => {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessun nuovo investimento pianificato.</p></div>';
     } else {
       html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:160px"><col style="width:60px"><col style="width:60px"><col style="width:120px"><col style="width:70px"><col style="width:80px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Categoria</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Importo</td><td class="cell-amount">IVA %</td><td class="cell-amount">Aliq. amm. %</td><td></td></tr></thead><tbody>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Categoria</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Importo</td><td class="cell-amount">IVA %</td><td class="cell-amount">Anni amm.</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -2830,7 +2860,7 @@ const UI = (() => {
         html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
         html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaIvaPct(' + idx + ')">' + (_formatPct(e.iva_pct) || '0%') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'aliquota_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.aliquota_ammortamento) + '</div></td>';
+        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anni_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + (e.anni_ammortamento || e.aliquota_ammortamento ? (e.anni_ammortamento || (e.aliquota_ammortamento ? Math.round(1/e.aliquota_ammortamento*10)/10 : '')) : '') + '</div></td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -3003,7 +3033,7 @@ const UI = (() => {
     var ultimoAnno = _ultimoAnnoPiano(progetto);
     var html = '';
     html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione Personale</h3>';
-    html += '<div class="form-hint mb-8">Aumento o diminuzione del numero di dipendenti dal mese/anno indicato. Il campo RAL è opzionale: se lasciato a 0 si usa la RAL media del progetto.</div>';
+    html += '<div class="form-hint mb-8">Aumento o diminuzione del numero di dipendenti dal mese/anno indicato. Il delta ammette decimali (es. 0.5 per un part-time).</div>';
 
     html += '<div class="section-toolbar"><div class="section-toolbar-right">';
     html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'variazione_personale\')">+ Aggiungi variazione</div>';
@@ -3012,8 +3042,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessuna variazione di personale pianificata.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:120px"><col style="width:90px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Delta (+/-)</td><td class="cell-amount">RAL nuovi</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:100px"><col style="width:90px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Delta (+/-)</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -3022,7 +3052,6 @@ const UI = (() => {
         html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
         html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'delta\')" onkeydown="UI._handleAmountKey(event)">' + (e.delta || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'ral_nuovi\')" onkeydown="UI._handleAmountKey(event)">' + (e.ral_nuovi ? _formatImporto(e.ral_nuovi) : '') + '</div></td>';
         html += '<td class="cell-amount">' + _selectAnnoFine(idx, e.anno_fine, progetto) + '</td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
@@ -3971,8 +4000,8 @@ const UI = (() => {
     html += '<span style="color:var(--color-text-muted);min-width:60px">Fondo</span>';
     html += '<div class="amount-field" contenteditable="true" style="width:110px" data-placeholder="0" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'fondo_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + (fondo ? _formatImporto(fondo) : '') + '</div>';
 
-    html += '<span style="color:var(--color-text-muted);min-width:50px">Aliq. %</span>';
-    html += '<div class="amount-field" contenteditable="true" style="width:70px" data-placeholder="0%" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'aliquota\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(aliq) + '</div>';
+    html += '<span style="color:var(--color-text-muted);min-width:50px">Anni amm.</span>';
+    html += '<div class="amount-field" contenteditable="true" style="width:70px" data-placeholder="0" onblur="UI._handleImmobField(this,\'' + nodo.id + '\',\'anni_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + (immob.anni_ammortamento || (aliq ? Math.round(1/aliq*10)/10 : '')) + '</div>';
 
     html += '</div></td></tr>\n';
 
@@ -3989,9 +4018,11 @@ const UI = (() => {
 
     var immob = progetto.immobilizzazioni[nodoId];
 
-    if (campo === 'aliquota') {
-      immob.aliquota = _parsePct(el.textContent);
-      el.textContent = _formatPct(immob.aliquota);
+    if (campo === 'anni_ammortamento') {
+      var v = parseFloat((el.textContent || '').replace(',', '.')) || 0;
+      immob.anni_ammortamento = Math.round(v * 10) / 10;
+      immob.aliquota = v > 0 ? 1 / v : 0;
+      el.textContent = immob.anni_ammortamento || '';
     } else {
       immob[campo] = _parseImporto(el.textContent);
       el.textContent = immob[campo] ? _formatImporto(immob[campo]) : '';
@@ -4252,6 +4283,7 @@ const UI = (() => {
     ciclaTipoCosto,
     _toggleCatMenu,
     _handlePersField,
+    _handlePersToggle,
     _handlePersRalAnno,
     aggiungiVarOrganico,
     rimuoviVarOrganico,
