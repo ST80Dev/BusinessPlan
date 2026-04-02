@@ -428,6 +428,7 @@ const Projects = (() => {
     const clienteEl = document.getElementById('mc-cliente');
     const annoEl    = document.getElementById('mc-anno-base');
     const anniEl    = document.getElementById('mc-anni-prev');
+    const meseAvvioEl = document.getElementById('mc-mese-avvio');
 
     const cliente   = (clienteEl.textContent || '').trim();
     const annoBase  = parseInt((annoEl.textContent || '').trim(), 10);
@@ -475,6 +476,10 @@ const Projects = (() => {
     // Aggiorna parametri annuali nei driver
     _aggiornaParamAnnuali(_progettoCorrente, vecchiAnniPrev, nuoviAnniPrev);
 
+    if (meta.scenario === 'costituenda' && meseAvvioEl) {
+      meta.mese_avvio = parseInt(meseAvvioEl.value, 10) || 1;
+    }
+
     meta.modificato = new Date().toISOString().split('T')[0];
 
     _modificato = true;
@@ -482,7 +487,7 @@ const Projects = (() => {
 
     UI.closeModal('modal-modifica-cliente');
     UI.onProgettoAperto(_progettoCorrente);
-    UI.mostraNotifica('Dati cliente aggiornati.', 'success');
+    UI.mostraNotifica('Dati base aggiornati.', 'success');
   }
 
   /**

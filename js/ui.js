@@ -336,6 +336,16 @@ const UI = (() => {
       if (anniHint) anniHint.textContent = 'Da 1 a 8 anni oltre l\'anno base';
     }
 
+    // Mostra/nascondi e pre-seleziona mese avvio
+    const meseAvvioGroup = document.getElementById('mc-mese-avvio-group');
+    const meseAvvioSel = document.getElementById('mc-mese-avvio');
+    if (meta.scenario === 'costituenda') {
+      if (meseAvvioGroup) meseAvvioGroup.classList.remove('hidden');
+      if (meseAvvioSel) meseAvvioSel.value = String(meta.mese_avvio || 1);
+    } else {
+      if (meseAvvioGroup) meseAvvioGroup.classList.add('hidden');
+    }
+
     // Rimuovi errori precedenti
     const prev = document.getElementById('modal-mc-error');
     if (prev) prev.remove();
@@ -759,6 +769,13 @@ const UI = (() => {
   }
 
   function _buildNodeHtml(nodo, dati, sez, lato, modalita, depth, parentIds) {
+    // Separatore — riga visiva non editabile (es. ── ATTIVO ── / ── PASSIVO ──)
+    if (nodo.tipo === 'separatore') {
+      var hidden = _isHidden(parentIds) ? ' row-collapsed' : '';
+      var parStr = parentIds.join(' ');
+      return '<tr class="row-separatore' + hidden + '" data-node-id="' + nodo.id + '" data-parents="' + parStr + '"><td colspan="2">' + _escapeHtml(nodo.label) + '</td></tr>\n';
+    }
+
     // Totale — sempre visibile
     if (nodo.tipo === 'totale') {
       return _totaleRowHtml(nodo, dati, sez, lato, modalita, parentIds);
@@ -853,13 +870,23 @@ const UI = (() => {
     } else if (_isImmobilizzazione(nodo.id) && isAnalitica && sez === 'sp') {
       // Immobilizzazione in analitica: mostra costo storico, fondo, netto, aliquota
       html += _immobilizzazioneRowHtml(nodo, dati, sez, lato, depth, parentIds);
+    } else if (!nodo.editabile && nodo.computed) {
+      // Non-editable computed leaf (e.g. spc.CRED.1): show as read-only auto-calculated
+      const val = dati[nodo.id] || 0;
+      const valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
+      html += `<tr class="${cls}${hidden}" data-node-id="${nodo.id}" data-parents="${parStr}">
+        <td style="padding-left:${pad}px;font-style:italic;color:var(--color-text-secondary)">${_escapeHtml(nodo.label)}</td>
+        <td class="cell-amount"><span class="amount-computed${valCls}" data-nodo-id="${nodo.id}" data-sez="${sez}" data-lato="${lato}">${_formatImporto(val)}</span></td>
+      </tr>\n`;
     } else {
       // Nodo foglia semplice
       const val = dati[nodo.id] || 0;
       const display = val !== 0 ? _formatImporto(val) : '';
-      html += `<tr class="${cls}${hidden}" data-node-id="${nodo.id}" data-parents="${parStr}">
-        <td style="padding-left:${pad}px">${_escapeHtml(nodo.label)}</td>
-        <td class="cell-amount"><div class="amount-field" contenteditable="true" data-conto-id="${nodo.id}" data-sez="${sez}" data-lato="${lato}" data-placeholder="0" onblur="UI._handleAmountBlur(this)" onkeydown="UI._handleAmountKey(event)">${display}</div></td>
+      const notaStyle = nodo.nota_info ? ' style="font-style:italic;color:var(--color-text-secondary)"' : '';
+      const notaLabelStyle = nodo.nota_info ? ';font-style:italic;color:var(--color-text-secondary)' : '';
+      html += `<tr class="${cls}${hidden}${nodo.nota_info ? ' row-nota-info' : ''}" data-node-id="${nodo.id}" data-parents="${parStr}">
+        <td style="padding-left:${pad}px${notaLabelStyle}">${_escapeHtml(nodo.label)}</td>
+        <td class="cell-amount"><div class="amount-field" contenteditable="true" data-conto-id="${nodo.id}" data-sez="${sez}" data-lato="${lato}" data-placeholder="0" onblur="UI._handleAmountBlur(this)" onkeydown="UI._handleAmountKey(event)"${notaStyle}>${display}</div></td>
       </tr>\n`;
 
       // In analitica, mostra sempre il pulsante aggiungi conto (per nodi foglia CE e SP)
@@ -1065,6 +1092,16 @@ const UI = (() => {
     // Aggiorna display formattato
     el.textContent = valore !== 0 ? _formatImporto(valore) : '';
 
+    // Auto-calcola crediti vs soci per SP costituenda
+    if (sez === 'sp_avvio' && (contoId === 'spc.PN.1' || contoId === 'spc.PN.2')) {
+      var annoData = progetto.storico[String(progetto.meta.anno_base)];
+      if (annoData && annoData.sp_avvio) {
+        var sottoscr = annoData.sp_avvio['spc.PN.1'] || 0;
+        var vers = annoData.sp_avvio['spc.PN.2'] || 0;
+        annoData.sp_avvio['spc.CRED.1'] = Math.max(0, sottoscr - vers);
+      }
+    }
+
     _ricalcolaTotali();
     _aggiornaQuadratura();
     _scheduleAggiornaIndicatori();
@@ -1086,6 +1123,14 @@ const UI = (() => {
     const modalita = progetto.meta.modalita || 'rapida';
     const annoData = progetto.storico[anno];
     if (!annoData) return;
+
+    // Auto-calculate spc.CRED.1 = sottoscritto − versato (for costituenda)
+    if (progetto.meta.scenario === 'costituenda' && annoData.sp_avvio) {
+      var avvio = annoData.sp_avvio;
+      var sottoscritto = avvio['spc.PN.1'] || 0;
+      var versato = avvio['spc.PN.2'] || 0;
+      avvio['spc.CRED.1'] = Math.max(0, sottoscritto - versato);
+    }
 
     document.querySelectorAll('.amount-computed[data-nodo-id]').forEach(function(span) {
       const nodoId = span.dataset.nodoId;
