@@ -716,20 +716,25 @@ const UI = (() => {
     const annoData = progetto.storico[anno];
     if (!annoData || !annoData.sp) return '<p class="text-muted">Dati non disponibili.</p>';
 
-    let html = '';
+    let html = '<div class="sp-bilancio-grid">';
 
-    // ATTIVO
-    html += `<h3 style="font-size:14px;font-weight:700;margin:0 0 8px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;">ATTIVO</h3>`;
-    html += `<table class="schema-table" id="table-sp-attivo"><colgroup><col class="col-label"><col class="col-amount"></colgroup><tbody>`;
+    // Colonna ATTIVO
+    html += '<div class="sp-bilancio-col">';
+    html += '<h3 class="sp-bilancio-header">ATTIVO</h3>';
+    html += '<table class="schema-table" id="table-sp-attivo"><colgroup><col class="col-label"><col class="col-amount"></colgroup><tbody>';
     html += _buildTreeRows(Schema.SP_ATTIVO, annoData.sp.attivo, 'sp', 'attivo', modalita, 0, []);
-    html += `</tbody></table>`;
+    html += '</tbody></table>';
+    html += '</div>';
 
-    // PASSIVO
-    html += `<h3 style="font-size:14px;font-weight:700;margin:24px 0 8px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;">PASSIVO E PATRIMONIO NETTO</h3>`;
-    html += `<table class="schema-table" id="table-sp-passivo"><colgroup><col class="col-label"><col class="col-amount"></colgroup><tbody>`;
+    // Colonna PASSIVO
+    html += '<div class="sp-bilancio-col">';
+    html += '<h3 class="sp-bilancio-header">PASSIVO E PATRIMONIO NETTO</h3>';
+    html += '<table class="schema-table" id="table-sp-passivo"><colgroup><col class="col-label"><col class="col-amount"></colgroup><tbody>';
     html += _buildTreeRows(Schema.SP_PASSIVO, annoData.sp.passivo, 'sp', 'passivo', modalita, 0, []);
-    html += `</tbody></table>`;
+    html += '</tbody></table>';
+    html += '</div>';
 
+    html += '</div>';
     return html;
   }
 
@@ -738,9 +743,35 @@ const UI = (() => {
     const annoData = progetto.storico[anno];
     if (!annoData || !annoData.sp_avvio) return '<p class="text-muted">Dati non disponibili.</p>';
 
-    let html = `<table class="schema-table" id="table-sp-avvio"><colgroup><col class="col-label"><col class="col-amount"></colgroup><tbody>`;
-    html += _buildTreeRows(Schema.SP_COSTITUENDA, annoData.sp_avvio, 'sp_avvio', '', 'analitica', 0, []);
-    html += `</tbody></table>`;
+    // Dividi nodi schema in ATTIVO (prima di spc._PAS) e PASSIVO (dopo spc._PAS)
+    var nodiAttivo = [], nodiPassivo = [], dopoSeparatore = false;
+    for (var i = 0; i < Schema.SP_COSTITUENDA.length; i++) {
+      var nodo = Schema.SP_COSTITUENDA[i];
+      if (nodo.id === 'spc._PAS') { dopoSeparatore = true; continue; }
+      if (nodo.id === 'spc._ATT') continue; // skip separatore attivo
+      if (dopoSeparatore) nodiPassivo.push(nodo);
+      else nodiAttivo.push(nodo);
+    }
+
+    var html = '<div class="sp-bilancio-grid">';
+
+    // Colonna ATTIVO
+    html += '<div class="sp-bilancio-col">';
+    html += '<h3 class="sp-bilancio-header">ATTIVO</h3>';
+    html += '<table class="schema-table" id="table-sp-avvio-att"><colgroup><col class="col-label"><col class="col-amount"></colgroup><tbody>';
+    html += _buildTreeRows(nodiAttivo, annoData.sp_avvio, 'sp_avvio', '', 'analitica', 0, []);
+    html += '</tbody></table>';
+    html += '</div>';
+
+    // Colonna PASSIVO
+    html += '<div class="sp-bilancio-col">';
+    html += '<h3 class="sp-bilancio-header">PASSIVO</h3>';
+    html += '<table class="schema-table" id="table-sp-avvio-pas"><colgroup><col class="col-label"><col class="col-amount"></colgroup><tbody>';
+    html += _buildTreeRows(nodiPassivo, annoData.sp_avvio, 'sp_avvio', '', 'analitica', 0, []);
+    html += '</tbody></table>';
+    html += '</div>';
+
+    html += '</div>';
     return html;
   }
 
