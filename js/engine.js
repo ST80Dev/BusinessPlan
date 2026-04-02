@@ -193,6 +193,9 @@ const Engine = (() => {
     // Investimenti cumulativi (portati avanti anno per anno)
     var investimentiCumulativi = []; // { categoria, importo, aliquota, anno_acquisto, fondo: 0 }
 
+    // Fondo cumulativo proiezioni per immobilizzazioni storiche (si accumula anno dopo anno)
+    var fondoProiezioni = {}; // { nodoId: ammortamento_cumulato_in_proiezione }
+
     // Stato SP portato avanti anno per anno
     var spPrev = _inizializzaSP(p, annoBase);
 
@@ -343,7 +346,7 @@ const Engine = (() => {
       }
 
       // 4b. AMMORTAMENTI (da immobilizzazioni esistenti + investimenti cumulativi incl. anno corrente)
-      var ammort = _calcolaAmmortamentiAnno(p.immobilizzazioni, spPrev);
+      var ammort = _calcolaAmmortamentiAnno(p.immobilizzazioni, spPrev, fondoProiezioni);
       // Ammortamenti da investimenti, separati: nuovi dell'anno vs anni precedenti
       var ammortEvtImmatNew = 0, ammortEvtMatNew = 0;   // investimenti NUOVI quest'anno
       var ammortEvtImmatOld = 0, ammortEvtMatOld = 0;   // investimenti di anni precedenti
@@ -723,7 +726,7 @@ const Engine = (() => {
 
   /* ── Ammortamenti da immobilizzazioni esistenti ──────────── */
 
-  function _calcolaAmmortamentiAnno(immobilizzazioni, spPrev) {
+  function _calcolaAmmortamentiAnno(immobilizzazioni, spPrev, fondoProiezioni) {
     var immateriali = 0;
     var materiali = 0;
 
@@ -735,9 +738,16 @@ const Engine = (() => {
         var aliq = im.aliquota || (im.anni_ammortamento ? 1 / im.anni_ammortamento : 0);
         if (!aliq) return;
         var quota = Math.round(im.costo_storico * aliq);
-        // Non ammortizzare oltre il valore netto residuo
-        var nettoResiduo = (im.costo_storico || 0) - (im.fondo_ammortamento || 0);
-        if (quota > nettoResiduo) quota = Math.max(0, nettoResiduo);
+        // Netto residuo = costo - fondo iniziale - ammortamento già calcolato in proiezione
+        var fondoIniziale = im.fondo_ammortamento || 0;
+        var fondoProiez = (fondoProiezioni && fondoProiezioni[id]) || 0;
+        var nettoResiduo = im.costo_storico - fondoIniziale - fondoProiez;
+        if (nettoResiduo <= 0) { quota = 0; }
+        else if (quota > nettoResiduo) { quota = Math.round(nettoResiduo); }
+        // Aggiorna fondo cumulativo proiezioni
+        if (fondoProiezioni && quota > 0) {
+          fondoProiezioni[id] = fondoProiez + quota;
+        }
 
         if (id.indexOf('sp.BI.') === 0) {
           immateriali += quota;
