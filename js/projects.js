@@ -176,7 +176,7 @@ const Projects = (() => {
         });
       case 'nuovo_investimento':
         return Object.assign(base, {
-          categoria: 'sp.BII.2', anno: primoAnno, anno_fine: ultimoAnno, mese: 1,
+          categoria: 'sp.BII.2', anno: primoAnno, mese: 1,
           importo: 0, iva_pct: 0.22, aliquota_ammortamento: 0
         });
       case 'variazione_ricavi':
