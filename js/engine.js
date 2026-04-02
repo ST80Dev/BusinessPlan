@@ -44,8 +44,10 @@ const Engine = (() => {
         return dati[nodo.id];
       }
       // Somma ricorsiva dei figli (schema + custom)
+      // Figli con nota_info: true sono informativi e non vengono sommati nel totale del genitore
       let tot = 0;
       for (const figlio of nodo.children) {
+        if (figlio.nota_info) continue;
         const val = calcolaValore(figlio, dati, modalita, contiCustom);
         tot += val * (figlio.segno !== undefined ? figlio.segno : 1);
       }
@@ -526,13 +528,15 @@ const Engine = (() => {
 
     if (progetto.meta.scenario === 'costituenda' && storico.sp_avvio) {
       var av = storico.sp_avvio;
-      // PN: capitale versato + versamenti c/capitale (sottoscritto è informativo)
-      sp.patrimonio_netto = (av['spc.PN.2'] || 0) + (av['spc.PN.3'] || 0);
+      // PN: capitale sottoscritto + versamenti c/capitale
+      sp.patrimonio_netto = (av['spc.PN.1'] || 0) + (av['spc.PN.3'] || 0);
       sp.debiti_finanziari = (av['spc.FIN.1'] || 0) + (av['spc.FIN.2'] || 0);
       sp.cassa = av['spc.LIQ.1'] || 0;
       sp.immobilizzazioni_nette = (av['spc.INV.1'] || 0) + (av['spc.INV.2'] || 0) + (av['spc.INV.3'] || 0);
-      // Crediti vs soci per versamenti dovuti
-      sp.crediti_soci = av['spc.CRED.1'] || 0;
+      // Crediti vs soci = sottoscritto − versato (capitale non ancora versato)
+      var sottoscritto = av['spc.PN.1'] || 0;
+      var versato = av['spc.PN.2'] || 0;
+      sp.crediti_soci = Math.max(0, sottoscritto - versato);
       // Spese di avvio: capitalizzate come immobilizzazioni immateriali
       sp.immob_immateriali_nette = (sp.immob_immateriali_nette || 0) +
         (av['spc.SPESE.1'] || 0) + (av['spc.SPESE.2'] || 0);

@@ -193,35 +193,18 @@ const Schema = (() => {
      ────────────────────────────────────────────────────────── */
 
   const SP_COSTITUENDA = [
+    // ── ATTIVO ──────────────────────────────────────────
     {
-      id: 'spc.PN', label: 'Patrimonio netto iniziale', tipo: 'mastro', segno: +1, computed: true,
+      id: 'spc._ATT', label: '── ATTIVO ──', tipo: 'separatore', computed: false, editabile: false
+    },
+    {
+      id: 'spc.CRED', label: 'A) Crediti vs soci per versamenti dovuti', tipo: 'mastro', segno: +1, computed: true,
       children: [
-        { id: 'spc.PN.1', label: 'Capitale sociale sottoscritto',          tipo: 'conto', segno: +1, editabile: true },
-        { id: 'spc.PN.2', label: 'di cui: versato',                        tipo: 'conto', segno: +1, editabile: true },
-        { id: 'spc.PN.3', label: 'Versamenti in conto capitale soci',      tipo: 'conto', segno: +1, editabile: true }
+        { id: 'spc.CRED.1', label: 'Crediti vs soci (calcolato: sottoscritto − versato)', tipo: 'conto', segno: +1, editabile: false, computed: true }
       ]
     },
     {
-      id: 'spc.CRED', label: 'Crediti verso soci per versamenti dovuti', tipo: 'mastro', segno: +1, computed: true,
-      children: [
-        { id: 'spc.CRED.1', label: 'Crediti vs soci (capitale sottoscritto non versato)', tipo: 'conto', segno: +1, editabile: true }
-      ]
-    },
-    {
-      id: 'spc.FIN', label: 'Finanziamenti iniziali', tipo: 'mastro', segno: +1, computed: true,
-      children: [
-        { id: 'spc.FIN.1', label: 'Finanziamenti soci',   tipo: 'conto', segno: +1, editabile: true },
-        { id: 'spc.FIN.2', label: 'Finanziamenti bancari (mutui / aperture di credito)', tipo: 'conto', segno: +1, editabile: true }
-      ]
-    },
-    {
-      id: 'spc.LIQ', label: 'Liquidità iniziale', tipo: 'mastro', segno: +1, computed: true,
-      children: [
-        { id: 'spc.LIQ.1', label: 'Cassa e conti bancari (saldo disponibile al via)', tipo: 'conto', segno: +1, editabile: true }
-      ]
-    },
-    {
-      id: 'spc.INV', label: 'Investimenti già acquisiti all\'avvio', tipo: 'mastro', segno: +1, computed: true,
+      id: 'spc.INV', label: 'B) Investimenti già acquisiti all\'avvio', tipo: 'mastro', segno: +1, computed: true,
       children: [
         { id: 'spc.INV.1', label: 'Immobilizzazioni materiali (macchinari, arredi, veicoli)',       tipo: 'conto', segno: +1, editabile: true },
         { id: 'spc.INV.2', label: 'Immobilizzazioni immateriali (licenze, software, avviamento)',   tipo: 'conto', segno: +1, editabile: true },
@@ -229,10 +212,35 @@ const Schema = (() => {
       ]
     },
     {
-      id: 'spc.SPESE', label: 'Spese di avvio', tipo: 'mastro', segno: +1, computed: true,
+      id: 'spc.SPESE', label: 'C) Spese di avvio capitalizzate', tipo: 'mastro', segno: +1, computed: true,
       children: [
         { id: 'spc.SPESE.1', label: 'Spese di costituzione (notaio, CCIAA, bolli)',                 tipo: 'conto', segno: +1, editabile: true },
         { id: 'spc.SPESE.2', label: 'Caparre e depositi cauzionali (locazioni, utenze)',             tipo: 'conto', segno: +1, editabile: true }
+      ]
+    },
+    {
+      id: 'spc.LIQ', label: 'D) Liquidità iniziale', tipo: 'mastro', segno: +1, computed: true,
+      children: [
+        { id: 'spc.LIQ.1', label: 'Cassa e conti bancari (saldo disponibile al via)', tipo: 'conto', segno: +1, editabile: true }
+      ]
+    },
+    // ── PASSIVO ─────────────────────────────────────────
+    {
+      id: 'spc._PAS', label: '── PASSIVO ──', tipo: 'separatore', computed: false, editabile: false
+    },
+    {
+      id: 'spc.PN', label: 'A) Patrimonio Netto', tipo: 'mastro', segno: +1, computed: true,
+      children: [
+        { id: 'spc.PN.1', label: 'Capitale sociale sottoscritto',          tipo: 'conto', segno: +1, editabile: true },
+        { id: 'spc.PN.2', label: 'di cui: versato',                        tipo: 'conto', segno: +1, editabile: true, nota_info: true },
+        { id: 'spc.PN.3', label: 'Versamenti in conto capitale soci',      tipo: 'conto', segno: +1, editabile: true }
+      ]
+    },
+    {
+      id: 'spc.FIN', label: 'B) Debiti', tipo: 'mastro', segno: +1, computed: true,
+      children: [
+        { id: 'spc.FIN.1', label: 'Finanziamenti soci',   tipo: 'conto', segno: +1, editabile: true },
+        { id: 'spc.FIN.2', label: 'Finanziamenti bancari (mutui / aperture di credito)', tipo: 'conto', segno: +1, editabile: true }
       ]
     }
   ];

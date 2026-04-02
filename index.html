@@ -30,7 +30,7 @@
     <div class="sidebar-project-info" id="sidebar-project-info">
       <div class="sidebar-project-name text-muted" id="sidebar-project-name">Nessun progetto</div>
       <div class="sidebar-project-meta" id="sidebar-project-meta">—</div>
-      <div class="sidebar-project-edit-btn hidden" id="sidebar-project-edit" onclick="UI.apriModificaCliente()" title="Modifica ragione sociale, anno base e orizzonte anni">✎ Modifica anagrafica</div>
+      <div class="sidebar-project-edit-btn hidden" id="sidebar-project-edit" onclick="UI.apriModificaCliente()" title="Modifica ragione sociale, anno base e orizzonte anni">✎ Modifica dati base</div>
     </div>
 
     <!-- Navigazione principale -->
@@ -242,7 +242,7 @@
 <div class="modal-overlay hidden" id="modal-modifica-cliente">
   <div class="modal" style="width:480px">
     <div class="modal-header">
-      <span class="modal-title">Modifica dati cliente</span>
+      <span class="modal-title">Modifica dati base</span>
       <div class="modal-close" onclick="UI.closeModal('modal-modifica-cliente')">✕</div>
     </div>
 
@@ -279,6 +279,25 @@
           </div>
           <div class="form-hint" id="mc-anni-hint">Da 1 a 8 anni oltre l'anno base</div>
         </div>
+      </div>
+
+      <div class="form-group hidden" id="mc-mese-avvio-group">
+        <span class="form-label">Mese di avvio</span>
+        <select class="form-select" id="mc-mese-avvio">
+          <option value="1">Gennaio</option>
+          <option value="2">Febbraio</option>
+          <option value="3">Marzo</option>
+          <option value="4">Aprile</option>
+          <option value="5">Maggio</option>
+          <option value="6">Giugno</option>
+          <option value="7">Luglio</option>
+          <option value="8">Agosto</option>
+          <option value="9">Settembre</option>
+          <option value="10">Ottobre</option>
+          <option value="11">Novembre</option>
+          <option value="12">Dicembre</option>
+        </select>
+        <div class="form-hint">Mese in cui la società inizia l'attività</div>
       </div>
 
     </div><!-- /.modal-body -->
