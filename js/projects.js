@@ -72,11 +72,13 @@ const Projects = (() => {
         profilo_stagionale:  [8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34],
         costi:      [],    // [{ id, voce_ce, label, tipo_driver, pct_ricavi, var_pct_annua, importo_fisso, soggetto_inflazione, iva_pct }]
         personale: {
-          headcount:          0,      // N. dipendenti anno base
+          headcount:          0,      // N. dipendenti anno base (decimale: 5.5 = 5 FT + 1 PT)
           ral_media:          0,      // Retribuzione annua lorda media
           coeff_oneri:        0.32,   // Coefficiente oneri sociali (default 32%)
+          tredicesima:        true,   // 13ª mensilità (dicembre)
+          quattordicesima:    true,   // 14ª mensilità (giugno)
           var_ral_pct:        _creaParamAnnuale(anniPrev, 0),  // Variazione RAL media % per anno
-          variazioni_organico: []     // [{ anno, delta, da_mese }] es. { anno: 2025, delta: +2, da_mese: 6 }
+          variazioni_organico: []     // [{ anno, delta, da_mese }] es. { anno: 2025, delta: +0.5, da_mese: 6 }
         },
         finanziamenti_essere: [],
         smobilizzo: [],
@@ -177,7 +179,7 @@ const Projects = (() => {
       case 'nuovo_investimento':
         return Object.assign(base, {
           categoria: 'sp.BII.2', anno: primoAnno, mese: 1,
-          importo: 0, iva_pct: 0.22, aliquota_ammortamento: 0
+          importo: 0, iva_pct: 0.22, anni_ammortamento: 5
         });
       case 'variazione_ricavi':
         return Object.assign(base, {
@@ -198,7 +200,7 @@ const Projects = (() => {
         });
       case 'variazione_personale':
         return Object.assign(base, {
-          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, delta: 0, ral_nuovi: 0
+          anno: primoAnno, anno_fine: ultimoAnno, mese: 1, delta: 0
         });
       case 'operazione_soci':
         return Object.assign(base, {

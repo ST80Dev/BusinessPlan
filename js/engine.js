@@ -85,11 +85,16 @@ const Engine = (() => {
       return { headcount_medio: 0, headcount_fine: 0, salari: 0, oneri: 0, tfr: 0, totale: 0 };
     }
 
-    var hcBase = personale.headcount;
+    var hcBase = personale.headcount; // decimale (es. 5.5)
     var ralMedia = personale.ral_media || 0;
     var coeffOneri = personale.coeff_oneri || 0.32;
     var variazioni = personale.variazioni_organico || [];
     var varRal = personale.var_ral_pct || {};
+    var ha13 = personale.tredicesima !== false;   // default true
+    var ha14 = personale.quattordicesima !== false; // default true
+
+    // Numero mensilità: base 12 + 13ª + 14ª
+    var numMensilita = 12 + (ha13 ? 1 : 0) + (ha14 ? 1 : 0);
 
     // Calcola RAL media per l'anno corrente (con adeguamenti cumulativi)
     var ralAnno = ralMedia;
@@ -98,21 +103,17 @@ const Engine = (() => {
       ralAnno = ralAnno * (1 + pct);
     }
 
-    // Calcola headcount mensile (12 mesi)
-    // Parte dal headcount di fine anno precedente
+    // Calcola headcount mensile (12 mesi) — supporta decimali
     var hcInizio = hcBase;
-    // Applica tutte le variazioni degli anni precedenti (effetto pieno)
     variazioni.forEach(function(v) {
       if (v.anno < anno) {
         hcInizio += (v.delta || 0);
       }
     });
 
-    // Mese per mese nell'anno corrente
     var mesiHc = [];
     var hcCorrente = hcInizio;
     for (var m = 1; m <= 12; m++) {
-      // Applica variazioni che entrano in vigore questo mese/anno
       variazioni.forEach(function(v) {
         if (v.anno === anno && v.da_mese === m) {
           hcCorrente += (v.delta || 0);
@@ -121,32 +122,37 @@ const Engine = (() => {
       mesiHc.push(Math.max(0, hcCorrente));
     }
 
-    // Headcount medio e fine anno
     var sommaHc = 0;
     for (var k = 0; k < 12; k++) sommaHc += mesiHc[k];
     var hcMedio = sommaHc / 12;
     var hcFine = mesiHc[11];
 
-    // Salari: somma mensile di (hc_mese × RAL / 12)
+    // Retribuzione mensile base = RAL / numMensilità
+    var retribMensile = ralAnno / numMensilita;
+
+    // Salari: somma mese per mese (hc × retrib_mensile) + mensilità aggiuntive
     var salari = 0;
     for (var j = 0; j < 12; j++) {
-      salari += mesiHc[j] * ralAnno / 12;
+      var salarioMese = mesiHc[j] * retribMensile;
+      // 13ª a dicembre (mese 12, indice 11)
+      if (ha13 && j === 11) salarioMese += mesiHc[j] * retribMensile;
+      // 14ª a giugno (mese 6, indice 5)
+      if (ha14 && j === 5) salarioMese += mesiHc[j] * retribMensile;
+      salari += salarioMese;
     }
     salari = Math.round(salari);
 
     // Oneri sociali
     var oneri = Math.round(salari * coeffOneri);
 
-    // TFR (art. 2120 c.c.): retribuzione lorda totale / 13,5
-    // La retribuzione include le mensilita aggiuntive, ma per semplicita
-    // usiamo i salari lordi come base (gia comprensivi nel RAL)
+    // TFR (art. 2120 c.c.): retribuzione lorda annua / 13,5
     var tfr = Math.round(salari / 13.5);
 
     var totale = salari + oneri + tfr;
 
     return {
       headcount_medio: Math.round(hcMedio * 10) / 10,
-      headcount_fine: hcFine,
+      headcount_fine: Math.round(hcFine * 10) / 10,
       salari: salari,
       oneri: oneri,
       tfr: tfr,
@@ -313,6 +319,8 @@ const Engine = (() => {
         headcount: persDriver.headcount,
         ral_media: persDriver.ral_media,
         coeff_oneri: persDriver.coeff_oneri,
+        tredicesima: persDriver.tredicesima,
+        quattordicesima: persDriver.quattordicesima,
         var_ral_pct: persDriver.var_ral_pct,
         variazioni_organico: varOrgTemp
       };
@@ -323,9 +331,11 @@ const Engine = (() => {
       var ivaInvestimentiAnno = 0;
       for (var ni = 0; ni < investimentiAnno.length; ni++) {
         var nInv = investimentiAnno[ni];
+        // Retrocompat: se presente aliquota_ammortamento, usala; altrimenti converti da anni
+        var aliqAmm = nInv.aliquota_ammortamento || (nInv.anni_ammortamento ? 1 / nInv.anni_ammortamento : 0);
         investimentiCumulativi.push({
           categoria: nInv.categoria, importo: nInv.importo,
-          aliquota: nInv.aliquota_ammortamento || 0,
+          aliquota: aliqAmm,
           anno_acquisto: anno, mese_acquisto: nInv.mese || 1, fondo: 0
         });
         investimentiCassaAnno += nInv.importo;
@@ -718,8 +728,11 @@ const Engine = (() => {
     if (immobilizzazioni) {
       Object.keys(immobilizzazioni).forEach(function(id) {
         var im = immobilizzazioni[id];
-        if (!im || !im.aliquota || !im.costo_storico) return;
-        var quota = Math.round(im.costo_storico * im.aliquota);
+        if (!im || !im.costo_storico) return;
+        // Retrocompat: aliquota diretta oppure convertita da anni
+        var aliq = im.aliquota || (im.anni_ammortamento ? 1 / im.anni_ammortamento : 0);
+        if (!aliq) return;
+        var quota = Math.round(im.costo_storico * aliq);
         // Non ammortizzare oltre il valore netto residuo
         var nettoResiduo = (im.costo_storico || 0) - (im.fondo_ammortamento || 0);
         if (quota > nettoResiduo) quota = Math.max(0, nettoResiduo);
