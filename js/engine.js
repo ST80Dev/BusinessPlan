@@ -460,34 +460,47 @@ const Engine = (() => {
       sp.patrimonio_netto += versCapitaleAnno;
       sp.altri_debiti += finSociNettoAnno;
 
-      // 10. RENDICONTO FINANZIARIO
-      var cf = _calcolaCashFlowAnno(ce, sp, spPrev, finanz);
+      // 10. SP QUADRATO: cassa come residuo (A = P per costruzione)
+      sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.debiti_fornitori +
+        sp.debiti_tributari + sp.altri_debiti + sp.tfr;
+      sp.cassa = sp.totale_passivo - sp.immobilizzazioni_nette - sp.attivo_circolante;
+      sp.totale_attivo = sp.totale_passivo; // quadrato per costruzione
 
-      // CF: investimenti
+      // 11. RENDICONTO FINANZIARIO (derivato da variazioni SP, non driver di cassa)
+      var cf = {};
+      cf.flusso_netto = sp.cassa - spPrev.cassa;
+
+      // Area operativa (metodo indiretto)
+      cf.utile_netto = ce.utile_netto;
+      cf.ammortamenti = ce.ammortamenti;
+      cf.var_crediti = -(sp.crediti_clienti - spPrev.crediti_clienti);
+      cf.var_rimanenze = -(sp.rimanenze - spPrev.rimanenze);
+      cf.var_debiti_fornitori = sp.debiti_fornitori - spPrev.debiti_fornitori;
+      cf.var_debiti_tributari = sp.debiti_tributari - spPrev.debiti_tributari;
+      cf.var_tfr = sp.tfr - spPrev.tfr;
+      cf.var_altri = (sp.altri_debiti - spPrev.altri_debiti) - (sp.altri_crediti - spPrev.altri_crediti);
+      cf.flusso_operativo = cf.utile_netto + cf.ammortamenti +
+        cf.var_crediti + cf.var_rimanenze + cf.var_debiti_fornitori +
+        cf.var_debiti_tributari + cf.var_tfr + cf.var_altri;
+
+      // Area investimenti
       cf.investimenti = investimentiCassaAnno;
       cf.flusso_investimenti = -investimentiCassaAnno;
 
-      // CF: nuovi finanziamenti erogati
+      // Area finanziaria (residuo: garantisce quadratura CF = variazione cassa)
+      cf.flusso_finanziario = cf.flusso_netto - cf.flusso_operativo - cf.flusso_investimenti;
+
+      // Dettaglio finanziario (informativo)
       var nuoviFinErogati = 0;
       for (var ne = 0; ne < nuoviFinAnno.length; ne++) {
         nuoviFinErogati += nuoviFinAnno[ne].importo || 0;
       }
+      cf.rimborso_finanziamenti = -finanz.capitale_rimborsato;
       cf.nuovi_finanziamenti = nuoviFinErogati;
-
-      // CF: operazioni soci (entrata/uscita cassa)
       cf.versamenti_soci = versCapitaleAnno + Math.max(0, finSociNettoAnno);
       cf.rimborsi_soci = Math.abs(Math.min(0, finSociNettoAnno));
-      cf.flusso_finanziario = cf.rimborso_finanziamenti + cf.nuovi_finanziamenti +
-        cf.versamenti_soci - cf.rimborsi_soci - cf.dividendi;
-
-      // Ricalcola flusso netto con tutti gli aggiustamenti
-      cf.flusso_netto = cf.flusso_operativo + cf.flusso_investimenti + cf.flusso_finanziario + cf.flusso_iva;
-
-      // Aggiorna cassa nello SP
-      sp.cassa = spPrev.cassa + cf.flusso_netto;
-      sp.totale_attivo = sp.immobilizzazioni_nette + sp.attivo_circolante + sp.cassa;
-      sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.debiti_fornitori +
-        sp.debiti_tributari + sp.altri_debiti + sp.tfr;
+      cf.dividendi = 0;
+      cf.flusso_iva = 0;
 
       p.proiezioni.annuali[annoStr] = {
         ce: ce,
@@ -820,52 +833,14 @@ const Engine = (() => {
     sp.utile_esercizio = ce.utile_netto;
     sp.patrimonio_netto = spPrev.patrimonio_netto + ce.utile_netto;
 
-    // Cassa calcolata dal cash flow (impostata dopo)
-    sp.cassa = 0;
-
-    sp.totale_attivo = 0;
-    sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.debiti_fornitori +
-      sp.debiti_tributari + sp.altri_debiti + sp.tfr;
+    // cassa, totale_attivo, totale_passivo calcolati nel loop principale
+    // (cassa = residuo che quadra A = P)
 
     return sp;
   }
 
-  /* ── Rendiconto finanziario (metodo indiretto) ───────────── */
-
-  function _calcolaCashFlowAnno(ce, sp, spPrev, finanz) {
-    var cf = {};
-
-    // Area operativa
-    cf.utile_netto = ce.utile_netto;
-    cf.ammortamenti = ce.ammortamenti;
-    cf.var_crediti = -(sp.crediti_clienti - spPrev.crediti_clienti);
-    cf.var_rimanenze = -(sp.rimanenze - spPrev.rimanenze);
-    cf.var_debiti_fornitori = sp.debiti_fornitori - spPrev.debiti_fornitori;
-    cf.var_debiti_tributari = sp.debiti_tributari - spPrev.debiti_tributari;
-    cf.var_tfr = sp.tfr - spPrev.tfr;
-    cf.var_altri = (sp.altri_debiti - spPrev.altri_debiti) - (sp.altri_crediti - spPrev.altri_crediti);
-
-    cf.flusso_operativo = cf.utile_netto + cf.ammortamenti +
-      cf.var_crediti + cf.var_rimanenze + cf.var_debiti_fornitori +
-      cf.var_debiti_tributari + cf.var_tfr + cf.var_altri;
-
-    // Area investimenti (senza eventi = 0)
-    cf.investimenti = 0;
-    cf.flusso_investimenti = -cf.investimenti;
-
-    // Area finanziaria
-    cf.rimborso_finanziamenti = -finanz.capitale_rimborsato;
-    cf.nuovi_finanziamenti = 0;
-    cf.dividendi = 0;
-    cf.flusso_finanziario = cf.rimborso_finanziamenti + cf.nuovi_finanziamenti - cf.dividendi;
-
-    // IVA: non inclusa nel CF perché non tracciata nello SP (pass-through neutro)
-    cf.flusso_iva = 0;
-
-    cf.flusso_netto = cf.flusso_operativo + cf.flusso_investimenti + cf.flusso_finanziario + cf.flusso_iva;
-
-    return cf;
-  }
+  // Nota: il CF è ora calcolato direttamente nel loop principale come derivato
+  // delle variazioni SP (cassa = residuo che quadra A = P).
 
   /* ── Smobilizzo crediti/debiti (primi mesi) ──────────────── */
   // TODO: implementare effetto mensile dello smobilizzo nei primi mesi
