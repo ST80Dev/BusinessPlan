@@ -4,6 +4,8 @@
 
 - Lavora sempre su un **branch dedicato** (mai direttamente su main)
 - Al termine delle modifiche: **commit → push → Pull Request verso main**
+- **IMPORTANTE**: ogni gruppo di modifiche deve concludersi con la creazione della PR su main. Non lasciare mai commit pushati senza PR aperta. Sequenza completa: commit → push → crea PR verso main → avvisa l'utente
+- Se l'utente mergia una PR mentre stai ancora lavorando, fai rebase su origin/main e crea una nuova PR per i commit rimasti fuori
 - Il merge su main viene fatto manualmente dal proprietario dopo review
 - Non fare mai merge autonomamente su main
 - Ogni PR deve includere: titolo chiaro, sommario delle modifiche, test plan
