@@ -334,8 +334,9 @@ const Engine = (() => {
 
       // 4b. AMMORTAMENTI (da immobilizzazioni esistenti + investimenti cumulativi incl. anno corrente)
       var ammort = _calcolaAmmortamentiAnno(p.immobilizzazioni, spPrev);
-      // Ammortamenti da investimenti (incluso anno di acquisto con pro-rata dal mese)
-      var ammortEvtImmat = 0, ammortEvtMat = 0;
+      // Ammortamenti da investimenti, separati: nuovi dell'anno vs anni precedenti
+      var ammortEvtImmatNew = 0, ammortEvtMatNew = 0;   // investimenti NUOVI quest'anno
+      var ammortEvtImmatOld = 0, ammortEvtMatOld = 0;   // investimenti di anni precedenti
       for (var ic = 0; ic < investimentiCumulativi.length; ic++) {
         var inv = investimentiCumulativi[ic];
         var nettoInv = inv.importo - inv.fondo;
@@ -352,16 +353,26 @@ const Engine = (() => {
           continue; // investimento futuro
         }
         if (quotaInv > nettoInv) quotaInv = Math.max(0, nettoInv);
-        if (inv.categoria.indexOf('sp.BI.') === 0) {
-          ammortEvtImmat += quotaInv;
+        var isImmat = inv.categoria.indexOf('sp.BI.') === 0;
+        if (inv.anno_acquisto === anno) {
+          if (isImmat) ammortEvtImmatNew += quotaInv; else ammortEvtMatNew += quotaInv;
         } else {
-          ammortEvtMat += quotaInv;
+          if (isImmat) ammortEvtImmatOld += quotaInv; else ammortEvtMatOld += quotaInv;
         }
         inv.fondo += quotaInv;
       }
-      ammort.immateriali += ammortEvtImmat;
-      ammort.materiali += ammortEvtMat;
-      ammort.quota_annua += ammortEvtImmat + ammortEvtMat;
+
+      // Per il CE: ammortamento totale (storico + tutti gli eventi)
+      ammort.immateriali += ammortEvtImmatOld + ammortEvtImmatNew;
+      ammort.materiali += ammortEvtMatOld + ammortEvtMatNew;
+      ammort.quota_annua += ammortEvtImmatOld + ammortEvtImmatNew + ammortEvtMatOld + ammortEvtMatNew;
+
+      // Per lo SP: ammortamento solo storico + eventi anni precedenti (esclusi nuovi di quest'anno)
+      var ammortPerSP = {
+        immateriali: ammort.immateriali - ammortEvtImmatNew,
+        materiali: ammort.materiali - ammortEvtMatNew,
+        quota_annua: ammort.quota_annua - ammortEvtImmatNew - ammortEvtMatNew
+      };
 
       // 5. ONERI FINANZIARI (finanziamenti in essere + nuovi)
       var finanz = _calcolaFinanziamentiAnno(driver.finanziamenti_essere, anno, annoBase);
@@ -414,9 +425,10 @@ const Engine = (() => {
       ce.iva = iva;
 
       // 9. SP
-      var sp = _calcolaSPAnno(spPrev, ce, finanz, ammort, driver, anno, annoBase, p);
+      // SP: usa ammortPerSP (senza nuovi investimenti dell'anno, che vengono aggiunti dopo)
+      var sp = _calcolaSPAnno(spPrev, ce, finanz, ammortPerSP, driver, anno, annoBase, p);
 
-      // SP: aggiungi investimenti netti dell'anno
+      // SP: aggiungi investimenti dell'anno AL NETTO del loro ammortamento pro-rata
       var invImmatAnno = 0, invMatAnno = 0;
       for (var ii = 0; ii < investimentiAnno.length; ii++) {
         var inv2 = investimentiAnno[ii];
@@ -426,9 +438,9 @@ const Engine = (() => {
           invMatAnno += inv2.importo;
         }
       }
-      sp.immob_immateriali_nette += invImmatAnno;
-      sp.immob_materiali_nette += invMatAnno;
-      sp.immobilizzazioni_nette += invImmatAnno + invMatAnno;
+      sp.immob_immateriali_nette += invImmatAnno - ammortEvtImmatNew;
+      sp.immob_materiali_nette += invMatAnno - ammortEvtMatNew;
+      sp.immobilizzazioni_nette += (invImmatAnno - ammortEvtImmatNew) + (invMatAnno - ammortEvtMatNew);
 
       // SP: debiti finanziari calcolati direttamente (residuo essere + residuo eventi)
       sp.debiti_finanziari = finanz.residuo_totale + nuoviFinDebito;
