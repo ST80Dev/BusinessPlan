@@ -277,7 +277,7 @@ const Engine = (() => {
             break;
 
           case 'variazione_personale':
-            if (evt.anno === anno && anno <= evtAnnoFine) {
+            if (evt.anno <= anno && anno <= evtAnnoFine) {
               varPersonaleAnno.push(evt);
             }
             break;
