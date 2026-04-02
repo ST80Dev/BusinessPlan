@@ -221,7 +221,7 @@ const Engine = (() => {
             break;
 
           case 'nuovo_investimento':
-            if (evt.anno === anno && anno <= evtAnnoFine) {
+            if (evt.anno === anno) {
               investimentiAnno.push(evt);
             }
             break;

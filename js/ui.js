@@ -2818,8 +2818,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessun nuovo investimento pianificato.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:160px"><col style="width:60px"><col style="width:60px"><col style="width:120px"><col style="width:70px"><col style="width:80px"><col style="width:90px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Categoria</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Importo</td><td class="cell-amount">IVA %</td><td class="cell-amount">Aliq. amm. %</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:160px"><col style="width:60px"><col style="width:60px"><col style="width:120px"><col style="width:70px"><col style="width:80px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Categoria</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Importo</td><td class="cell-amount">IVA %</td><td class="cell-amount">Aliq. amm. %</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -2831,7 +2831,6 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
         html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaIvaPct(' + idx + ')">' + (_formatPct(e.iva_pct) || '0%') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'aliquota_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.aliquota_ammortamento) + '</div></td>';
-        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
