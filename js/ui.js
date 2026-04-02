@@ -3168,6 +3168,7 @@ const UI = (() => {
     html += '</div>';
 
     content.innerHTML = html;
+    _initCEToggle();
   }
 
   function switchProspTab(tabId) {
@@ -3186,7 +3187,7 @@ const UI = (() => {
     var nAnni = anniPrev.length;
     var colW = Math.max(100, Math.floor(600 / nAnni));
     var html = '<div style="overflow-x:auto">';
-    html += '<table class="schema-table"><colgroup><col style="width:auto">';
+    html += '<table class="schema-table" id="table-prosp-ce"><colgroup><col style="width:auto">';
     for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
     html += '</colgroup>';
 
@@ -3195,37 +3196,94 @@ const UI = (() => {
     for (var h = 0; h < nAnni; h++) html += '<td class="cell-amount">' + anniPrev[h] + '</td>';
     html += '</tr></thead><tbody>';
 
-    // Righe CE
-    var voci = [
-      { key: 'valore_produzione',     label: 'A. Valore della produzione',   bold: true },
-      { key: 'costi_totale',          label: 'B.6-8,11-14 Costi operativi',  indent: 1 },
-      { key: 'personale_totale',      label: 'B.9 Costo del personale',      indent: 1 },
-      { key: 'ebitda',                label: 'EBITDA',                        bold: true, highlight: true },
-      { key: 'ammortamenti',          label: 'B.10 Ammortamenti',            indent: 1 },
-      { key: 'ebit',                  label: 'EBIT (A-B)',                   bold: true },
-      { key: 'oneri_finanziari',      label: 'C.17 Oneri finanziari',        indent: 1 },
-      { key: 'risultato_ante_imposte',label: 'Risultato ante imposte',       bold: true },
-      { key: 'ires',                  label: 'IRES',                         indent: 1 },
-      { key: 'irap',                  label: 'IRAP',                         indent: 1 },
-      { key: 'utile_netto',           label: 'Utile (perdita) netto',        bold: true, highlight: true }
-    ];
-
-    voci.forEach(function(v) {
-      var cls = v.bold ? 'row-totale' : 'row-conto';
-      if (v.highlight) cls = 'row-totale';
-      var pad = v.indent ? 'padding-left:24px' : '';
-      html += '<tr class="' + cls + '"><td style="' + pad + '">' + v.label + '</td>';
+    // Helper: riga CE standard
+    function ceRow(key, label, opts) {
+      opts = opts || {};
+      var cls = opts.bold ? 'row-totale' : 'row-conto';
+      var pad = opts.indent ? 'padding-left:' + (opts.indent * 24) + 'px' : '';
+      var toggle = opts.toggle ? ' class="ce-toggle" data-target="' + opts.toggle + '" style="cursor:pointer;' + pad + '"' : ' style="' + pad + '"';
+      var arrow = opts.toggle ? '<span class="ce-toggle-arrow" data-target="' + opts.toggle + '">&#9654;</span> ' : '';
+      var r = '<tr class="' + cls + '"' + (opts.id ? ' id="' + opts.id + '"' : '') + '><td' + toggle + '>' + arrow + label + '</td>';
       for (var a = 0; a < nAnni; a++) {
         var ce = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].ce;
-        var val = ce ? (ce[v.key] || 0) : 0;
+        var val = ce ? (ce[key] || 0) : 0;
         var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
-        html += '<td class="cell-amount"><span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span></td>';
+        r += '<td class="cell-amount"><span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span></td>';
       }
-      html += '</tr>';
-    });
+      r += '</tr>\n';
+      return r;
+    }
+
+    // Helper: righe dettaglio collassabili
+    function detailRows(detailKey, groupId) {
+      var r = '';
+      // Raccogli le label uniche dal primo anno che ha dati
+      var labels = [];
+      for (var a = 0; a < nAnni; a++) {
+        var ce = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].ce;
+        var det = ce ? ce[detailKey] : null;
+        if (det && det.length > 0) {
+          for (var d = 0; d < det.length; d++) {
+            var found = false;
+            for (var l = 0; l < labels.length; l++) { if (labels[l].id === det[d].id) { found = true; break; } }
+            if (!found) labels.push({ id: det[d].id, label: det[d].label });
+          }
+        }
+      }
+      for (var li = 0; li < labels.length; li++) {
+        var lab = labels[li];
+        r += '<tr class="row-conto ce-detail-row ' + groupId + '" style="display:none"><td style="padding-left:48px;font-size:12px;color:var(--color-text-secondary)">' + _escapeHtml(lab.label) + '</td>';
+        for (var a2 = 0; a2 < nAnni; a2++) {
+          var ce2 = proiezioni[String(anniPrev[a2])] && proiezioni[String(anniPrev[a2])].ce;
+          var det2 = ce2 ? ce2[detailKey] : null;
+          var val2 = 0;
+          if (det2) { for (var d2 = 0; d2 < det2.length; d2++) { if (det2[d2].id === lab.id) { val2 = det2[d2].importo || 0; break; } } }
+          var valCls2 = val2 < 0 ? ' negative' : (val2 === 0 ? ' zero' : '');
+          r += '<td class="cell-amount"><span style="font-size:12px;color:var(--color-text-secondary)" class="' + valCls2 + '">' + _formatImporto(val2) + '</span></td>';
+        }
+        r += '</tr>\n';
+      }
+      return r;
+    }
+
+    // A. Valore della produzione (con dettaglio ricavi)
+    html += ceRow('valore_produzione', 'A. Valore della produzione', { bold: true, toggle: 'ce-det-ricavi' });
+    html += detailRows('ricavi_dettaglio', 'ce-det-ricavi');
+
+    // B. Costi operativi (con dettaglio costi)
+    html += ceRow('costi_totale', 'B.6-8,11-14 Costi operativi', { indent: 1, toggle: 'ce-det-costi' });
+    html += detailRows('costi_dettaglio', 'ce-det-costi');
+
+    // Resto del CE
+    html += ceRow('personale_totale', 'B.9 Costo del personale', { indent: 1 });
+    html += ceRow('ebitda', 'EBITDA', { bold: true });
+    html += ceRow('ammortamenti', 'B.10 Ammortamenti', { indent: 1 });
+    html += ceRow('ebit', 'EBIT (A-B)', { bold: true });
+    html += ceRow('oneri_finanziari', 'C.17 Oneri finanziari', { indent: 1 });
+    html += ceRow('risultato_ante_imposte', 'Risultato ante imposte', { bold: true });
+    html += ceRow('ires', 'IRES', { indent: 1 });
+    html += ceRow('irap', 'IRAP', { indent: 1 });
+    html += ceRow('utile_netto', 'Utile (perdita) netto', { bold: true });
 
     html += '</tbody></table></div>';
     return html;
+  }
+
+  /** Gestisce click su toggle dettaglio CE (event delegation) */
+  function _initCEToggle() {
+    var table = document.getElementById('table-prosp-ce');
+    if (!table) return;
+    table.addEventListener('click', function(e) {
+      var td = e.target.closest('.ce-toggle');
+      if (!td) return;
+      var target = td.dataset.target;
+      if (!target) return;
+      var rows = document.querySelectorAll('.' + target);
+      var arrow = td.querySelector('.ce-toggle-arrow');
+      var open = rows.length > 0 && rows[0].style.display !== 'none';
+      rows.forEach(function(r) { r.style.display = open ? 'none' : ''; });
+      if (arrow) arrow.innerHTML = open ? '&#9654;' : '&#9660;';
+    });
   }
 
   /* ── SP Previsionale ─────────────────────────────────────── */

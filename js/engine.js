@@ -318,7 +318,21 @@ const Engine = (() => {
       };
       var pers = calcolaPersonaleAnno(persTemp, anno, annoBase);
 
-      // 4. AMMORTAMENTI (da immobilizzazioni esistenti + nuovi investimenti cumulativi)
+      // 4a. Registra nuovi investimenti di quest'anno (prima del calcolo ammortamenti)
+      var investimentiCassaAnno = 0;
+      var ivaInvestimentiAnno = 0;
+      for (var ni = 0; ni < investimentiAnno.length; ni++) {
+        var nInv = investimentiAnno[ni];
+        investimentiCumulativi.push({
+          categoria: nInv.categoria, importo: nInv.importo,
+          aliquota: nInv.aliquota_ammortamento || 0,
+          anno_acquisto: anno, mese_acquisto: nInv.mese || 1, fondo: 0
+        });
+        investimentiCassaAnno += nInv.importo;
+        ivaInvestimentiAnno += Math.round(nInv.importo * (nInv.iva_pct || 0));
+      }
+
+      // 4b. AMMORTAMENTI (da immobilizzazioni esistenti + investimenti cumulativi incl. anno corrente)
       var ammort = _calcolaAmmortamentiAnno(p.immobilizzazioni, spPrev);
       // Ammortamenti da investimenti (incluso anno di acquisto con pro-rata dal mese)
       var ammortEvtImmat = 0, ammortEvtMat = 0;
@@ -349,20 +363,6 @@ const Engine = (() => {
       ammort.materiali += ammortEvtMat;
       ammort.quota_annua += ammortEvtImmat + ammortEvtMat;
 
-      // Registra nuovi investimenti di quest'anno (ammortamento calcolato sopra con pro-rata)
-      var investimentiCassaAnno = 0;
-      var ivaInvestimentiAnno = 0;
-      for (var ni = 0; ni < investimentiAnno.length; ni++) {
-        var nInv = investimentiAnno[ni];
-        investimentiCumulativi.push({
-          categoria: nInv.categoria, importo: nInv.importo,
-          aliquota: nInv.aliquota_ammortamento || 0,
-          anno_acquisto: anno, mese_acquisto: nInv.mese || 1, fondo: 0
-        });
-        investimentiCassaAnno += nInv.importo;
-        ivaInvestimentiAnno += Math.round(nInv.importo * (nInv.iva_pct || 0));
-      }
-
       // 5. ONERI FINANZIARI (finanziamenti in essere + nuovi)
       var finanz = _calcolaFinanziamentiAnno(driver.finanziamenti_essere, anno, annoBase);
       // Nuovi finanziamenti: calcola interessi e rimborso
@@ -381,7 +381,9 @@ const Engine = (() => {
       // 6. CE
       var ce = {};
       ce.ricavi_totale = ricavi.totale;
+      ce.ricavi_dettaglio = ricavi.dettaglio || [];
       ce.costi_totale = costi.totale;
+      ce.costi_dettaglio = costi.dettaglio || [];
       ce.personale_totale = pers.totale;
       ce.personale = pers;
       ce.ammortamenti = ammort.quota_annua;
