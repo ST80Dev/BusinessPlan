@@ -1092,16 +1092,6 @@ const UI = (() => {
     // Aggiorna display formattato
     el.textContent = valore !== 0 ? _formatImporto(valore) : '';
 
-    // Auto-calcola crediti vs soci per SP costituenda
-    if (sez === 'sp_avvio' && (contoId === 'spc.PN.1' || contoId === 'spc.PN.2')) {
-      var annoData = progetto.storico[String(progetto.meta.anno_base)];
-      if (annoData && annoData.sp_avvio) {
-        var sottoscr = annoData.sp_avvio['spc.PN.1'] || 0;
-        var vers = annoData.sp_avvio['spc.PN.2'] || 0;
-        annoData.sp_avvio['spc.CRED.1'] = Math.max(0, sottoscr - vers);
-      }
-    }
-
     _ricalcolaTotali();
     _aggiornaQuadratura();
     _scheduleAggiornaIndicatori();
@@ -1123,14 +1113,6 @@ const UI = (() => {
     const modalita = progetto.meta.modalita || 'rapida';
     const annoData = progetto.storico[anno];
     if (!annoData) return;
-
-    // Auto-calculate spc.CRED.1 = sottoscritto − versato (for costituenda)
-    if (progetto.meta.scenario === 'costituenda' && annoData.sp_avvio) {
-      var avvio = annoData.sp_avvio;
-      var sottoscritto = avvio['spc.PN.1'] || 0;
-      var versato = avvio['spc.PN.2'] || 0;
-      avvio['spc.CRED.1'] = Math.max(0, sottoscritto - versato);
-    }
 
     document.querySelectorAll('.amount-computed[data-nodo-id]').forEach(function(span) {
       const nodoId = span.dataset.nodoId;
@@ -1161,14 +1143,35 @@ const UI = (() => {
     const qText = document.getElementById('footer-quadratura-text');
     if (!qEl || !qText) return;
 
-    if (!progetto || progetto.meta.scenario === 'costituenda') {
-      qEl.classList.add('hidden');
+    if (!progetto) { qEl.classList.add('hidden'); return; }
+
+    const anno = String(progetto.meta.anno_base);
+    const annoData = progetto.storico[anno];
+
+    if (progetto.meta.scenario === 'costituenda') {
+      // Quadratura SP costituenda: ATTIVO vs PASSIVO
+      if (!annoData || !annoData.sp_avvio) { qEl.classList.add('hidden'); return; }
+      var av = annoData.sp_avvio;
+      var totAtt = (av['spc.CRED.1'] || 0) +
+        (av['spc.INV.1'] || 0) + (av['spc.INV.2'] || 0) + (av['spc.INV.3'] || 0) +
+        (av['spc.SPESE.1'] || 0) + (av['spc.SPESE.2'] || 0) +
+        (av['spc.LIQ.1'] || 0);
+      var totPass = (av['spc.PN.1'] || 0) + (av['spc.PN.3'] || 0) +
+        (av['spc.FIN.1'] || 0) + (av['spc.FIN.2'] || 0);
+      var diff = totAtt - totPass;
+
+      qEl.classList.remove('hidden');
+      if (Math.abs(diff) < 1) {
+        qEl.className = 'footer-quadratura ok';
+        qText.textContent = 'SP quadrato: Attivo ' + _formatImporto(totAtt) + ' = Passivo ' + _formatImporto(totPass);
+      } else {
+        qEl.className = 'footer-quadratura error';
+        qText.textContent = 'SP NON quadrato — Attivo: ' + _formatImporto(totAtt) + ' / Passivo: ' + _formatImporto(totPass) + ' (diff: ' + _formatImporto(diff) + ')';
+      }
       return;
     }
 
-    const anno = String(progetto.meta.anno_base);
     const modalita = progetto.meta.modalita || 'rapida';
-    const annoData = progetto.storico[anno];
     if (!annoData || !annoData.sp) { qEl.classList.add('hidden'); return; }
 
     const nodoAtt = Schema.trovaNodo('sp.TOT_ATT');
@@ -1176,18 +1179,18 @@ const UI = (() => {
     if (!nodoAtt || !nodoPass) return;
 
     const cc = _getContiCustom();
-    const totAtt  = Engine.calcolaValore(nodoAtt, annoData.sp.attivo, modalita, cc);
-    const totPass = Engine.calcolaValore(nodoPass, annoData.sp.passivo, modalita, cc);
-    const diff = totAtt - totPass;
+    const totAttSP  = Engine.calcolaValore(nodoAtt, annoData.sp.attivo, modalita, cc);
+    const totPassSP = Engine.calcolaValore(nodoPass, annoData.sp.passivo, modalita, cc);
+    const diffSP = totAttSP - totPassSP;
 
     qEl.classList.remove('hidden');
 
-    if (Math.abs(diff) < 1) {
+    if (Math.abs(diffSP) < 1) {
       qEl.className = 'footer-quadratura ok';
-      qText.textContent = 'SP quadrato: ' + _formatImporto(totAtt);
+      qText.textContent = 'SP quadrato: ' + _formatImporto(totAttSP);
     } else {
       qEl.className = 'footer-quadratura error';
-      qText.textContent = 'SP NON quadrato — diff: ' + _formatImporto(diff);
+      qText.textContent = 'SP NON quadrato — diff: ' + _formatImporto(diffSP);
     }
   }
 

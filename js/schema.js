@@ -200,7 +200,7 @@ const Schema = (() => {
     {
       id: 'spc.CRED', label: 'A) Crediti vs soci per versamenti dovuti', tipo: 'mastro', segno: +1, computed: true,
       children: [
-        { id: 'spc.CRED.1', label: 'Crediti vs soci (calcolato: sottoscritto − versato)', tipo: 'conto', segno: +1, editabile: false, computed: true }
+        { id: 'spc.CRED.1', label: 'Crediti vs soci per versamenti ancora dovuti', tipo: 'conto', segno: +1, editabile: true }
       ]
     },
     {
@@ -231,8 +231,7 @@ const Schema = (() => {
     {
       id: 'spc.PN', label: 'A) Patrimonio Netto', tipo: 'mastro', segno: +1, computed: true,
       children: [
-        { id: 'spc.PN.1', label: 'Capitale sociale sottoscritto',          tipo: 'conto', segno: +1, editabile: true },
-        { id: 'spc.PN.2', label: 'di cui: versato',                        tipo: 'conto', segno: +1, editabile: true, nota_info: true },
+        { id: 'spc.PN.1', label: 'Capitale sociale',                       tipo: 'conto', segno: +1, editabile: true },
         { id: 'spc.PN.3', label: 'Versamenti in conto capitale soci',      tipo: 'conto', segno: +1, editabile: true }
       ]
     },

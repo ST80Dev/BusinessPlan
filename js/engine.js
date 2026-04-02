@@ -533,10 +533,8 @@ const Engine = (() => {
       sp.debiti_finanziari = (av['spc.FIN.1'] || 0) + (av['spc.FIN.2'] || 0);
       sp.cassa = av['spc.LIQ.1'] || 0;
       sp.immobilizzazioni_nette = (av['spc.INV.1'] || 0) + (av['spc.INV.2'] || 0) + (av['spc.INV.3'] || 0);
-      // Crediti vs soci = sottoscritto − versato (capitale non ancora versato)
-      var sottoscritto = av['spc.PN.1'] || 0;
-      var versato = av['spc.PN.2'] || 0;
-      sp.crediti_soci = Math.max(0, sottoscritto - versato);
+      // Crediti vs soci per versamenti ancora dovuti
+      sp.crediti_soci = av['spc.CRED.1'] || 0;
       // Spese di avvio: capitalizzate come immobilizzazioni immateriali
       sp.immob_immateriali_nette = (sp.immob_immateriali_nette || 0) +
         (av['spc.SPESE.1'] || 0) + (av['spc.SPESE.2'] || 0);
