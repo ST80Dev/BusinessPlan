@@ -398,17 +398,20 @@ const UI = (() => {
     var hintEl  = document.getElementById('np-anno-hint');
     var anniHint = document.getElementById('np-anni-hint');
     var annoField = document.getElementById('np-anno-base');
+    var meseGroup = document.getElementById('np-mese-avvio-group');
 
     if (scenario === 'costituenda') {
       if (labelEl) labelEl.textContent = 'Anno di inizio attività *';
       if (hintEl)  hintEl.textContent  = 'Primo anno operativo della nuova società';
       if (anniHint) anniHint.textContent = 'Da 1 a 8 anni di previsione';
       if (annoField) annoField.dataset.placeholder = 'Es. 2025';
+      if (meseGroup) meseGroup.classList.remove('hidden');
     } else {
       if (labelEl) labelEl.textContent = 'Anno base (storico) *';
       if (hintEl)  hintEl.textContent  = "Anno dell'ultimo bilancio approvato";
       if (anniHint) anniHint.textContent = "Da 1 a 8 anni oltre l'anno base";
       if (annoField) annoField.dataset.placeholder = 'Es. 2024';
+      if (meseGroup) meseGroup.classList.add('hidden');
     }
   }
 
@@ -1230,9 +1233,8 @@ const UI = (() => {
         return spCompilato ? '<span class="tab-dot partial"></span>' : '';
       }
       case 'drv-personale': {
-        var ok = d.personale && d.personale.headcount > 0;
-        if (ok) return '<span class="tab-dot complete"></span>';
-        return spCompilato ? '<span class="tab-dot partial"></span>' : '';
+        // Personale è sempre "compilata" — 0 dipendenti è un valore valido
+        return d.personale ? '<span class="tab-dot complete"></span>' : '';
       }
       case 'drv-patrimoniali':
         return (d.finanziamenti_essere && d.finanziamenti_essere.length > 0) ? '<span class="tab-dot complete"></span>' : '';
@@ -1292,18 +1294,23 @@ const UI = (() => {
       return html;
     }
 
-    // Griglia ricavi: Voce | Base | Anno1 | Anno2 | ... | ✕
+    // Griglia ricavi: Voce | Tipo | Base | Anno1 | Anno2 | ... | ✕
+    var isCostitutenda = progetto.meta.scenario === 'costituenda';
     var colW = Math.max(70, Math.floor(400 / nAnni));
-    html += '<div style="overflow-x:auto"><table class="schema-table"><colgroup><col style="width:auto"><col style="width:130px">';
+    html += '<div style="overflow-x:auto"><table class="schema-table"><colgroup><col style="width:auto"><col style="width:80px"><col style="width:130px">';
     for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
     html += '<col style="width:40px"></colgroup>';
 
     // Header: anni con pulsante "↓ applica a tutte"
-    html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Base annuale</td>';
+    html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Tipo</td><td class="cell-amount">Base importo</td>';
     for (var h = 0; h < nAnni; h++) {
-      html += '<td class="cell-amount" style="font-size:12px">' + anniPrev[h] + '<br>';
-      html += '<div class="add-conto-btn" style="font-size:10px;display:inline-flex;margin-top:2px" onclick="UI.applicaCrescitaColonna(' + h + ')">↓ a tutte</div>';
-      html += '</td>';
+      if (isCostitutenda && h === 0) {
+        html += '<td class="cell-amount" style="font-size:12px;color:var(--color-text-muted)">' + anniPrev[h] + '</td>';
+      } else {
+        html += '<td class="cell-amount" style="font-size:12px">' + anniPrev[h] + '<br>';
+        html += '<div class="add-conto-btn" style="font-size:10px;display:inline-flex;margin-top:2px" onclick="UI.applicaCrescitaColonna(' + h + ')">↓ a tutte</div>';
+        html += '</td>';
+      }
     }
     html += '<td></td></tr></thead><tbody>';
 
@@ -1311,22 +1318,31 @@ const UI = (() => {
     for (var i = 0; i < ricavi.length; i++) {
       var r = ricavi[i];
       var crescita = (typeof r.crescita_annua === 'object' && r.crescita_annua) ? r.crescita_annua : {};
+      var baseTipoR = r.base_tipo || 'annuale';
+      var baseTipoLabelR = baseTipoR === 'mensile' ? 'Mensile' : 'Annuale';
 
       html += '<tr class="row-conto">';
       // Label
       html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'label\')">' + _escapeHtml(r.label) + '</div></td>';
+      // Tipo toggle (Annuale/Mensile)
+      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaBaseTipo(\'ricavi\',' + i + ')">' + baseTipoLabelR + '</div></td>';
       // Base annuale
       html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'base_annuale\')" onkeydown="UI._handleAmountKey(event)">' + (r.base_annuale ? _formatImporto(r.base_annuale) : '') + '</div></td>';
       // % per ogni anno + pulsante "→ a tutti gli anni"
       for (var a = 0; a < nAnni; a++) {
         var annoStr = String(anniPrev[a]);
         var pctAnno = crescita[annoStr] || 0;
-        html += '<td class="cell-amount"><div style="display:flex;align-items:center;gap:2px">';
-        html += '<div class="amount-field" contenteditable="true" style="width:50px" data-placeholder="0%" onblur="UI._handleRicavoCrescitaAnno(this,' + i + ',\'' + annoStr + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(pctAnno) + '</div>';
-        if (a === 0) {
-          html += '<div class="add-conto-btn" style="font-size:10px;padding:1px 3px" onclick="UI.applicaCrescitaRiga(' + i + ',\'' + annoStr + '\')" title="Applica a tutti gli anni">→</div>';
+        if (isCostitutenda && a === 0) {
+          // Per costituenda, il primo anno non ha crescita (la base E' il primo anno)
+          html += '<td class="cell-amount"><span class="text-muted" style="font-size:11px">—</span></td>';
+        } else {
+          html += '<td class="cell-amount"><div style="display:flex;align-items:center;gap:2px">';
+          html += '<div class="amount-field" contenteditable="true" style="width:50px" data-placeholder="0%" onblur="UI._handleRicavoCrescitaAnno(this,' + i + ',\'' + annoStr + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(pctAnno) + '</div>';
+          if (a === 0 || (isCostitutenda && a === 1)) {
+            html += '<div class="add-conto-btn" style="font-size:10px;padding:1px 3px" onclick="UI.applicaCrescitaRiga(' + i + ',\'' + annoStr + '\')" title="Applica a tutti gli anni">→</div>';
+          }
+          html += '</div></td>';
         }
-        html += '</div></td>';
       }
       // Elimina
       html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'ricavi\',' + i + ')">✕</div></td>';
@@ -1350,6 +1366,17 @@ const UI = (() => {
     var progetto = Projects.getProgetto();
     if (!progetto) return;
     progetto.driver.stagionalita_attiva = val;
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  /** Cicla base_tipo tra 'annuale' e 'mensile' per driver ricavi o costi. */
+  function ciclaBaseTipo(tipo, idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var arr = progetto.driver[tipo];
+    if (!arr || !arr[idx]) return;
+    arr[idx].base_tipo = arr[idx].base_tipo === 'mensile' ? 'annuale' : 'mensile';
     Projects.segnaModificato();
     _renderDriver();
   }
@@ -1504,7 +1531,12 @@ const UI = (() => {
           html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'pct_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.pct_ricavi) + '</div></td>';
           html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'var_pct_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.var_pct_annua) + '</div></td>';
         } else {
-          html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'importo_fisso\')" onkeydown="UI._handleAmountKey(event)">' + (cc.importo_fisso ? _formatImporto(cc.importo_fisso) : '') + '</div></td>';
+          var baseTipoC = cc.base_tipo || 'annuale';
+          var baseTipoLabelC = baseTipoC === 'mensile' ? 'Mens.' : 'Ann.';
+          html += '<td class="cell-amount"><div style="display:flex;align-items:center;gap:2px">';
+          html += '<div class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 4px" onclick="UI.ciclaBaseTipo(\'costi\',' + ii + ')">' + baseTipoLabelC + '</div>';
+          html += '<div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'importo_fisso\')" onkeydown="UI._handleAmountKey(event)">' + (cc.importo_fisso ? _formatImporto(cc.importo_fisso) : '') + '</div>';
+          html += '</div></td>';
           html += '<td class="cell-amount"><span class="text-muted" style="font-size:12px">—</span></td>';
         }
 
@@ -1516,9 +1548,10 @@ const UI = (() => {
           html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + flagColor + '" onclick="UI.toggleInflazione(' + ii + ')">' + flagIcon + '</div></td>';
         }
 
-        // IVA %
+        // IVA % (toggle button)
         var ivaPct = cc.iva_pct !== undefined ? cc.iva_pct : 0.22;
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" style="width:50px" data-placeholder="22%" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'iva_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(ivaPct) + '</div></td>';
+        var ivaLabel = Math.round(ivaPct * 100) + '%';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaIva(\'costi\',' + ii + ')" ondblclick="UI.editIvaManuale(\'costi\',' + ii + ')" oncontextmenu="event.preventDefault();UI.editIvaManuale(\'costi\',' + ii + ')">' + ivaLabel + '</div></td>';
 
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'costi\',' + ii + ')">✕</div></td>';
         html += '</tr>';
@@ -1804,13 +1837,12 @@ const UI = (() => {
 
       for (var i = 0; i < fin.length; i++) {
         var f = fin[i];
-        var tipoLabel = f.tipo_ammortamento === 'italiano' ? 'Italiano' : 'Francese';
         html += '<tr class="row-conto">';
         html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleFinField(this,' + i + ',\'descrizione\')">' + _escapeHtml(f.descrizione || '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleFinField(this,' + i + ',\'capitale_residuo\')" onkeydown="UI._handleAmountKey(event)">' + (f.capitale_residuo ? _formatImporto(f.capitale_residuo) : '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleFinField(this,' + i + ',\'tasso_annuo\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(f.tasso_annuo) + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleFinField(this,' + i + ',\'durata_mesi\')" onkeydown="UI._handleAmountKey(event)">' + (f.durata_mesi || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaTipoAmm(' + i + ')">' + tipoLabel + '</div></td>';
+        html += '<td class="cell-amount"><span style="font-size:12px;color:var(--color-text-secondary)">Italiano</span></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" style="font-size:12px" data-placeholder="MM/AAAA" onblur="UI._handleFinField(this,' + i + ',\'data_inizio_rata\')" onkeydown="UI._handleAmountKey(event)">' + _escapeHtml(f.data_inizio_rata || '') + '</div></td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviFinanziamento(' + i + ')">✕</div></td>';
         html += '</tr>';
@@ -1861,7 +1893,7 @@ const UI = (() => {
       capitale_residuo: 0,
       tasso_annuo: 0,
       durata_mesi: 60,
-      tipo_ammortamento: 'francese',
+      tipo_ammortamento: 'italiano',
       data_inizio_rata: ''
     });
     Projects.segnaModificato();
@@ -1877,13 +1909,7 @@ const UI = (() => {
   }
 
   function ciclaTipoAmm(idx) {
-    var progetto = Projects.getProgetto();
-    if (!progetto || !progetto.driver.finanziamenti_essere) return;
-    var f = progetto.driver.finanziamenti_essere[idx];
-    if (!f) return;
-    f.tipo_ammortamento = f.tipo_ammortamento === 'francese' ? 'italiano' : 'francese';
-    Projects.segnaModificato();
-    _renderDriver();
+    // Solo ammortamento italiano supportato — no-op
   }
 
   function _handleFinField(el, idx, campo) {
@@ -2376,15 +2402,101 @@ const UI = (() => {
     Projects.segnaModificato();
   }
 
+  /* ── Helper: render data_inizio come due select mese/anno ── */
+
+  function _renderEvtDataInizio(evt, idx, progetto) {
+    var anniPrev = (progetto && progetto.meta && progetto.meta.anni_previsione) || [];
+    var curMese = 1, curAnno = anniPrev[0] || new Date().getFullYear();
+    if (evt.data_inizio) {
+      var parts = String(evt.data_inizio).split('/');
+      if (parts.length === 2) {
+        curMese = parseInt(parts[0], 10) || 1;
+        curAnno = parseInt(parts[1], 10) || curAnno;
+      }
+    }
+    var html = '<div style="display:flex;gap:2px;align-items:center">';
+    html += '<select class="form-select" style="width:55px;display:inline-block;font-size:11px;padding:2px" onchange="UI._handleEvtSelect(this,' + idx + ',\'data_inizio_mese\')">';
+    for (var m = 1; m <= 12; m++) {
+      html += '<option value="' + m + '"' + (m === curMese ? ' selected' : '') + '>' + m + '</option>';
+    }
+    html += '</select><span style="font-size:10px;color:var(--color-text-muted)">/</span>';
+    html += '<select class="form-select" style="width:70px;display:inline-block;font-size:11px;padding:2px" onchange="UI._handleEvtSelect(this,' + idx + ',\'data_inizio_anno\')">';
+    for (var ai = 0; ai < anniPrev.length; ai++) {
+      html += '<option value="' + anniPrev[ai] + '"' + (anniPrev[ai] === curAnno ? ' selected' : '') + '>' + anniPrev[ai] + '</option>';
+    }
+    html += '</select></div>';
+    return html;
+  }
+
+  /* (select helpers for anno/mese/categoria are defined below with _selectAnno/_selectMese/_selectCategoria) */
+
+  /* ── IVA toggle e manual entry ─────────────────────────── */
+
+  function ciclaIva(tipo, idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var arr = progetto.driver[tipo];
+    if (!arr || !arr[idx]) return;
+    var steps = [0.22, 0.10, 0.04, 0];
+    var cur = arr[idx].iva_pct !== undefined ? arr[idx].iva_pct : 0.22;
+    var pos = -1;
+    for (var s = 0; s < steps.length; s++) {
+      if (Math.abs(steps[s] - cur) < 0.001) { pos = s; break; }
+    }
+    arr[idx].iva_pct = steps[(pos + 1) % steps.length];
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function editIvaManuale(tipo, idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    var arr = progetto.driver[tipo];
+    if (!arr || !arr[idx]) return;
+    var cur = arr[idx].iva_pct !== undefined ? arr[idx].iva_pct : 0.22;
+    var input = prompt('Inserisci aliquota IVA % (es. 22, 10, 4, 0):', String(Math.round(cur * 100)));
+    if (input === null) return;
+    var val = parseFloat(input.replace(',', '.').replace('%', ''));
+    if (isNaN(val)) return;
+    arr[idx].iva_pct = val / 100;
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  /* ── Dropdown handler per categorie/modalita/azione/sottotipo eventi ── */
+
+  function _handleEvtCategoria(el, idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi || !progetto.eventi[idx]) return;
+    progetto.eventi[idx].categoria = el.value;
+    Projects.segnaModificato();
+  }
+
+  function _handleEvtModalita(el, idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi || !progetto.eventi[idx]) return;
+    progetto.eventi[idx].modalita = el.value;
+    Projects.segnaModificato();
+  }
+
+  function _handleEvtAzione(el, idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi || !progetto.eventi[idx]) return;
+    progetto.eventi[idx].azione = el.value;
+    Projects.segnaModificato();
+  }
+
+  function _handleEvtSottotipo(el, idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi || !progetto.eventi[idx]) return;
+    progetto.eventi[idx].sottotipo = el.value;
+    Projects.segnaModificato();
+  }
+
   /* ── Bottoni ciclici per campi enum ────────────────────── */
 
   function ciclaEvtTipoAmm(idx) {
-    var progetto = Projects.getProgetto();
-    if (!progetto || !progetto.eventi[idx]) return;
-    var evt = progetto.eventi[idx];
-    evt.tipo_ammortamento = evt.tipo_ammortamento === 'francese' ? 'italiano' : 'francese';
-    Projects.segnaModificato();
-    _renderEventi();
+    // Solo ammortamento italiano supportato — no-op
   }
 
   function ciclaEvtModalita(idx) {
@@ -2482,6 +2594,100 @@ const UI = (() => {
     attivato: 'Attivato'
   };
 
+  /* ── Helper: dropdown anno per eventi ─────────────────── */
+
+  var _MESI_LABEL = ['','Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+  function _selectAnno(idx, campo, valore, progetto) {
+    var anni = progetto.meta.anni_previsione || [];
+    var html = '<select class="form-select form-select-sm" onchange="UI._handleEvtSelect(this,' + idx + ',\'' + campo + '\')">';
+    html += '<option value="">—</option>';
+    for (var a = 0; a < anni.length; a++) {
+      html += '<option value="' + anni[a] + '"' + (valore === anni[a] ? ' selected' : '') + '>' + anni[a] + '</option>';
+    }
+    html += '</select>';
+    return html;
+  }
+
+  function _selectMese(idx, campo, valore) {
+    var html = '<select class="form-select form-select-sm" onchange="UI._handleEvtSelect(this,' + idx + ',\'' + campo + '\')">';
+    for (var m = 1; m <= 12; m++) {
+      html += '<option value="' + m + '"' + (valore === m ? ' selected' : '') + '>' + _MESI_LABEL[m] + '</option>';
+    }
+    html += '</select>';
+    return html;
+  }
+
+  function _selectAnnoFine(idx, valore, progetto) {
+    var anni = progetto.meta.anni_previsione || [];
+    var ultimo = anni.length > 0 ? anni[anni.length - 1] : '';
+    var val = valore || ultimo;
+    var html = '<select class="form-select form-select-sm" onchange="UI._handleEvtSelect(this,' + idx + ',\'anno_fine\')">';
+    for (var a = 0; a < anni.length; a++) {
+      html += '<option value="' + anni[a] + '"' + (val === anni[a] ? ' selected' : '') + '>' + anni[a] + '</option>';
+    }
+    html += '</select>';
+    return html;
+  }
+
+  function _selectCategoria(idx, valore) {
+    var cats = Projects.CATEGORIE_INVESTIMENTO;
+    var html = '<select class="form-select form-select-sm" style="font-size:11px" onchange="UI._handleEvtSelect(this,' + idx + ',\'categoria\')">';
+    for (var c = 0; c < cats.length; c++) {
+      html += '<option value="' + cats[c].id + '"' + (valore === cats[c].id ? ' selected' : '') + '>' + _escapeHtml(cats[c].label) + '</option>';
+    }
+    html += '</select>';
+    return html;
+  }
+
+  function _handleEvtSelect(el, idx, campo) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi || !progetto.eventi[idx]) return;
+    var evt = progetto.eventi[idx];
+    var raw = el.value;
+    if (campo === 'data_inizio_mese' || campo === 'data_inizio_anno') {
+      // Ricomponi data_inizio da mese/anno
+      var curMese = 1, curAnno = '';
+      if (evt.data_inizio) {
+        var parts = String(evt.data_inizio).split('/');
+        if (parts.length === 2) {
+          curMese = parseInt(parts[0], 10) || 1;
+          curAnno = parts[1];
+        }
+      }
+      if (campo === 'data_inizio_mese') curMese = parseInt(raw, 10) || 1;
+      if (campo === 'data_inizio_anno') curAnno = raw;
+      evt.data_inizio = curMese + '/' + curAnno;
+    } else if (campo === 'anno' || campo === 'anno_fine' || campo === 'mese') {
+      evt[campo] = parseInt(raw, 10) || 0;
+    } else if (campo === 'categoria' || campo === 'modalita' || campo === 'azione' || campo === 'sottotipo') {
+      evt[campo] = raw;
+    }
+    Projects.segnaModificato();
+  }
+
+  /* ── Helper: IVA preset toggle ──────────────────────────── */
+
+  var _IVA_PRESETS = [0, 0.04, 0.10, 0.22];
+
+  function ciclaIvaPct(idx) {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi[idx]) return;
+    var evt = progetto.eventi[idx];
+    var cur = evt.iva_pct || 0;
+    // Find next preset
+    var nextIdx = 0;
+    for (var i = 0; i < _IVA_PRESETS.length; i++) {
+      if (Math.abs(cur - _IVA_PRESETS[i]) < 0.001) {
+        nextIdx = (i + 1) % _IVA_PRESETS.length;
+        break;
+      }
+    }
+    evt.iva_pct = _IVA_PRESETS[nextIdx];
+    Projects.segnaModificato();
+    _renderEventi();
+  }
+
   /* ── Tab 1: Nuovi Finanziamenti ────────────────────────── */
 
   function _renderEvtFinanziamenti(progetto) {
@@ -2497,19 +2703,18 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessun nuovo finanziamento pianificato.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:120px"><col style="width:80px"><col style="width:80px"><col style="width:100px"><col style="width:90px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Importo</td><td class="cell-amount">Tasso %</td><td class="cell-amount">Durata mesi</td><td class="cell-amount">Tipo amm.</td><td class="cell-amount">Data inizio</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:120px"><col style="width:80px"><col style="width:80px"><col style="width:70px"><col style="width:70px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Importo</td><td class="cell-amount">Tasso %</td><td class="cell-amount">Durata mesi</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
-        var tipoLabel = e.tipo_ammortamento === 'italiano' ? 'Italiano' : 'Francese';
         html += '<tr class="row-conto">';
         html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'tasso_annuo\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.tasso_annuo) + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'durata_mesi\')" onkeydown="UI._handleAmountKey(event)">' + (e.durata_mesi || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtTipoAmm(' + idx + ')">' + tipoLabel + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" style="font-size:12px" data-placeholder="MM/AAAA" onblur="UI._handleEvtField(this,' + idx + ',\'data_inizio\')" onkeydown="UI._handleAmountKey(event)">' + _escapeHtml(e.data_inizio || '') + '</div></td>';
+        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
+        html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2541,11 +2746,11 @@ const UI = (() => {
         var e = items[i].evt, idx = items[i].idx;
         html += '<tr class="row-conto">';
         html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:120px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="font-size:11px;white-space:nowrap" onclick="UI.ciclaEvtCategoria(' + idx + ')">' + _escapeHtml(_labelCategoria(e.categoria)) + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount">' + _selectCategoria(idx, e.categoria) + '</td>';
+        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
+        html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="22%" onblur="UI._handleEvtField(this,' + idx + ',\'iva_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.iva_pct) + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaIvaPct(' + idx + ')">' + (_formatPct(e.iva_pct) || '0%') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'aliquota_ammortamento\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.aliquota_ammortamento) + '</div></td>';
         html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
@@ -2579,11 +2784,14 @@ const UI = (() => {
         var e = items[i].evt, idx = items[i].idx;
         html += '<tr class="row-conto">';
         html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
+        html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtModalita(' + idx + ')">' + (e.modalita === 'puntuale' ? 'Puntuale' : 'Strutturale') + '</div></td>';
-        html += _renderAnnoFineCell(e, idx, ultimoAnno);
+        html += '<td class="cell-amount"><select class="form-select" style="width:auto;display:inline-block;font-size:11px" onchange="UI._handleEvtSelect(this,' + idx + ',\'modalita\')">';
+        html += '<option value="strutturale"' + (e.modalita !== 'puntuale' ? ' selected' : '') + '>Strutturale</option>';
+        html += '<option value="puntuale"' + (e.modalita === 'puntuale' ? ' selected' : '') + '>Puntuale</option>';
+        html += '</select></td>';
+        html += '<td class="cell-amount">' + _selectAnnoFine(idx, e.anno_fine, progetto) + '</td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2615,11 +2823,14 @@ const UI = (() => {
         var e = items[i].evt, idx = items[i].idx;
         html += '<tr class="row-conto">';
         html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
+        html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtModalita(' + idx + ')">' + (e.modalita === 'puntuale' ? 'Puntuale' : 'Strutturale') + '</div></td>';
-        html += _renderAnnoFineCell(e, idx, ultimoAnno);
+        html += '<td class="cell-amount"><select class="form-select" style="width:auto;display:inline-block;font-size:11px" onchange="UI._handleEvtSelect(this,' + idx + ',\'modalita\')">';
+        html += '<option value="strutturale"' + (e.modalita !== 'puntuale' ? ' selected' : '') + '>Strutturale</option>';
+        html += '<option value="puntuale"' + (e.modalita === 'puntuale' ? ' selected' : '') + '>Puntuale</option>';
+        html += '</select></td>';
+        html += '<td class="cell-amount">' + _selectAnnoFine(idx, e.anno_fine, progetto) + '</td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2651,11 +2862,14 @@ const UI = (() => {
         var e = items[i].evt, idx = items[i].idx;
         html += '<tr class="row-conto">';
         html += '<td><div class="btn btn-ghost btn-sm" style="text-align:left;font-size:12px;white-space:nowrap" onclick="UI.ciclaEvtDriver(' + idx + ')">' + _escapeHtml(_labelDriverById(progetto, e.driver_id)) + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
+        html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtModalita(' + idx + ')">' + (e.modalita === 'puntuale' ? 'Puntuale' : 'Strutturale') + '</div></td>';
-        html += _renderAnnoFineCell(e, idx, ultimoAnno);
+        html += '<td class="cell-amount"><select class="form-select" style="width:auto;display:inline-block;font-size:11px" onchange="UI._handleEvtSelect(this,' + idx + ',\'modalita\')">';
+        html += '<option value="strutturale"' + (e.modalita !== 'puntuale' ? ' selected' : '') + '>Strutturale</option>';
+        html += '<option value="puntuale"' + (e.modalita === 'puntuale' ? ' selected' : '') + '>Puntuale</option>';
+        html += '</select></td>';
+        html += '<td class="cell-amount">' + _selectAnnoFine(idx, e.anno_fine, progetto) + '</td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2687,12 +2901,15 @@ const UI = (() => {
         var e = items[i].evt, idx = items[i].idx;
         html += '<tr class="row-conto">';
         html += '<td><div class="btn btn-ghost btn-sm" style="text-align:left;font-size:12px;white-space:nowrap" onclick="UI.ciclaEvtDriver(' + idx + ')">' + _escapeHtml(_labelDriverById(progetto, e.driver_id)) + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaEvtAzione(' + idx + ')">' + (_AZIONE_LABELS[e.azione] || e.azione) + '</div></td>';
+        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
+        html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
+        html += '<td class="cell-amount"><select class="form-select" style="width:auto;display:inline-block;font-size:11px" onchange="UI._handleEvtSelect(this,' + idx + ',\'azione\')">';
+        var _azOpts = ['variazione', 'cessato', 'aumentato', 'attivato'];
+        for (var az = 0; az < _azOpts.length; az++) { html += '<option value="' + _azOpts[az] + '"' + (e.azione === _azOpts[az] ? ' selected' : '') + '>' + (_AZIONE_LABELS[_azOpts[az]] || _azOpts[az]) + '</option>'; }
+        html += '</select></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo_nuovo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo_nuovo ? _formatImporto(e.importo_nuovo) : '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'variazione_pct\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.variazione_pct) + '</div></td>';
-        html += _renderAnnoFineCell(e, idx, ultimoAnno);
+        html += '<td class="cell-amount">' + _selectAnnoFine(idx, e.anno_fine, progetto) + '</td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2724,11 +2941,11 @@ const UI = (() => {
         var e = items[i].evt, idx = items[i].idx;
         html += '<tr class="row-conto">';
         html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
+        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
+        html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'delta\')" onkeydown="UI._handleAmountKey(event)">' + (e.delta || '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'ral_nuovi\')" onkeydown="UI._handleAmountKey(event)">' + (e.ral_nuovi ? _formatImporto(e.ral_nuovi) : '') + '</div></td>';
-        html += _renderAnnoFineCell(e, idx, ultimoAnno);
+        html += '<td class="cell-amount">' + _selectAnnoFine(idx, e.anno_fine, progetto) + '</td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2760,7 +2977,7 @@ const UI = (() => {
         var e = items[i].evt, idx = items[i].idx;
         html += '<tr class="row-conto">';
         html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
+        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'pct_utilizzo\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.pct_utilizzo) + '</div></td>';
         html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
@@ -2774,8 +2991,10 @@ const UI = (() => {
   /* ── Helper: cella "Fino a" per anno di fine evento ────── */
 
   function _renderAnnoFineCell(evt, idx, ultimoAnno) {
+    var progetto = Projects.getProgetto();
+    if (progetto) return '<td class="cell-amount">' + _selectAnnoFine(idx, evt.anno_fine, progetto) + '</td>';
     var val = evt.anno_fine || ultimoAnno || '';
-    return '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="' + ultimoAnno + '" onblur="UI._handleEvtField(this,' + idx + ',\'anno_fine\')" onkeydown="UI._handleAmountKey(event)">' + val + '</div></td>';
+    return '<td class="cell-amount">' + val + '</td>';
   }
 
   function _ultimoAnnoPiano(progetto) {
@@ -2806,9 +3025,12 @@ const UI = (() => {
         var e = items[i].evt, idx = items[i].idx;
         html += '<tr class="row-conto">';
         html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'anno\')" onkeydown="UI._handleAmountKey(event)">' + (e.anno || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="1" onblur="UI._handleEvtField(this,' + idx + ',\'mese\')" onkeydown="UI._handleAmountKey(event)">' + (e.mese || '') + '</div></td>';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="font-size:11px;white-space:nowrap" onclick="UI.ciclaEvtSottotipo(' + idx + ')">' + (_SOTTOTIPO_LABELS[e.sottotipo] || e.sottotipo) + '</div></td>';
+        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
+        html += '<td class="cell-amount">' + _selectMese(idx, 'mese', e.mese) + '</td>';
+        html += '<td class="cell-amount"><select class="form-select" style="width:auto;display:inline-block;font-size:11px" onchange="UI._handleEvtSelect(this,' + idx + ',\'sottotipo\')">';
+        var _stOpts = ['versamento_capitale', 'finanziamento_soci', 'rimborso_soci'];
+        for (var st = 0; st < _stOpts.length; st++) { html += '<option value="' + _stOpts[st] + '"' + (e.sottotipo === _stOpts[st] ? ' selected' : '') + '>' + (_SOTTOTIPO_LABELS[_stOpts[st]] || _stOpts[st]) + '</option>'; }
+        html += '</select></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
         html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
@@ -3610,8 +3832,8 @@ const UI = (() => {
 
   function _formatPct(val) {
     if (val === null || val === undefined || val === 0) return '';
-    // Converti in forma percentuale per display
-    var pct = Math.abs(val) < 1 ? val * 100 : val;
+    // Storage sempre decimale (0.05 = 5%), display sempre *100
+    var pct = val * 100;
     var str = pct % 1 === 0 ? String(pct) : pct.toFixed(2).replace('.', ',').replace(/,?0+$/, '');
     return str + '%';
   }
@@ -3621,8 +3843,8 @@ const UI = (() => {
     var clean = str.replace(/%/g, '').replace(',', '.').trim();
     var val = parseFloat(clean);
     if (isNaN(val)) return 0;
-    // Restituisce sempre in forma decimale (es. "24" o "24%" -> 0.24)
-    return Math.abs(val) > 1 ? val / 100 : val;
+    // Input sempre in forma percentuale (es. "24" o "24%" -> 0.24, "150" -> 1.50)
+    return val / 100;
   }
 
   function _formatDec(val) {
@@ -3672,9 +3894,9 @@ const UI = (() => {
       case 'driver': {
         var hasRicavi = d.ricavi && d.ricavi.some(function(r) { return r.base_annuale > 0; });
         var hasCosti = d.costi && d.costi.some(function(c) { return c.importo_fisso > 0 || c.pct_ricavi > 0; });
-        var hasPers = d.personale && d.personale.headcount > 0;
-        var n = (hasRicavi ? 1 : 0) + (hasCosti ? 1 : 0) + (hasPers ? 1 : 0);
-        if (n === 3) return { status: 'complete', count: 3 };
+        // Personale: 0 dipendenti è un valore valido, non conta come mancante
+        var n = (hasRicavi ? 1 : 0) + (hasCosti ? 1 : 0);
+        if (n === 2) return { status: 'complete', count: 2 };
         if (n > 0) return { status: 'partial', count: n };
         // Nessun driver: mostra warning se SP è già compilato
         if (_isSpCompilato(progetto)) return { status: 'partial', count: 0 };
@@ -3838,7 +4060,17 @@ const UI = (() => {
     ciclaEvtAzione,
     ciclaEvtSottotipo,
     ciclaEvtCategoria,
-    ciclaEvtDriver
+    ciclaEvtDriver,
+    ciclaBaseTipo,
+    ciclaIvaPct,
+    _handleEvtSelect,
+    // New functions
+    ciclaIva,
+    editIvaManuale,
+    _handleEvtCategoria,
+    _handleEvtModalita,
+    _handleEvtAzione,
+    _handleEvtSottotipo
   };
 
 })();
