@@ -3393,6 +3393,7 @@ const UI = (() => {
 
     var vociPass = [
       { key: 'patrimonio_netto',  label: 'A. Patrimonio netto',   bold: true },
+      { key: 'utile_esercizio',   label: 'di cui: Utile (perdita) esercizio', indent: 1 },
       { key: 'tfr',               label: 'C. TFR',                indent: 1 },
       { key: 'debiti_finanziari', label: 'D.4 Debiti finanziari', indent: 1 },
       { key: 'debiti_fornitori',  label: 'D.7 Debiti fornitori',  indent: 1 },
