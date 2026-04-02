@@ -3203,7 +3203,7 @@ const UI = (() => {
       var pad = opts.indent ? 'padding-left:' + (opts.indent * 24) + 'px' : '';
       var toggle = opts.toggle ? ' class="ce-toggle" data-target="' + opts.toggle + '" style="cursor:pointer;' + pad + '"' : ' style="' + pad + '"';
       var arrow = opts.toggle ? '<span class="ce-toggle-arrow" data-target="' + opts.toggle + '">&#9654;</span> ' : '';
-      var r = '<tr class="' + cls + '"' + (opts.id ? ' id="' + opts.id + '"' : '') + '><td' + toggle + '>' + arrow + label + '</td>';
+      var r = '<tr class="' + cls + '"><td' + toggle + '>' + arrow + label + '</td>';
       for (var a = 0; a < nAnni; a++) {
         var ce = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].ce;
         var val = ce ? (ce[key] || 0) : 0;
@@ -3214,50 +3214,128 @@ const UI = (() => {
       return r;
     }
 
-    // Helper: righe dettaglio collassabili
-    function detailRows(detailKey, groupId) {
-      var r = '';
-      // Raccogli le label uniche dal primo anno che ha dati
-      var labels = [];
+    // Helper: riga dettaglio (nascosta, con stile secondario)
+    function detRow(label, values, groupId, indentPx) {
+      var r = '<tr class="row-conto ce-detail-row ' + groupId + '" style="display:none">';
+      r += '<td style="padding-left:' + indentPx + 'px;font-size:12px;color:var(--color-text-secondary)">' + _escapeHtml(label) + '</td>';
       for (var a = 0; a < nAnni; a++) {
-        var ce = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].ce;
-        var det = ce ? ce[detailKey] : null;
-        if (det && det.length > 0) {
-          for (var d = 0; d < det.length; d++) {
-            var found = false;
-            for (var l = 0; l < labels.length; l++) { if (labels[l].id === det[d].id) { found = true; break; } }
-            if (!found) labels.push({ id: det[d].id, label: det[d].label });
-          }
-        }
+        var val = values[a] || 0;
+        var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
+        r += '<td class="cell-amount"><span style="font-size:12px;color:var(--color-text-secondary)" class="' + valCls + '">' + _formatImporto(val) + '</span></td>';
       }
-      for (var li = 0; li < labels.length; li++) {
-        var lab = labels[li];
-        r += '<tr class="row-conto ce-detail-row ' + groupId + '" style="display:none"><td style="padding-left:48px;font-size:12px;color:var(--color-text-secondary)">' + _escapeHtml(lab.label) + '</td>';
-        for (var a2 = 0; a2 < nAnni; a2++) {
-          var ce2 = proiezioni[String(anniPrev[a2])] && proiezioni[String(anniPrev[a2])].ce;
-          var det2 = ce2 ? ce2[detailKey] : null;
-          var val2 = 0;
-          if (det2) { for (var d2 = 0; d2 < det2.length; d2++) { if (det2[d2].id === lab.id) { val2 = det2[d2].importo || 0; break; } } }
-          var valCls2 = val2 < 0 ? ' negative' : (val2 === 0 ? ' zero' : '');
-          r += '<td class="cell-amount"><span style="font-size:12px;color:var(--color-text-secondary)" class="' + valCls2 + '">' + _formatImporto(val2) + '</span></td>';
-        }
-        r += '</tr>\n';
-      }
+      r += '</tr>\n';
       return r;
     }
 
-    // A. Valore della produzione (con dettaglio ricavi)
+    // Helper: riga intestazione sottogruppo (nascosta)
+    function subHeader(label, groupId) {
+      return '<tr class="ce-detail-row ' + groupId + '" style="display:none"><td colspan="' + (nAnni + 1) + '" style="padding-left:36px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--color-text-muted);padding-top:6px">' + label + '</td></tr>\n';
+    }
+
+    // Helper: raccogli voci dettaglio uniche per id, con valori per anno
+    function collectDetail(detailKey) {
+      var map = {};
+      var order = [];
+      for (var a = 0; a < nAnni; a++) {
+        var ce = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].ce;
+        var det = ce ? ce[detailKey] : null;
+        if (!det) continue;
+        for (var d = 0; d < det.length; d++) {
+          var item = det[d];
+          if (!map[item.id]) {
+            map[item.id] = { id: item.id, label: item.label, tipo_driver: item.tipo_driver, voce_ce: item.voce_ce, values: [] };
+            order.push(item.id);
+          }
+          map[item.id].values[a] = item.importo || 0;
+        }
+      }
+      return order.map(function(id) { return map[id]; });
+    }
+
+    // Helper: ha almeno un anno con valore non zero?
+    function hasNonZero(values) {
+      for (var i = 0; i < values.length; i++) { if (values[i] && values[i] !== 0) return true; }
+      return false;
+    }
+
+    // ── A. Valore della produzione (con dettaglio ricavi) ──
     html += ceRow('valore_produzione', 'A. Valore della produzione', { bold: true, toggle: 'ce-det-ricavi' });
-    html += detailRows('ricavi_dettaglio', 'ce-det-ricavi');
+    var ricaviDet = collectDetail('ricavi_dettaglio');
+    ricaviDet.sort(function(a, b) { return a.label.localeCompare(b.label); });
+    for (var ri = 0; ri < ricaviDet.length; ri++) {
+      if (!hasNonZero(ricaviDet[ri].values)) continue;
+      html += detRow(ricaviDet[ri].label, ricaviDet[ri].values, 'ce-det-ricavi', 48);
+    }
 
-    // B. Costi operativi (con dettaglio costi)
+    // ── B. Costi operativi (con dettaglio categorizzato) ──
     html += ceRow('costi_totale', 'B.6-8,11-14 Costi operativi', { indent: 1, toggle: 'ce-det-costi' });
-    html += detailRows('costi_dettaglio', 'ce-det-costi');
+    var costiDet = collectDetail('costi_dettaglio');
+    // Classifica in 3 gruppi
+    var costiMP = [], costiVar = [], costiGest = [];
+    for (var ci = 0; ci < costiDet.length; ci++) {
+      var cd = costiDet[ci];
+      if (!hasNonZero(cd.values)) continue;
+      var voce = cd.voce_ce || '';
+      if (voce.indexOf('ce.B.6') === 0) {
+        costiMP.push(cd);
+      } else if (cd.tipo_driver === 'pct_ricavi') {
+        costiVar.push(cd);
+      } else {
+        costiGest.push(cd);
+      }
+    }
+    costiMP.sort(function(a, b) { return a.label.localeCompare(b.label); });
+    costiVar.sort(function(a, b) { return a.label.localeCompare(b.label); });
+    costiGest.sort(function(a, b) { return a.label.localeCompare(b.label); });
 
-    // Resto del CE
-    html += ceRow('personale_totale', 'B.9 Costo del personale', { indent: 1 });
+    if (costiMP.length > 0) {
+      html += subHeader('Materie Prime', 'ce-det-costi');
+      for (var mp = 0; mp < costiMP.length; mp++) html += detRow(costiMP[mp].label, costiMP[mp].values, 'ce-det-costi', 52);
+    }
+    if (costiVar.length > 0) {
+      html += subHeader('Costi Variabili', 'ce-det-costi');
+      for (var cv = 0; cv < costiVar.length; cv++) html += detRow(costiVar[cv].label, costiVar[cv].values, 'ce-det-costi', 52);
+    }
+    if (costiGest.length > 0) {
+      html += subHeader('Costi di Gestione', 'ce-det-costi');
+      for (var cg = 0; cg < costiGest.length; cg++) html += detRow(costiGest[cg].label, costiGest[cg].values, 'ce-det-costi', 52);
+    }
+
+    // ── B.9 Personale (con dettaglio stipendi/oneri/tfr) ──
+    html += ceRow('personale_totale', 'B.9 Costo del personale', { indent: 1, toggle: 'ce-det-pers' });
+    var persVoci = [
+      { key: 'salari', label: 'Stipendi e salari' },
+      { key: 'oneri', label: 'Oneri sociali' },
+      { key: 'tfr', label: 'TFR' }
+    ];
+    for (var pv = 0; pv < persVoci.length; pv++) {
+      var pvals = [];
+      for (var pa = 0; pa < nAnni; pa++) {
+        var ceP = proiezioni[String(anniPrev[pa])] && proiezioni[String(anniPrev[pa])].ce;
+        pvals[pa] = ceP && ceP.personale ? (ceP.personale[persVoci[pv].key] || 0) : 0;
+      }
+      if (hasNonZero(pvals)) html += detRow(persVoci[pv].label, pvals, 'ce-det-pers', 48);
+    }
+
+    // ── EBITDA ──
     html += ceRow('ebitda', 'EBITDA', { bold: true });
-    html += ceRow('ammortamenti', 'B.10 Ammortamenti', { indent: 1 });
+
+    // ── B.10 Ammortamenti (con dettaglio materiali/immateriali) ──
+    html += ceRow('ammortamenti', 'B.10 Ammortamenti', { indent: 1, toggle: 'ce-det-ammort' });
+    var ammVoci = [
+      { key: 'ammort_immateriali', label: 'Ammortamenti immateriali' },
+      { key: 'ammort_materiali', label: 'Ammortamenti materiali' }
+    ];
+    for (var av = 0; av < ammVoci.length; av++) {
+      var avals = [];
+      for (var aa = 0; aa < nAnni; aa++) {
+        var ceA = proiezioni[String(anniPrev[aa])] && proiezioni[String(anniPrev[aa])].ce;
+        avals[aa] = ceA ? (ceA[ammVoci[av].key] || 0) : 0;
+      }
+      if (hasNonZero(avals)) html += detRow(ammVoci[av].label, avals, 'ce-det-ammort', 48);
+    }
+
+    // ── Resto CE ──
     html += ceRow('ebit', 'EBIT (A-B)', { bold: true });
     html += ceRow('oneri_finanziari', 'C.17 Oneri finanziari', { indent: 1 });
     html += ceRow('risultato_ante_imposte', 'Risultato ante imposte', { bold: true });
