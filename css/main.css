@@ -1021,6 +1021,19 @@ html, body {
   border-top: 1px solid var(--color-border);
 }
 
+/* ── CE prospetto: toggle dettaglio ─────────────────── */
+
+.ce-toggle { cursor: pointer; user-select: none; }
+.ce-toggle:hover { background: var(--color-surface-alt); }
+.ce-toggle-arrow {
+  display: inline-block;
+  width: 14px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  transition: transform 0.15s;
+}
+.ce-detail-row td { border-bottom: 1px dashed var(--color-border); }
+
 /* ── SP a sezioni contrapposte (bilancio) ──────────── */
 
 .sp-bilancio-grid {
