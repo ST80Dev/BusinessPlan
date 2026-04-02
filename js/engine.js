@@ -676,7 +676,8 @@ const Engine = (() => {
       totaleIvaCredito += ivaCredito;
 
       totale += importo;
-      dettaglio.push({ id: drv.id, label: drv.label, importo: importo, iva_credito: ivaCredito });
+      dettaglio.push({ id: drv.id, label: drv.label, importo: importo, iva_credito: ivaCredito,
+        tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce });
     });
 
     return { totale: totale, iva_credito: totaleIvaCredito, dettaglio: dettaglio };
@@ -940,7 +941,8 @@ const Engine = (() => {
       totaleIvaCredito += ivaCredito;
 
       totale += importo;
-      dettaglio.push({ id: drv.id, label: drv.label, importo: importo, iva_credito: ivaCredito });
+      dettaglio.push({ id: drv.id, label: drv.label, importo: importo, iva_credito: ivaCredito,
+        tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce });
     });
 
     return { totale: totale, iva_credito: totaleIvaCredito, dettaglio: dettaglio };
