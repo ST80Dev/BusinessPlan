@@ -430,8 +430,8 @@ const Engine = (() => {
       sp.immob_materiali_nette += invMatAnno;
       sp.immobilizzazioni_nette += invImmatAnno + invMatAnno;
 
-      // SP: nuovi finanziamenti aumentano debiti
-      sp.debiti_finanziari += nuoviFinDebito;
+      // SP: debiti finanziari calcolati direttamente (residuo essere + residuo eventi)
+      sp.debiti_finanziari = finanz.residuo_totale + nuoviFinDebito;
 
       // SP: utilizzo rimanenze — riduce rimanenze e costi MP
       if (utilizzoRimanenzeAnno.length > 0) {
@@ -719,6 +719,7 @@ const Engine = (() => {
   function _calcolaFinanziamentiAnno(finanziamenti, anno, annoBase) {
     var interessiTotale = 0;
     var capitaleTotale = 0;
+    var residuoTotale = 0;
 
     (finanziamenti || []).forEach(function(fin) {
       if (!fin.capitale_residuo || !fin.tasso_annuo || !fin.durata_mesi) return;
@@ -756,11 +757,13 @@ const Engine = (() => {
 
       interessiTotale += Math.round(interessiAnno);
       capitaleTotale += Math.round(capitaleAnno);
+      residuoTotale += Math.max(0, Math.round(capResiduo));
     });
 
     return {
       interessi_totale: interessiTotale,
       capitale_rimborsato: capitaleTotale,
+      residuo_totale: residuoTotale,
       uscita_cassa: interessiTotale + capitaleTotale
     };
   }
@@ -814,6 +817,7 @@ const Engine = (() => {
     sp.altri_debiti = spPrev.altri_debiti;
 
     // Patrimonio netto: precedente + utile
+    sp.utile_esercizio = ce.utile_netto;
     sp.patrimonio_netto = spPrev.patrimonio_netto + ce.utile_netto;
 
     // Cassa calcolata dal cash flow (impostata dopo)
@@ -855,8 +859,8 @@ const Engine = (() => {
     cf.dividendi = 0;
     cf.flusso_finanziario = cf.rimborso_finanziamenti + cf.nuovi_finanziamenti - cf.dividendi;
 
-    // IVA versata/rimborsata (semplificato: saldo annuale)
-    cf.flusso_iva = -(ce.iva.da_versare || 0) + (ce.iva.a_credito || 0);
+    // IVA: non inclusa nel CF perché non tracciata nello SP (pass-through neutro)
+    cf.flusso_iva = 0;
 
     cf.flusso_netto = cf.flusso_operativo + cf.flusso_investimenti + cf.flusso_finanziario + cf.flusso_iva;
 
