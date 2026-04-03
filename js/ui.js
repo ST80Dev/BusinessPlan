@@ -1406,13 +1406,14 @@ const UI = (() => {
       var baseTipoR = r.base_tipo || 'annuale';
       var baseTipoLabelR = baseTipoR === 'mensile' ? 'Mensile' : 'Annuale';
 
+      var rid = r.id; // id stabile del driver ricavo
       html += '<tr class="row-conto">';
       // Label
-      html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'label\')">' + _escapeHtml(r.label) + '</div></td>';
+      html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'ricavi\',\'' + rid + '\',\'label\')">' + _escapeHtml(r.label) + '</div></td>';
       // Tipo toggle (Annuale/Mensile)
-      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaBaseTipo(\'ricavi\',' + i + ')">' + baseTipoLabelR + '</div></td>';
+      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaBaseTipo(\'ricavi\',\'' + rid + '\')">' + baseTipoLabelR + '</div></td>';
       // Base annuale
-      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'ricavi\',' + i + ',\'base_annuale\')" onkeydown="UI._handleAmountKey(event)">' + (r.base_annuale ? _formatImporto(r.base_annuale) : '') + '</div></td>';
+      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'ricavi\',\'' + rid + '\',\'base_annuale\')" onkeydown="UI._handleAmountKey(event)">' + (r.base_annuale ? _formatImporto(r.base_annuale) : '') + '</div></td>';
       // % per ogni anno + pulsante "→ a tutti gli anni"
       for (var a = 0; a < nAnni; a++) {
         var annoStr = String(anniPrev[a]);
@@ -1422,15 +1423,15 @@ const UI = (() => {
           html += '<td class="cell-amount"><span class="text-muted" style="font-size:11px">—</span></td>';
         } else {
           html += '<td class="cell-amount"><div style="display:flex;align-items:center;gap:2px">';
-          html += '<div class="amount-field" contenteditable="true" style="width:50px" data-placeholder="0%" onblur="UI._handleRicavoCrescitaAnno(this,' + i + ',\'' + annoStr + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(pctAnno) + '</div>';
+          html += '<div class="amount-field" contenteditable="true" style="width:50px" data-placeholder="0%" onblur="UI._handleRicavoCrescitaAnno(this,\'' + rid + '\',\'' + annoStr + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(pctAnno) + '</div>';
           if (a === 0 || (isCostitutenda && a === 1)) {
-            html += '<div class="add-conto-btn" style="font-size:10px;padding:1px 3px" onclick="UI.applicaCrescitaRiga(' + i + ',\'' + annoStr + '\')" title="Applica a tutti gli anni">→</div>';
+            html += '<div class="add-conto-btn" style="font-size:10px;padding:1px 3px" onclick="UI.applicaCrescitaRiga(\'' + rid + '\',\'' + annoStr + '\')" title="Applica a tutti gli anni">→</div>';
           }
           html += '</div></td>';
         }
       }
       // Elimina
-      html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'ricavi\',' + i + ')">✕</div></td>';
+      html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'ricavi\',\'' + rid + '\')">✕</div></td>';
       html += '</tr>';
     }
     html += '</tbody></table></div>';
@@ -1456,21 +1457,21 @@ const UI = (() => {
   }
 
   /** Cicla base_tipo tra 'annuale' e 'mensile' per driver ricavi o costi. */
-  function ciclaBaseTipo(tipo, idx) {
+  function ciclaBaseTipo(tipo, idOrIdx) {
+    var idx = _findDriverIdx(tipo, idOrIdx);
     var progetto = Projects.getProgetto();
-    if (!progetto) return;
+    if (!progetto || idx < 0) return;
     var arr = progetto.driver[tipo];
-    if (!arr || !arr[idx]) return;
     arr[idx].base_tipo = arr[idx].base_tipo === 'mensile' ? 'annuale' : 'mensile';
     Projects.segnaModificato();
     _renderDriver();
   }
 
-  function _handleRicavoCrescitaAnno(el, idx, annoStr) {
+  function _handleRicavoCrescitaAnno(el, idOrIdx, annoStr) {
+    var idx = _findDriverIdx('ricavi', idOrIdx);
     var progetto = Projects.getProgetto();
-    if (!progetto) return;
+    if (!progetto || idx < 0) return;
     var r = progetto.driver.ricavi[idx];
-    if (!r) return;
     if (typeof r.crescita_annua !== 'object' || !r.crescita_annua) r.crescita_annua = {};
     var val = _parsePct(el.textContent);
     r.crescita_annua[annoStr] = val;
@@ -1479,11 +1480,11 @@ const UI = (() => {
   }
 
   /** Applica la % del primo anno a tutti gli anni per una voce ricavo. */
-  function applicaCrescitaRiga(idx, primoAnnoStr) {
+  function applicaCrescitaRiga(idOrIdx, primoAnnoStr) {
+    var idx = _findDriverIdx('ricavi', idOrIdx);
     var progetto = Projects.getProgetto();
-    if (!progetto) return;
+    if (!progetto || idx < 0) return;
     var r = progetto.driver.ricavi[idx];
-    if (!r) return;
     if (typeof r.crescita_annua !== 'object' || !r.crescita_annua) r.crescita_annua = {};
     var val = r.crescita_annua[primoAnnoStr] || 0;
     (progetto.meta.anni_previsione || []).forEach(function(a) {
@@ -1585,6 +1586,12 @@ const UI = (() => {
       if (!gruppi[catId]) gruppi[catId] = gruppi['_altro'];
       gruppi[catId].push({ drv: c, idx: i });
     }
+    // Ordina alfabeticamente per label dentro ogni sezione
+    categorie.forEach(function(cat) {
+      if (gruppi[cat.id]) {
+        gruppi[cat.id].sort(function(a, b) { return (a.drv.label || '').localeCompare(b.drv.label || ''); });
+      }
+    });
 
     html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:90px"><col style="width:110px"><col style="width:90px"><col style="width:60px"><col style="width:60px"><col style="width:40px"></colgroup>';
 
@@ -1594,9 +1601,8 @@ const UI = (() => {
       if (!items) items = [];
       if (cat.id === '_altro' && items.length === 0) continue;
 
-      // Header categoria con pulsante "+"
-      html += '<thead><tr class="row-sottomastro"><td colspan="5" style="padding:8px 12px;font-weight:700">' + cat.label + '</td>';
-      html += '<td style="text-align:right;padding-right:12px"><div class="add-conto-btn" onclick="UI.aggiungiCosto(\'' + cat.id + '\')" style="display:inline-flex">+ Aggiungi</div></td></tr>';
+      // Header categoria
+      html += '<thead><tr class="row-sottomastro"><td colspan="7" style="padding:8px 12px;font-weight:700">' + cat.label + '</td></tr>';
       if (items.length > 0) {
         html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td class="cell-amount">IVA</td><td></td></tr>';
       }
@@ -1605,22 +1611,22 @@ const UI = (() => {
       for (var j = 0; j < items.length; j++) {
         var item = items[j];
         var cc = item.drv;
-        var ii = item.idx;
+        var did = cc.id; // id stabile del driver (non cambia con splice)
         html += '<tr class="row-conto">';
-        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:160px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'label\')">' + _escapeHtml(cc.label) + '</div></td>';
+        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:160px;font-family:var(--font-ui)" onblur="UI._handleDriverField(this,\'costi\',\'' + did + '\',\'label\')">' + _escapeHtml(cc.label) + '</div></td>';
 
         var tipoLabel = cc.tipo_driver === 'pct_ricavi' ? '% ricavi' : 'Fisso';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaTipoCosto(' + ii + ')">' + tipoLabel + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaTipoCosto(\'' + did + '\')">' + tipoLabel + '</div></td>';
 
         if (cc.tipo_driver === 'pct_ricavi') {
-          html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'pct_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.pct_ricavi) + '</div></td>';
-          html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'var_pct_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.var_pct_annua) + '</div></td>';
+          html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',\'' + did + '\',\'pct_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.pct_ricavi) + '</div></td>';
+          html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',\'' + did + '\',\'var_pct_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.var_pct_annua) + '</div></td>';
         } else {
           var baseTipoC = cc.base_tipo || 'annuale';
           var baseTipoLabelC = baseTipoC === 'mensile' ? 'Mens.' : 'Ann.';
           html += '<td class="cell-amount"><div style="display:flex;align-items:center;gap:2px">';
-          html += '<div class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 4px" onclick="UI.ciclaBaseTipo(\'costi\',' + ii + ')">' + baseTipoLabelC + '</div>';
-          html += '<div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'costi\',' + ii + ',\'importo_fisso\')" onkeydown="UI._handleAmountKey(event)">' + (cc.importo_fisso ? _formatImporto(cc.importo_fisso) : '') + '</div>';
+          html += '<div class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 4px" onclick="UI.ciclaBaseTipo(\'costi\',\'' + did + '\')">' + baseTipoLabelC + '</div>';
+          html += '<div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'costi\',\'' + did + '\',\'importo_fisso\')" onkeydown="UI._handleAmountKey(event)">' + (cc.importo_fisso ? _formatImporto(cc.importo_fisso) : '') + '</div>';
           html += '</div></td>';
           html += '<td class="cell-amount"><span class="text-muted" style="font-size:12px">—</span></td>';
         }
@@ -1630,17 +1636,19 @@ const UI = (() => {
         } else {
           var flagIcon = cc.soggetto_inflazione ? '✓' : '✕';
           var flagColor = cc.soggetto_inflazione ? 'var(--color-success)' : 'var(--color-text-muted)';
-          html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + flagColor + '" onclick="UI.toggleInflazione(' + ii + ')">' + flagIcon + '</div></td>';
+          html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + flagColor + '" onclick="UI.toggleInflazione(\'' + did + '\')">' + flagIcon + '</div></td>';
         }
 
         // IVA % (toggle button)
         var ivaPct = cc.iva_pct !== undefined ? cc.iva_pct : 0.22;
         var ivaLabel = Math.round(ivaPct * 100) + '%';
-        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaIva(\'costi\',' + ii + ')" ondblclick="UI.editIvaManuale(\'costi\',' + ii + ')" oncontextmenu="event.preventDefault();UI.editIvaManuale(\'costi\',' + ii + ')">' + ivaLabel + '</div></td>';
+        html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaIva(\'costi\',\'' + did + '\')" ondblclick="UI.editIvaManuale(\'costi\',\'' + did + '\')" oncontextmenu="event.preventDefault();UI.editIvaManuale(\'costi\',\'' + did + '\')">' + ivaLabel + '</div></td>';
 
-        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'costi\',' + ii + ')">✕</div></td>';
+        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviDriver(\'costi\',\'' + did + '\')">✕</div></td>';
         html += '</tr>';
       }
+      // Pulsante "Aggiungi" in fondo alla sezione
+      html += '<tr><td colspan="7" style="padding:4px 12px"><div class="add-conto-btn" onclick="UI.aggiungiCosto(\'' + cat.id + '\')" style="display:inline-flex">+ Aggiungi</div></td></tr>';
       html += '</tbody>';
     }
     html += '</table>';
@@ -1689,6 +1697,14 @@ const UI = (() => {
     progetto.driver.costi.push(drv);
     Projects.segnaModificato();
     _renderDriver();
+    // Scroll e focus sulla label della nuova voce
+    setTimeout(function() {
+      var fields = document.querySelectorAll('[onblur*="' + drv.id + '"][onblur*="label"]');
+      if (fields.length > 0) {
+        fields[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        fields[0].focus();
+      }
+    }, 50);
   }
 
   function importaCostiDaCE() {
@@ -1719,11 +1735,12 @@ const UI = (() => {
   /** Cicla tipo costo: solo pct_ricavi <-> fisso (personale gestito a parte). */
   function ciclaTipoDriver(idx) { ciclaTipoCosto(idx); }
 
-  function ciclaTipoCosto(idx) {
+  function ciclaTipoCosto(idOrIdx) {
+    var idx = _findDriverIdx('costi', idOrIdx);
     var progetto = Projects.getProgetto();
-    if (!progetto) return;
+    if (!progetto || idx < 0) return;
     var c = progetto.driver.costi[idx];
-    if (!c || c.usa_var_personale) return;
+    if (c.usa_var_personale) return;
 
     if (c.tipo_driver === 'pct_ricavi') {
       c.tipo_driver = 'fisso';
@@ -1884,11 +1901,11 @@ const UI = (() => {
     _renderDriver();
   }
 
-  function toggleInflazione(idx) {
+  function toggleInflazione(idOrIdx) {
+    var idx = _findDriverIdx('costi', idOrIdx);
     var progetto = Projects.getProgetto();
-    if (!progetto) return;
+    if (!progetto || idx < 0) return;
     var c = progetto.driver.costi[idx];
-    if (!c) return;
     c.soggetto_inflazione = !c.soggetto_inflazione;
     Projects.segnaModificato();
     _renderDriver();
@@ -2276,9 +2293,24 @@ const UI = (() => {
 
   /* ── Handler campi driver ────────────────────────────────── */
 
-  function _handleDriverField(el, tipo, idx, campo) {
+  // Risolve un driver per id (stringa) o indice (numero) nell'array
+  function _findDriverIdx(tipo, idOrIdx) {
     var progetto = Projects.getProgetto();
-    if (!progetto) return;
+    if (!progetto) return -1;
+    var arr = progetto.driver[tipo];
+    if (!arr) return -1;
+    if (typeof idOrIdx === 'number') return idOrIdx < arr.length ? idOrIdx : -1;
+    // Cerca per id stringa
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i].id === idOrIdx) return i;
+    }
+    return -1;
+  }
+
+  function _handleDriverField(el, tipo, idOrIdx, campo) {
+    var idx = _findDriverIdx(tipo, idOrIdx);
+    var progetto = Projects.getProgetto();
+    if (!progetto || idx < 0) return;
     var arr = progetto.driver[tipo];
     if (!arr || !arr[idx]) return;
 
@@ -2334,11 +2366,11 @@ const UI = (() => {
     _renderDriver();
   }
 
-  function rimuoviDriver(tipo, idx) {
+  function rimuoviDriver(tipo, idOrIdx) {
+    var idx = _findDriverIdx(tipo, idOrIdx);
     var progetto = Projects.getProgetto();
-    if (!progetto) return;
+    if (!progetto || idx < 0) return;
     var arr = progetto.driver[tipo];
-    if (!arr) return;
     arr.splice(idx, 1);
     Projects.segnaModificato();
     _renderDriver();
@@ -2547,11 +2579,11 @@ const UI = (() => {
 
   /* ── IVA toggle e manual entry ─────────────────────────── */
 
-  function ciclaIva(tipo, idx) {
+  function ciclaIva(tipo, idOrIdx) {
+    var idx = _findDriverIdx(tipo, idOrIdx);
     var progetto = Projects.getProgetto();
-    if (!progetto) return;
+    if (!progetto || idx < 0) return;
     var arr = progetto.driver[tipo];
-    if (!arr || !arr[idx]) return;
     var steps = [0.22, 0.10, 0.04, 0];
     var cur = arr[idx].iva_pct !== undefined ? arr[idx].iva_pct : 0.22;
     var pos = -1;
@@ -2563,11 +2595,11 @@ const UI = (() => {
     _renderDriver();
   }
 
-  function editIvaManuale(tipo, idx) {
+  function editIvaManuale(tipo, idOrIdx) {
+    var idx = _findDriverIdx(tipo, idOrIdx);
     var progetto = Projects.getProgetto();
-    if (!progetto) return;
+    if (!progetto || idx < 0) return;
     var arr = progetto.driver[tipo];
-    if (!arr || !arr[idx]) return;
     var cur = arr[idx].iva_pct !== undefined ? arr[idx].iva_pct : 0.22;
     var input = prompt('Inserisci aliquota IVA % (es. 22, 10, 4, 0):', String(Math.round(cur * 100)));
     if (input === null) return;
@@ -3267,6 +3299,19 @@ const UI = (() => {
       return '<tr class="ce-detail-row ' + groupId + '" style="display:none"><td colspan="' + (nAnni + 1) + '" style="padding-left:36px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--color-text-muted);padding-top:6px">' + label + '</td></tr>\n';
     }
 
+    // Helper: riga subtotale sottogruppo (nascosta, con somma per anno)
+    function subTotalRow(label, items, groupId) {
+      var r = '<tr class="ce-detail-row ' + groupId + '" style="display:none"><td style="padding-left:52px;font-size:12px;font-weight:600;color:var(--color-text-secondary)">' + _escapeHtml(label) + '</td>';
+      for (var a = 0; a < nAnni; a++) {
+        var sum = 0;
+        for (var k = 0; k < items.length; k++) sum += (items[k].values[a] || 0);
+        var valCls = sum < 0 ? ' negative' : (sum === 0 ? ' zero' : '');
+        r += '<td class="cell-amount"><span style="font-size:12px;font-weight:600;color:var(--color-text-secondary)" class="' + valCls + '">' + _formatImporto(sum) + '</span></td>';
+      }
+      r += '</tr>\n';
+      return r;
+    }
+
     // Helper: raccogli voci dettaglio uniche per id, con valori per anno
     function collectDetail(detailKey) {
       var map = {};
@@ -3326,14 +3371,17 @@ const UI = (() => {
     if (costiMP.length > 0) {
       html += subHeader('Materie Prime', 'ce-det-costi');
       for (var mp = 0; mp < costiMP.length; mp++) html += detRow(costiMP[mp].label, costiMP[mp].values, 'ce-det-costi', 52);
+      if (costiMP.length > 1) html += subTotalRow('Tot. Materie Prime', costiMP, 'ce-det-costi');
     }
     if (costiVar.length > 0) {
       html += subHeader('Costi Variabili', 'ce-det-costi');
       for (var cv = 0; cv < costiVar.length; cv++) html += detRow(costiVar[cv].label, costiVar[cv].values, 'ce-det-costi', 52);
+      if (costiVar.length > 1) html += subTotalRow('Tot. Costi Variabili', costiVar, 'ce-det-costi');
     }
     if (costiGest.length > 0) {
       html += subHeader('Costi di Gestione', 'ce-det-costi');
       for (var cg = 0; cg < costiGest.length; cg++) html += detRow(costiGest[cg].label, costiGest[cg].values, 'ce-det-costi', 52);
+      if (costiGest.length > 1) html += subTotalRow('Tot. Costi di Gestione', costiGest, 'ce-det-costi');
     }
 
     // ── B.9 Personale (con dettaglio stipendi/oneri/tfr) ──
