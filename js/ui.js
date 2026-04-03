@@ -1198,7 +1198,7 @@ const UI = (() => {
       var diff = totAtt - totPass;
 
       qEl.classList.remove('hidden');
-      if (Math.abs(diff) < 1) {
+      if (Math.abs(diff) < 0.01) {
         qEl.className = 'footer-quadratura ok';
         qText.textContent = 'SP quadrato: Attivo ' + _formatImporto(totAtt) + ' = Passivo ' + _formatImporto(totPass);
       } else {
@@ -1222,7 +1222,7 @@ const UI = (() => {
 
     qEl.classList.remove('hidden');
 
-    if (Math.abs(diffSP) < 1) {
+    if (Math.abs(diffSP) < 0.01) {
       qEl.className = 'footer-quadratura ok';
       qText.textContent = 'SP quadrato: ' + _formatImporto(totAttSP);
     } else {
@@ -1236,9 +1236,21 @@ const UI = (() => {
   function _formatImporto(val) {
     if (val === 0 || val === undefined || val === null) return '0';
     var neg = val < 0;
-    var abs = Math.abs(Math.round(val));
+    var abs = Math.abs(val);
+    // Separa parte intera e decimale
+    var intPart = Math.floor(abs);
+    var decPart = abs - intPart;
     // Separatore migliaia manuale (il toLocaleString puo non funzionare ovunque)
-    var str = String(abs).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    var str = String(intPart).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    // Mostra i decimali (virgola) solo se presenti
+    if (decPart > 0.00001) {
+      // Arrotonda a 2 decimali per evitare errori floating point
+      var dec = Math.round(decPart * 100);
+      if (dec >= 100) { intPart += 1; dec = 0; str = String(intPart).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+      if (dec > 0) {
+        str += ',' + (dec < 10 ? '0' + dec : String(dec));
+      }
+    }
     return neg ? '-' + str : str;
   }
 
@@ -1246,7 +1258,9 @@ const UI = (() => {
     if (!str || str.trim() === '') return 0;
     var clean = str.replace(/\./g, '').replace(',', '.').trim();
     var val = parseFloat(clean);
-    return isNaN(val) ? 0 : Math.round(val);
+    if (isNaN(val)) return 0;
+    // Preserva i decimali (arrotonda a 2 cifre per evitare errori floating point)
+    return Math.round(val * 100) / 100;
   }
 
   /* ══════════════════════════════════════════════════════════
