@@ -44,6 +44,12 @@ const UI = (() => {
     // Se non c'e progetto aperto, solo home e accessibile
     if (sezione !== 'home' && !Projects.getProgetto()) return;
 
+    // Forza commit di eventuali campi editabili ancora attivi
+    // (il blur potrebbe non scattare in tempo su contenteditable)
+    if (document.activeElement && document.activeElement.blur) {
+      document.activeElement.blur();
+    }
+
     // Cleanup chart dashboard prima di cambiare sezione
     _destroyDashboardCharts();
 
