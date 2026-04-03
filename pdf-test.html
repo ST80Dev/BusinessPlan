@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Bilancio - Test Estrazione</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --color-bg: #F5F7FA;
+  --color-surface: #FFFFFF;
+  --color-accent: #2A7AC7;
+  --color-accent-light: #D6E8F8;
+  --color-accent-hover: #1F62A0;
+  --color-text-primary: #1A2535;
+  --color-text-secondary: #4A5568;
+  --color-text-muted: #8A96A8;
+  --color-border: #D0D9E8;
+  --color-success: #27AE60;
+  --color-success-bg: #E8F8EF;
+  --color-warning: #E67E22;
+  --color-warning-bg: #FEF3E7;
+  --color-error: #C0392B;
+  --color-error-bg: #FDEDEC;
+  --font-ui: 'DM Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-ui);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+.header .badge {
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--color-accent-light);
+  color: var(--color-accent);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Main layout */
+.main {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  grid-template-rows: 1fr auto;
+  gap: 16px;
+  padding: 16px 24px;
+  height: calc(100vh - 65px);
+}
+
+/* Panels */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+/* Drop zone */
+.drop-zone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 32px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  margin-bottom: 12px;
+}
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-light);
+}
+.drop-zone p {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.drop-zone .hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.drop-zone input[type="file"] { display: none; }
+
+/* Extracted text */
+.text-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.text-col {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 100%;
+  overflow-y: auto;
+}
+.text-col-label {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--color-accent);
+  margin-bottom: 4px;
+}
+
+/* Correspondence table */
+.corr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.corr-table th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--color-border);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  z-index: 1;
+}
+.corr-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+.corr-table tr.status-auto { background: var(--color-success-bg); }
+.corr-table tr.status-partial { background: var(--color-warning-bg); }
+.corr-table tr.status-none { background: var(--color-error-bg); }
+
+.corr-table td.pdf-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.corr-table td.value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+.corr-table select {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  width: 100%;
+  max-width: 280px;
+}
+.corr-table .status-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.status-badge.auto    { background: var(--color-success); color: #fff; }
+.status-badge.partial { background: var(--color-warning); color: #fff; }
+.status-badge.none    { background: var(--color-error);   color: #fff; }
+.status-badge.manual  { background: var(--color-accent);  color: #fff; }
+
+/* Bottom bar */
+.bottom-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 0 0;
+}
+.btn {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--color-accent-hover); }
+.btn-secondary {
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+.btn-secondary:hover { background: var(--color-border); }
+.btn-danger {
+  background: var(--color-error);
+  color: #fff;
+}
+.btn-danger:hover { background: #A93226; }
+
+.spacer { flex: 1; }
+.status-msg {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* Loading spinner */
+.spinner {
+  display: none;
+  text-align: center;
+  padding: 24px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+.spinner.active { display: block; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>PDF Bilancio - Test Estrazione</h1>
+  <span class="badge">Sperimentale</span>
+</div>
+
+<div class="main">
+  <!-- Left panel -->
+  <div class="panel">
+    <div class="panel-header">Carica PDF e testo estratto</div>
+    <div class="panel-body">
+      <div class="drop-zone" id="dropZone">
+        <p>Trascina qui un PDF di bilancio</p>
+        <span class="hint">oppure clicca per selezionare un file</span>
+        <input type="file" id="fileInput" accept=".pdf">
+      </div>
+      <div class="spinner" id="spinner">Estrazione testo in corso...</div>
+      <div id="textOutput">
+        <div class="text-columns">
+          <div>
+            <div class="text-col-label">ATTIVO (sinistra)</div>
+            <div class="text-col" id="colLeft">Nessun testo estratto</div>
+          </div>
+          <div>
+            <div class="text-col-label">PASSIVO (destra)</div>
+            <div class="text-col" id="colRight">Nessun testo estratto</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right panel -->
+  <div class="panel">
+    <div class="panel-header">Tabella di corrispondenza</div>
+    <div class="panel-body" style="padding: 0;">
+      <table class="corr-table" id="corrTable">
+        <thead>
+          <tr>
+            <th>Testo PDF</th>
+            <th>Valore</th>
+            <th>Voce Schema</th>
+            <th>Stato</th>
+          </tr>
+        </thead>
+        <tbody id="corrBody">
+          <tr><td colspan="4" style="text-align:center;color:var(--color-text-muted);padding:32px;">Carica un PDF per iniziare</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="bottom-bar">
+    <button class="btn btn-primary" id="btnSave" disabled>Salva mapping</button>
+    <button class="btn btn-secondary" id="btnExport" disabled>Esporta JSON</button>
+    <button class="btn btn-danger" id="btnClear">Cancella mapping</button>
+    <div class="spacer"></div>
+    <span class="status-msg" id="statusMsg"></span>
+  </div>
+</div>
+
+<!-- Schema.js loaded as regular script -->
+<script src="js/schema.js"></script>
+
+<!-- Main logic as ES module for pdf.js -->
+<script type="module">
+import * as pdfjsLib from './lib/pdf.min.mjs';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = './lib/pdf.worker.min.mjs';
+
+// ── State ──
+let extractedRows = [];  // { text, value, schemaId, status, column }
+let schemaDict = {};     // normalized_label -> { id, label }
+let allSchemaNodes = [];  // flat list of { id, label }
+let savedMapping = {};   // text -> schemaId  from localStorage
+
+// ── Build schema dictionary ──
+function normalizeLabel(s) {
+  return s.toLowerCase()
+    .replace(/[''`\u2019\u2018]/g, "'")
+    .replace(/[^\w\s'àèéìòùç]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function walkTree(nodes, collector) {
+  for (const node of nodes) {
+    collector.push({ id: node.id, label: node.label });
+    const key = normalizeLabel(node.label);
+    schemaDict[key] = { id: node.id, label: node.label };
+    if (node.children) walkTree(node.children, collector);
+  }
+}
+
+function buildDictionary() {
+  schemaDict = {};
+  allSchemaNodes = [];
+  if (typeof Schema === 'undefined') {
+    console.error('Schema.js not loaded');
+    return;
+  }
+  walkTree(Schema.SP_ATTIVO, allSchemaNodes);
+  walkTree(Schema.SP_PASSIVO, allSchemaNodes);
+  walkTree(Schema.CE, allSchemaNodes);
+}
+
+buildDictionary();
+
+// Load saved mapping
+try {
+  const raw = localStorage.getItem('bp_pdf_mapping');
+  if (raw) savedMapping = JSON.parse(raw);
+} catch(e) { savedMapping = {}; }
+
+// ── Number parsing (Italian format) ──
+function parseItalianNumber(s) {
+  // Match patterns like 1.234.567,89 or 1234567,89 or 1.234 or just 1234
+  const m = s.match(/([\d.]+,\d{2})\b/);
+  if (m) {
+    return parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+  }
+  // Try plain integer with dots as thousands
+  const m2 = s.match(/\b(\d{1,3}(?:\.\d{3})+)\b/);
+  if (m2) {
+    return parseFloat(m2[1].replace(/\./g, ''));
+  }
+  // Try plain number
+  const m3 = s.match(/\b(\d+)\b/);
+  if (m3 && m3[1].length >= 2) {
+    return parseFloat(m3[1]);
+  }
+  return null;
+}
+
+function formatItalianNumber(n) {
+  if (n == null) return '';
+  return n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+// ── Matching logic ──
+function findBestMatch(text) {
+  const norm = normalizeLabel(text);
+  if (!norm) return null;
+
+  // Check saved mapping first
+  if (savedMapping[text]) {
+    const node = allSchemaNodes.find(n => n.id === savedMapping[text]);
+    if (node) return { id: node.id, label: node.label, status: 'manual' };
+  }
+
+  // Exact match
+  if (schemaDict[norm]) {
+    return { ...schemaDict[norm], status: 'auto' };
+  }
+
+  // Substring match: check if any schema label is contained in the PDF text or vice versa
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const [key, entry] of Object.entries(schemaDict)) {
+    // Skip very short keys (like "Altre", "Acconti") to avoid false positives
+    if (key.length < 6) continue;
+
+    let score = 0;
+    if (norm.includes(key)) {
+      score = key.length / norm.length;
+    } else if (key.includes(norm) && norm.length >= 8) {
+      score = norm.length / key.length;
+    } else {
+      // Word-based overlap
+      const wordsA = norm.split(' ').filter(w => w.length > 3);
+      const wordsB = key.split(' ').filter(w => w.length > 3);
+      if (wordsA.length > 0 && wordsB.length > 0) {
+        const common = wordsA.filter(w => wordsB.includes(w));
+        score = common.length / Math.max(wordsA.length, wordsB.length);
+      }
+    }
+
+    if (score > bestScore && score >= 0.4) {
+      bestScore = score;
+      bestMatch = { ...entry, status: score >= 0.7 ? 'auto' : 'partial' };
+    }
+  }
+
+  return bestMatch;
+}
+
+// ── PDF Extraction ──
+async function extractPdf(arrayBuffer) {
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const allItems = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.0 });
+    const textContent = await page.getTextContent();
+    const pageWidth = viewport.width;
+
+    for (const item of textContent.items) {
+      if (!item.str || !item.str.trim()) continue;
+      const x = item.transform[4];
+      const y = item.transform[5];
+      allItems.push({
+        text: item.str.trim(),
+        x, y,
+        page: i,
+        column: x < pageWidth / 2 ? 'left' : 'right',
+        pageWidth
+      });
+    }
+  }
+
+  return allItems;
+}
+
+function groupIntoLines(items) {
+  // Group items by page and approximate y-coordinate (within 3 units)
+  const lines = [];
+  const sorted = [...items].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
+
+  let currentLine = null;
+  for (const item of sorted) {
+    if (!currentLine || currentLine.page !== item.page || Math.abs(currentLine.y - item.y) > 3) {
+      currentLine = { page: item.page, y: item.y, items: [], column: item.column };
+      lines.push(currentLine);
+    }
+    currentLine.items.push(item);
+    // Column is determined by leftmost item
+    if (item.x < currentLine.items[0].x) {
+      currentLine.column = item.column;
+    }
+  }
+
+  // Merge items into text per line
+  return lines.map(line => {
+    const sortedItems = line.items.sort((a, b) => a.x - b.x);
+    const text = sortedItems.map(i => i.text).join(' ');
+    // Determine column by the x of the label (first non-number item)
+    const firstItem = sortedItems[0];
+    return {
+      text,
+      column: firstItem.column,
+      page: line.page,
+      x: firstItem.x,
+      y: line.y
+    };
+  });
+}
+
+function processLines(lines) {
+  extractedRows = [];
+
+  for (const line of lines) {
+    const text = line.text;
+    if (!text || text.length < 3) continue;
+
+    // Try to separate label from value
+    // Value is typically at the end of the line
+    const value = parseItalianNumber(text);
+
+    // Get label part (remove the number at the end)
+    let label = text;
+    if (value != null) {
+      // Remove the last number occurrence
+      label = text.replace(/([\d.]+,\d{2})\s*$/, '').replace(/\b(\d{1,3}(?:\.\d{3})+)\s*$/, '').replace(/\b(\d+)\s*$/, '').trim();
+    }
+    if (!label) label = text;
+
+    const match = findBestMatch(label);
+
+    extractedRows.push({
+      text: label,
+      fullText: text,
+      value,
+      column: line.column,
+      schemaId: match ? match.id : '',
+      schemaLabel: match ? match.label : '',
+      status: match ? match.status : 'none',
+      page: line.page
+    });
+  }
+}
+
+// ── UI Rendering ──
+function renderTextColumns() {
+  const leftLines = extractedRows.filter(r => r.column === 'left');
+  const rightLines = extractedRows.filter(r => r.column === 'right');
+
+  document.getElementById('colLeft').textContent =
+    leftLines.map(r => {
+      const v = r.value != null ? `  ${formatItalianNumber(r.value)}` : '';
+      return r.text + v;
+    }).join('\n') || 'Nessun testo nella colonna sinistra';
+
+  document.getElementById('colRight').textContent =
+    rightLines.map(r => {
+      const v = r.value != null ? `  ${formatItalianNumber(r.value)}` : '';
+      return r.text + v;
+    }).join('\n') || 'Nessun testo nella colonna destra';
+}
+
+function renderCorrespondenceTable() {
+  const tbody = document.getElementById('corrBody');
+  if (extractedRows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--color-text-muted);padding:32px;">Carica un PDF per iniziare</td></tr>';
+    return;
+  }
+
+  // Build options HTML once
+  const optionsHtml = '<option value="">-- Nessuna corrispondenza --</option>' +
+    allSchemaNodes.map(n =>
+      `<option value="${n.id}">${n.id} - ${n.label}</option>`
+    ).join('');
+
+  tbody.innerHTML = extractedRows.map((row, idx) => {
+    const statusClass = row.status === 'auto' ? 'status-auto' :
+                        row.status === 'partial' ? 'status-partial' :
+                        row.status === 'manual' ? 'status-auto' : 'status-none';
+    const badgeClass = row.status === 'auto' ? 'auto' :
+                       row.status === 'partial' ? 'partial' :
+                       row.status === 'manual' ? 'manual' : 'none';
+    const badgeText = row.status === 'auto' ? 'Auto' :
+                      row.status === 'partial' ? 'Parziale' :
+                      row.status === 'manual' ? 'Manuale' : 'Non trovato';
+
+    return `<tr class="${statusClass}" data-idx="${idx}">
+      <td class="pdf-text" title="${row.fullText}">${escapeHtml(row.text)}</td>
+      <td class="value">${row.value != null ? formatItalianNumber(row.value) : ''}</td>
+      <td>
+        <select data-idx="${idx}">
+          ${optionsHtml.replace(
+            `value="${row.schemaId}"`,
+            `value="${row.schemaId}" selected`
+          )}
+        </select>
+      </td>
+      <td><span class="status-badge ${badgeClass}">${badgeText}</span></td>
+    </tr>`;
+  }).join('');
+
+  // Attach change listeners
+  tbody.querySelectorAll('select').forEach(sel => {
+    sel.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.dataset.idx);
+      const row = extractedRows[idx];
+      row.schemaId = e.target.value;
+      if (e.target.value) {
+        const node = allSchemaNodes.find(n => n.id === e.target.value);
+        row.schemaLabel = node ? node.label : '';
+        row.status = 'manual';
+      } else {
+        row.schemaLabel = '';
+        row.status = 'none';
+      }
+      renderCorrespondenceTable();
+    });
+  });
+
+  updateButtons();
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function updateButtons() {
+  const hasData = extractedRows.length > 0;
+  document.getElementById('btnSave').disabled = !hasData;
+  document.getElementById('btnExport').disabled = !hasData;
+}
+
+function setStatus(msg) {
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+// ── File handling ──
+async function handleFile(file) {
+  if (!file || file.type !== 'application/pdf') {
+    setStatus('Seleziona un file PDF valido.');
+    return;
+  }
+
+  const spinner = document.getElementById('spinner');
+  spinner.classList.add('active');
+  setStatus(`Caricamento: ${file.name}...`);
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const items = await extractPdf(buffer);
+    const lines = groupIntoLines(items);
+    processLines(lines);
+    renderTextColumns();
+    renderCorrespondenceTable();
+
+    const autoCount = extractedRows.filter(r => r.status === 'auto').length;
+    const partialCount = extractedRows.filter(r => r.status === 'partial').length;
+    const manualCount = extractedRows.filter(r => r.status === 'manual').length;
+    setStatus(`Estratte ${extractedRows.length} righe. Auto: ${autoCount}, Parziali: ${partialCount}, Manuali: ${manualCount}, Non trovati: ${extractedRows.length - autoCount - partialCount - manualCount}`);
+  } catch (err) {
+    console.error(err);
+    setStatus(`Errore: ${err.message}`);
+  } finally {
+    spinner.classList.remove('active');
+  }
+}
+
+// ── Event listeners ──
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => {
+  dropZone.classList.remove('dragover');
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  handleFile(file);
+});
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) handleFile(file);
+});
+
+// Save mapping
+document.getElementById('btnSave').addEventListener('click', () => {
+  const mapping = {};
+  for (const row of extractedRows) {
+    if (row.schemaId) {
+      mapping[row.text] = row.schemaId;
+    }
+  }
+  localStorage.setItem('bp_pdf_mapping', JSON.stringify(mapping));
+  savedMapping = mapping;
+  setStatus(`Mapping salvato: ${Object.keys(mapping).length} corrispondenze in localStorage.`);
+});
+
+// Export JSON
+document.getElementById('btnExport').addEventListener('click', () => {
+  const exportData = extractedRows
+    .filter(r => r.schemaId)
+    .map(r => ({
+      pdfText: r.text,
+      value: r.value,
+      schemaId: r.schemaId,
+      schemaLabel: r.schemaLabel,
+      status: r.status,
+      column: r.column
+    }));
+
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'pdf_mapping.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus(`Esportato JSON con ${exportData.length} voci.`);
+});
+
+// Clear mapping
+document.getElementById('btnClear').addEventListener('click', () => {
+  if (confirm('Cancellare il mapping salvato in localStorage?')) {
+    localStorage.removeItem('bp_pdf_mapping');
+    savedMapping = {};
+    setStatus('Mapping cancellato da localStorage.');
+  }
+});
+</script>
+</body>
+</html>
