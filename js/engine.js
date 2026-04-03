@@ -202,7 +202,6 @@ const Engine = (() => {
     for (var i = 0; i < anniPrev.length; i++) {
       var anno = anniPrev[i];
       var annoStr = String(anno);
-      var inflazione = (fisc.inflazione && fisc.inflazione[annoStr]) || 0;
 
       // ── Elabora eventi per questo anno ──
       var nuoviFinAnno = [];      // nuovi finanziamenti che partono quest'anno
@@ -300,11 +299,11 @@ const Engine = (() => {
       }
 
       // 1. RICAVI (con moltiplicatori eventi)
-      var ricavi = _calcolaRicaviAnno(driver.ricavi, anno, annoBase, inflazione, p.meta);
+      var ricavi = _calcolaRicaviAnno(driver.ricavi, anno, annoBase, fisc.inflazione, p.meta);
       ricavi.totale = Math.round(ricavi.totale * multRicaviStrutt * multRicaviPunt);
 
       // 2. COSTI (con eventi: variazione MP, costi variabili, costi gestione)
-      var costi = _calcolaCostiAnnoConEventi(driver.costi, ricavi.totale, anno, annoBase, inflazione,
+      var costi = _calcolaCostiAnnoConEventi(driver.costi, ricavi.totale, anno, annoBase, fisc.inflazione,
         multCostiMPStrutt * multCostiMPPunt, multCostiVarStrutt, multCostiVarPunt, costiGestOverride, p.meta);
 
       // 3. PERSONALE (con variazioni da eventi)
@@ -632,7 +631,7 @@ const Engine = (() => {
 
   /* ── Ricavi ──────────────────────────────────────────────── */
 
-  function _calcolaRicaviAnno(driverRicavi, anno, annoBase, inflazione, meta) {
+  function _calcolaRicaviAnno(driverRicavi, anno, annoBase, inflazioneMap, meta) {
     var totale = 0;
     var dettaglio = [];
     var isCostitutenda = meta && meta.scenario === 'costituenda';
@@ -650,7 +649,7 @@ const Engine = (() => {
           base = base * 12;
         }
       }
-      // Crescita cumulativa anno su anno con % distinta per anno + inflazione composta
+      // Crescita cumulativa anno su anno con % distinta per anno + inflazione per anno
       var importo = base;
       for (var a = primoAnnoPrev; a <= anno; a++) {
         var crescita = 0;
@@ -660,8 +659,9 @@ const Engine = (() => {
           crescita = drv.crescita_annua; // retrocompatibilita
         }
         importo = importo * (1 + crescita);
-        // Inflazione composta sui ricavi (come per i costi)
-        if (inflazione) importo = importo * (1 + inflazione);
+        // Inflazione specifica dell'anno a (non dell'anno di calcolo)
+        var infAnno = (inflazioneMap && inflazioneMap[String(a)]) || 0;
+        if (infAnno) importo = importo * (1 + infAnno);
       }
       importo = Math.round(importo);
       totale += importo;
@@ -673,7 +673,7 @@ const Engine = (() => {
 
   /* ── Costi ───────────────────────────────────────────────── */
 
-  function _calcolaCostiAnno(driverCosti, ricaviTotale, anno, annoBase, inflazione, meta) {
+  function _calcolaCostiAnno(driverCosti, ricaviTotale, anno, annoBase, inflazioneMap, meta) {
     var totale = 0;
     var totaleIvaCredito = 0;
     var dettaglio = [];
@@ -703,9 +703,14 @@ const Engine = (() => {
             base = base * 12;
           }
         }
-        var anniDiff2 = anno - annoBase;
-        if (drv.soggetto_inflazione && inflazione && anniDiff2 > 0) {
-          importo = Math.round(base * Math.pow(1 + inflazione, anniDiff2));
+        if (drv.soggetto_inflazione && anno > annoBase) {
+          // Inflazione cumulativa anno per anno con il tasso specifico di ogni anno
+          var fattoreInfl = 1;
+          for (var a = annoBase + 1; a <= anno; a++) {
+            var infAnno = (inflazioneMap && inflazioneMap[String(a)]) || 0;
+            fattoreInfl *= (1 + infAnno);
+          }
+          importo = Math.round(base * fattoreInfl);
         } else {
           importo = base;
         }
@@ -888,7 +893,7 @@ const Engine = (() => {
   /**
    * Calcola costi annuali con applicazione degli eventi (variazioni MP, costi variabili, costi gestione).
    */
-  function _calcolaCostiAnnoConEventi(driverCosti, ricaviTotale, anno, annoBase, inflazione,
+  function _calcolaCostiAnnoConEventi(driverCosti, ricaviTotale, anno, annoBase, inflazioneMap,
       multMP, multCostiVarStrutt, multCostiVarPunt, costiGestOverride, meta) {
     var totale = 0;
     var totaleIvaCredito = 0;
@@ -921,9 +926,14 @@ const Engine = (() => {
             base = base * 12;
           }
         }
-        var anniDiff2 = anno - annoBase;
-        if (drv.soggetto_inflazione && inflazione && anniDiff2 > 0) {
-          importo = Math.round(base * Math.pow(1 + inflazione, anniDiff2));
+        if (drv.soggetto_inflazione && anno > annoBase) {
+          // Inflazione cumulativa anno per anno con il tasso specifico di ogni anno
+          var fattoreInfl = 1;
+          for (var a = annoBase + 1; a <= anno; a++) {
+            var infAnno = (inflazioneMap && inflazioneMap[String(a)]) || 0;
+            fattoreInfl *= (1 + infAnno);
+          }
+          importo = Math.round(base * fattoreInfl);
         } else {
           importo = base;
         }
