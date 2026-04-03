@@ -303,6 +303,53 @@ const Projects = (() => {
   let _nextDriverId = 1;
 
   /**
+   * Scorre tutti i driver esistenti e aggiorna _nextDriverId
+   * per evitare collisioni con ID già in uso.
+   * Ripara anche eventuali ID duplicati assegnandone di nuovi.
+   */
+  function _sincronizzaDriverIdCounter(progetto) {
+    if (!progetto || !progetto.driver) return;
+    var maxId = 0;
+    var tuttiId = {};
+    var arr = (progetto.driver.ricavi || []).concat(progetto.driver.costi || []);
+
+    // Prima passata: trova il max e rileva duplicati
+    for (var i = 0; i < arr.length; i++) {
+      var drv = arr[i];
+      if (!drv.id) continue;
+      var match = drv.id.match(/^drv_[rc](\d+)$/);
+      if (match) {
+        var num = parseInt(match[1], 10);
+        if (num > maxId) maxId = num;
+      }
+      if (tuttiId[drv.id]) {
+        // ID duplicato — verrà riparato nella seconda passata
+        tuttiId[drv.id].push(i);
+      } else {
+        tuttiId[drv.id] = [i];
+      }
+    }
+
+    _nextDriverId = maxId + 1;
+
+    // Seconda passata: ripara ID duplicati (assegna nuovo id a tutti tranne il primo)
+    var riparati = 0;
+    Object.keys(tuttiId).forEach(function(id) {
+      var indices = tuttiId[id];
+      if (indices.length <= 1) return;
+      for (var j = 1; j < indices.length; j++) {
+        var drv = arr[indices[j]];
+        var prefisso = drv.id.indexOf('drv_r') === 0 ? 'drv_r' : 'drv_c';
+        drv.id = _generaDriverId(prefisso);
+        riparati++;
+      }
+    });
+    if (riparati > 0) {
+      segnaModificato();
+    }
+  }
+
+  /**
    * Genera un ID univoco per un driver ricavo o costo.
    * @param {string} prefisso - 'drv_r' o 'drv_c'
    * @returns {string}
@@ -632,6 +679,7 @@ const Projects = (() => {
           return;
         }
         _progettoCorrente = dati;
+        _sincronizzaDriverIdCounter(dati);
         _modificato = false;
         _aggiungiRecente(dati);
         UI.onProgettoAperto(dati);
