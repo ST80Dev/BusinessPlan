@@ -3282,15 +3282,19 @@ const UI = (() => {
       var cls = opts.bold ? 'row-totale' : 'row-conto';
       var pad = opts.indent ? 'padding-left:' + (opts.indent * 24) + 'px' : '';
       var fKey = 'ce.' + key;
-      var tipAttr = _tipLabel(fKey);
+      // Use first year's trace for label tooltip (formula description)
+      var firstTrace = proiezioni[String(anniPrev[0])] && proiezioni[String(anniPrev[0])]._trace;
+      var tipAttr = _tipLabel(firstTrace && firstTrace[fKey], fKey);
       var toggle = opts.toggle ? ' class="ce-toggle" data-target="' + opts.toggle + '" style="cursor:pointer;' + pad + '"' + tipAttr : ' style="' + pad + '"' + tipAttr;
       var arrow = opts.toggle ? '<span class="ce-toggle-arrow" data-target="' + opts.toggle + '">&#9654;</span> ' : '';
       var r = '<tr class="' + cls + '"><td' + toggle + '>' + arrow + label + '</td>';
       for (var a = 0; a < nAnni; a++) {
-        var ce = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].ce;
+        var annoData = proiezioni[String(anniPrev[a])];
+        var ce = annoData && annoData.ce;
+        var trace = annoData && annoData._trace;
         var val = ce ? (ce[key] || 0) : 0;
         var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
-        var tipOpen = _tipValue(fKey, ce);
+        var tipOpen = _tipValue(trace && trace[fKey]);
         var tipClose = tipOpen ? '</span>' : '';
         r += '<td class="cell-amount">' + tipOpen + '<span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span>' + tipClose + '</td>';
       }
@@ -4058,32 +4062,17 @@ const UI = (() => {
       c: [{k:'flusso_operativo',l:'Flusso operativo',s:'+'},{k:'flusso_investimenti',l:'Flusso investimenti',s:'+'},{k:'flusso_finanziario',l:'Flusso finanziario',s:'+'}] }
   };
 
-  /** Genera tooltip HTML per l'etichetta (descrizione formula) */
-  function _tipLabel(formulaKey) {
-    var f = _formule[formulaKey];
-    if (!f) return '';
-    return ' title="' + _escapeHtml(f.desc) + '"';
+  /** Genera tooltip attr dal trace engine (stringa) o fallback _formule */
+  function _tipLabel(traceStr, formulaKey) {
+    var desc = traceStr || (formulaKey && _formule[formulaKey] ? _formule[formulaKey].desc : '');
+    if (!desc) return '';
+    return ' title="' + _escapeHtml(desc) + '"';
   }
 
-  /** Genera tooltip HTML per il valore (breakdown numerico) */
-  function _tipValue(formulaKey, data) {
-    var f = _formule[formulaKey];
-    if (!f || !f.c || !data) return '';
-    var rows = '';
-    for (var i = 0; i < f.c.length; i++) {
-      var comp = f.c[i];
-      var val = data[comp.k] || 0;
-      if (val === 0 && f.c.length > 4) continue; // nascondi zeri se formula lunga
-      // Contributo effettivo: il segno della formula applicato al valore
-      var effVal = comp.s === '-' ? -val : val;
-      var sign = effVal < 0 ? '−' : '+';
-      var negCls = effVal < 0 ? ' neg' : '';
-      var absVal = Math.abs(effVal);
-      rows += '<div class="tip-row"><span class="tip-sign">' + (i === 0 ? '' : sign) +
-        '</span><span class="tip-label">' + _escapeHtml(comp.l) +
-        '</span><span class="tip-val' + negCls + '">' + _formatImporto(absVal) + '</span></div>';
-    }
-    return '<span class="formula-tip"><span class="tip-box">' + rows + '</span>';
+  /** Genera tooltip wrapper con trace engine per il valore numerico */
+  function _tipValue(traceStr) {
+    if (!traceStr) return '';
+    return '<span class="formula-tip"><span class="tip-box"><div class="tip-row"><span class="tip-label" style="white-space:normal">' + _escapeHtml(traceStr) + '</span></div></span>';
   }
 
   /* ── Helper riga prospetto ───────────────────────────────── */
@@ -4092,13 +4081,16 @@ const UI = (() => {
     var cls = v.highlight ? 'row-totale' : (v.bold ? 'row-totale' : 'row-conto');
     var pad = v.indent ? 'padding-left:24px' : '';
     var fKey = sezione + '.' + v.key;
-    var tipAttr = _tipLabel(fKey);
+    var firstTrace = proiezioni[String(anniPrev[0])] && proiezioni[String(anniPrev[0])]._trace;
+    var tipAttr = _tipLabel(firstTrace && firstTrace[fKey], fKey);
     var html = '<tr class="' + cls + '"><td style="' + pad + '"' + tipAttr + '>' + v.label + '</td>';
     for (var a = 0; a < anniPrev.length; a++) {
-      var data = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])][sezione];
+      var annoData = proiezioni[String(anniPrev[a])];
+      var data = annoData && annoData[sezione];
+      var trace = annoData && annoData._trace;
       var val = data ? (data[v.key] || 0) : 0;
       var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
-      var tipOpen = _tipValue(fKey, data);
+      var tipOpen = _tipValue(trace && trace[fKey]);
       var tipClose = tipOpen ? '</span>' : '';
       html += '<td class="cell-amount">' + tipOpen + '<span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span>' + tipClose + '</td>';
     }

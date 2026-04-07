@@ -1156,8 +1156,9 @@ html, body {
   font-size: 11px;
   line-height: 1.5;
   font-family: var(--font-mono);
-  white-space: nowrap;
+  white-space: normal;
   min-width: 180px;
+  max-width: 360px;
 }
 .formula-tip:hover .tip-box { display: block; }
 /* Tooltip etichetta: appare sotto a destra */

@@ -453,6 +453,7 @@ const Engine = (() => {
 
       // 9. SP
       // SP: usa ammortPerSP (senza nuovi investimenti dell'anno, che vengono aggiunti dopo)
+      var spPrev_saved = spPrev; // salva per trace
       var sp = _calcolaSPAnno(spPrev, ce, finanz, ammortPerSP, driver, anno, annoBase, p);
 
       // SP: smobilizzo crediti/debiti storici
@@ -615,7 +616,8 @@ const Engine = (() => {
         ce: ce,
         sp: sp,
         cash_flow: cf,
-        iva: iva
+        iva: iva,
+        _trace: _buildTrace(ce, sp, cf, spPrev_saved, driver, fisc)
       };
 
       // Porta avanti lo SP per l'anno successivo
@@ -943,6 +945,71 @@ const Engine = (() => {
       da_versare: saldo > 0 ? saldo : 0,
       a_credito: saldo < 0 ? -saldo : 0
     };
+  }
+
+  /* ── Trace: spiega come ogni voce è calcolata ─────────────── */
+
+  function _fmt(v) {
+    if (v === 0 || v === undefined || v === null) return '0';
+    var neg = v < 0; var a = Math.abs(v);
+    var s = String(Math.round(a)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return neg ? '-' + s : s;
+  }
+  function _pct(v) { return (v * 100).toFixed(1).replace('.', ',') + '%'; }
+
+  function _buildTrace(ce, sp, cf, spPrev, driver, fisc) {
+    var circ = (driver && driver.circolante) || {};
+    var t = {};
+    // ── CE ──
+    t['ce.ricavi_totale'] = 'Somma driver ricavi';
+    t['ce.costi_totale'] = 'Somma driver costi';
+    t['ce.personale_totale'] = 'Stipendi + Oneri sociali + TFR';
+    t['ce.ammortamenti'] = 'Immateriali ' + _fmt(ce.ammort_immateriali) + ' + Materiali ' + _fmt(ce.ammort_materiali);
+    t['ce.variazione_rimanenze'] = 'Rim. finali ' + _fmt(sp.rimanenze) + ' − Rim. iniziali ' + _fmt(spPrev.rimanenze);
+    t['ce.valore_produzione'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' + Var.rim. ' + _fmt(ce.variazione_rimanenze);
+    t['ce.ebitda'] = 'VP ' + _fmt(ce.valore_produzione) + ' − Costi ' + _fmt(ce.costi_totale) + ' − Personale ' + _fmt(ce.personale_totale);
+    t['ce.ebit'] = 'EBITDA ' + _fmt(ce.ebitda) + ' − Ammort. ' + _fmt(ce.ammortamenti);
+    t['ce.oneri_finanziari'] = 'Interessi su finanziamenti in essere ed eventi';
+    t['ce.risultato_ante_imposte'] = 'EBIT ' + _fmt(ce.ebit) + ' − Oneri fin. ' + _fmt(ce.oneri_finanziari);
+    t['ce.ires'] = 'max(0, Ris.ante imp. ' + _fmt(ce.risultato_ante_imposte) + ' × ' + _pct(fisc.aliquota_ires || 0.24) + ')';
+    t['ce.irap'] = 'max(0, Base IRAP ' + _fmt(ce.valore_produzione - ce.costi_totale - ce.ammortamenti) + ' × ' + _pct(fisc.aliquota_irap || 0.039) + ')';
+    t['ce.imposte'] = 'IRES ' + _fmt(ce.ires) + ' + IRAP ' + _fmt(ce.irap);
+    t['ce.utile_netto'] = 'Ris.ante imp. ' + _fmt(ce.risultato_ante_imposte) + ' − Imposte ' + _fmt(ce.imposte);
+    // ── SP ──
+    t['sp.immob_immateriali_nette'] = 'Prec. ' + _fmt(spPrev.immob_immateriali_nette) + ' − Ammort. ' + _fmt(spPrev.immob_immateriali_nette - sp.immob_immateriali_nette);
+    t['sp.immob_materiali_nette'] = 'Prec. ' + _fmt(spPrev.immob_materiali_nette) + ' − Ammort. ' + _fmt(spPrev.immob_materiali_nette - sp.immob_materiali_nette);
+    t['sp.immob_finanziarie'] = 'Invariate dal periodo precedente';
+    t['sp.crediti_clienti'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' × DSO ' + (circ.dso || 0) + 'gg / 360' + (sp.crediti_clienti > Math.round(ce.ricavi_totale * (circ.dso || 0) / 360) ? ' + residuo storico smob.' : '');
+    t['sp.debiti_fornitori'] = '(Costi ' + _fmt(ce.costi_totale) + ' + Pers. ' + _fmt(ce.personale_totale) + ') × DPO ' + (circ.dpo || 0) + 'gg / 360' + (sp.debiti_fornitori > Math.round((ce.costi_totale + ce.personale_totale) * (circ.dpo || 0) / 360) ? ' + residuo storico smob.' : '');
+    t['sp.rimanenze'] = 'max(Costi ' + _fmt(ce.costi_totale) + ' × DIO ' + (circ.dio || 0) + 'gg / 360 = ' + _fmt(Math.round(ce.costi_totale * (circ.dio || 0) / 360)) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
+    t['sp.altri_crediti'] = 'Smobilizzo residuo (mesi incasso configurati)';
+    t['sp.debiti_finanziari'] = 'Residuo finanziamenti in essere + nuovi eventi';
+    t['sp.debiti_tributari'] = 'Imposte ' + _fmt(ce.imposte) + ' / 2 (acconto residuo)';
+    t['sp.tfr'] = 'Prec. ' + _fmt(spPrev.tfr) + ' + Quota anno ' + _fmt(ce.personale.tfr);
+    t['sp.capitale_sociale'] = sp.capitale_sociale !== spPrev.capitale_sociale ? 'Prec. ' + _fmt(spPrev.capitale_sociale) + ' + Versamenti ' + _fmt(sp.capitale_sociale - spPrev.capitale_sociale) : 'Invariato dal periodo precedente';
+    t['sp.riserve'] = 'Invariate dal periodo precedente';
+    t['sp.utili_portati_nuovo'] = 'Prec. ' + _fmt(spPrev.utili_portati_nuovo) + ' + Utile es. prec. ' + _fmt(spPrev.utile_esercizio);
+    t['sp.utile_esercizio'] = 'Utile netto CE: ' + _fmt(ce.utile_netto);
+    t['sp.debiti_previdenziali'] = spPrev.debiti_previdenziali !== sp.debiti_previdenziali ? 'Smobilizzo da ' + _fmt(spPrev.debiti_previdenziali) : 'Invariati';
+    t['sp.fin_soci'] = sp.fin_soci !== spPrev.fin_soci ? 'Prec. ' + _fmt(spPrev.fin_soci) + ' + Movimenti ' + _fmt(sp.fin_soci - spPrev.fin_soci) : 'Invariato';
+    t['sp.cassa_attivo'] = 'max(0, cassa netta ' + _fmt(sp.cassa) + ')';
+    t['sp.cassa_passivo'] = sp.cassa_passivo > 0 ? 'Scoperto: |cassa netta ' + _fmt(sp.cassa) + '|' : 'Nessuno scoperto';
+    t['sp.patrimonio_netto'] = 'Cap. ' + _fmt(sp.capitale_sociale) + ' + Ris. ' + _fmt(sp.riserve) + ' + Ut.nuovo ' + _fmt(sp.utili_portati_nuovo) + ' + Ut.es. ' + _fmt(sp.utile_esercizio);
+    t['sp.totale_attivo'] = 'Immob. ' + _fmt(sp.immobilizzazioni_nette) + ' + Circ. ' + _fmt(sp.attivo_circolante) + ' + Cassa ' + _fmt(sp.cassa_attivo);
+    t['sp.totale_passivo'] = 'PN ' + _fmt(sp.patrimonio_netto) + ' + Deb.fin. ' + _fmt(sp.debiti_finanziari) + ' + Deb.forn. ' + _fmt(sp.debiti_fornitori) + ' + Deb.trib. ' + _fmt(sp.debiti_tributari) + ' + TFR ' + _fmt(sp.tfr) + ' + Altri ' + _fmt(sp.altri_debiti) + (sp.cassa_passivo > 0 ? ' + Scoperti ' + _fmt(sp.cassa_passivo) : '');
+    // ── CF ──
+    t['cash_flow.utile_netto'] = 'Da CE: ' + _fmt(ce.utile_netto);
+    t['cash_flow.ammortamenti'] = 'Da CE: ' + _fmt(ce.ammortamenti);
+    t['cash_flow.var_crediti'] = '−(Crediti ' + _fmt(sp.crediti_clienti) + ' − Prec. ' + _fmt(spPrev.crediti_clienti) + ')';
+    t['cash_flow.var_rimanenze'] = '−(Rim. ' + _fmt(sp.rimanenze) + ' − Prec. ' + _fmt(spPrev.rimanenze) + ')';
+    t['cash_flow.var_debiti_fornitori'] = 'Deb.forn. ' + _fmt(sp.debiti_fornitori) + ' − Prec. ' + _fmt(spPrev.debiti_fornitori);
+    t['cash_flow.var_debiti_tributari'] = 'Deb.trib. ' + _fmt(sp.debiti_tributari) + ' − Prec. ' + _fmt(spPrev.debiti_tributari);
+    t['cash_flow.var_tfr'] = 'TFR ' + _fmt(sp.tfr) + ' − Prec. ' + _fmt(spPrev.tfr);
+    t['cash_flow.flusso_operativo'] = 'Utile + Ammort. + Var. capitale circolante';
+    t['cash_flow.flusso_investimenti'] = '−Investimenti dell\'anno';
+    t['cash_flow.flusso_finanziario'] = 'Flusso netto − Fl.operativo − Fl.investimenti (residuo)';
+    t['cash_flow.flusso_netto'] = 'Cassa finale ' + _fmt(sp.cassa) + ' − Cassa iniziale ' + _fmt(spPrev.cassa);
+    return t;
   }
 
   /* ── SP previsionale ─────────────────────────────────────── */
