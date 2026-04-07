@@ -957,13 +957,13 @@ const Engine = (() => {
     sp.immob_finanziarie = spPrev.immob_finanziarie;
     sp.immobilizzazioni_nette = sp.immob_immateriali_nette + sp.immob_materiali_nette + sp.immob_finanziarie;
 
-    // Circolante da DSO/DPO/DIO sulle nuove operazioni
-    sp.crediti_clienti = Math.round(ce.ricavi_totale * (circ.dso || 0) / 365);
-    sp.debiti_fornitori = Math.round((ce.costi_totale + ce.personale_totale) * (circ.dpo || 0) / 365);
+    // Circolante da DSO/DPO/DIO sulle nuove operazioni (convenzione 30/360)
+    sp.crediti_clienti = Math.round(ce.ricavi_totale * (circ.dso || 0) / 360);
+    sp.debiti_fornitori = Math.round((ce.costi_totale + ce.personale_totale) * (circ.dpo || 0) / 360);
     // Rimanenze: il livello DIO rappresenta il fabbisogno operativo;
     // le rimanenze storiche eccedenti il DIO vengono preservate finché non
     // consumate esplicitamente tramite eventi "utilizzo_rimanenze".
-    var rimanenzeDIO = Math.round(ce.costi_totale * (circ.dio || 0) / 365);
+    var rimanenzeDIO = Math.round(ce.costi_totale * (circ.dio || 0) / 360);
     sp.rimanenze = Math.max(rimanenzeDIO, spPrev.rimanenze);
     sp.altri_crediti = spPrev.altri_crediti; // default; sovrascritto da smobilizzo nel loop principale
     sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
