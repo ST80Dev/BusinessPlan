@@ -299,7 +299,7 @@ const Engine = (() => {
             break;
 
           case 'operazione_soci':
-            if (evt.anno === anno && anno <= evtAnnoFine) {
+            if (evt.anno === anno) {
               opSociAnno.push(evt);
             }
             break;

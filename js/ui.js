@@ -3177,8 +3177,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessuna operazione soci pianificata.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:170px"><col style="width:120px"><col style="width:90px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Tipo operazione</td><td class="cell-amount">Importo</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:170px"><col style="width:120px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Tipo operazione</td><td class="cell-amount">Importo</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -3191,7 +3191,6 @@ const UI = (() => {
         for (var st = 0; st < _stOpts.length; st++) { html += '<option value="' + _stOpts[st] + '"' + (e.sottotipo === _stOpts[st] ? ' selected' : '') + '>' + (_SOTTOTIPO_LABELS[_stOpts[st]] || _stOpts[st]) + '</option>'; }
         html += '</select></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
-        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -3282,14 +3281,18 @@ const UI = (() => {
       opts = opts || {};
       var cls = opts.bold ? 'row-totale' : 'row-conto';
       var pad = opts.indent ? 'padding-left:' + (opts.indent * 24) + 'px' : '';
-      var toggle = opts.toggle ? ' class="ce-toggle" data-target="' + opts.toggle + '" style="cursor:pointer;' + pad + '"' : ' style="' + pad + '"';
+      var fKey = 'ce.' + key;
+      var tipAttr = _tipLabel(fKey);
+      var toggle = opts.toggle ? ' class="ce-toggle" data-target="' + opts.toggle + '" style="cursor:pointer;' + pad + '"' + tipAttr : ' style="' + pad + '"' + tipAttr;
       var arrow = opts.toggle ? '<span class="ce-toggle-arrow" data-target="' + opts.toggle + '">&#9654;</span> ' : '';
       var r = '<tr class="' + cls + '"><td' + toggle + '>' + arrow + label + '</td>';
       for (var a = 0; a < nAnni; a++) {
         var ce = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].ce;
         var val = ce ? (ce[key] || 0) : 0;
         var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
-        r += '<td class="cell-amount"><span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span></td>';
+        var tipOpen = _tipValue(fKey, ce);
+        var tipClose = tipOpen ? '</span>' : '';
+        r += '<td class="cell-amount">' + tipOpen + '<span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span>' + tipClose + '</td>';
       }
       r += '</tr>\n';
       return r;
@@ -4011,17 +4014,93 @@ const UI = (() => {
     }
   }
 
+  /* ── Formula registry per tooltip prospetti ────────────────── */
+  // Ogni entry: { desc: 'formula testuale', components: [{key, label, sign, sez}] }
+  // sign: '+' o '-'. sez: sezione dati (default = stessa del prospetto)
+  var _formule = {
+    // ── CE ──
+    'ce.valore_produzione':       { desc: 'Ricavi + Var. rimanenze',
+      c: [{k:'ricavi_totale',l:'Ricavi',s:'+'},{k:'variazione_rimanenze',l:'Var. rimanenze',s:'+'}] },
+    'ce.costi_produzione':        { desc: 'Costi oper. + Personale + Ammortamenti',
+      c: [{k:'costi_totale',l:'Costi operativi',s:'+'},{k:'personale_totale',l:'Personale',s:'+'},{k:'ammortamenti',l:'Ammortamenti',s:'+'}] },
+    'ce.ebitda':                  { desc: 'Valore produzione - Costi oper. - Personale',
+      c: [{k:'valore_produzione',l:'Valore produzione',s:'+'},{k:'costi_totale',l:'Costi operativi',s:'-'},{k:'personale_totale',l:'Personale',s:'-'}] },
+    'ce.ebit':                    { desc: 'EBITDA - Ammortamenti',
+      c: [{k:'ebitda',l:'EBITDA',s:'+'},{k:'ammortamenti',l:'Ammortamenti',s:'-'}] },
+    'ce.risultato_ante_imposte':  { desc: 'EBIT - Oneri finanziari',
+      c: [{k:'ebit',l:'EBIT',s:'+'},{k:'oneri_finanziari',l:'Oneri finanziari',s:'-'}] },
+    'ce.imposte':                 { desc: 'IRES + IRAP',
+      c: [{k:'ires',l:'IRES',s:'+'},{k:'irap',l:'IRAP',s:'+'}] },
+    'ce.utile_netto':             { desc: 'Risultato ante imposte - Imposte',
+      c: [{k:'risultato_ante_imposte',l:'Ris. ante imposte',s:'+'},{k:'imposte',l:'Imposte',s:'-'}] },
+    // ── SP Attivo ──
+    'sp.immobilizzazioni_nette':  { desc: 'Immob. immat. + Immob. mat. + Immob. finanz.',
+      c: [{k:'immob_immateriali_nette',l:'Immob. immateriali',s:'+'},{k:'immob_materiali_nette',l:'Immob. materiali',s:'+'},{k:'immob_finanziarie',l:'Immob. finanziarie',s:'+'}] },
+    'sp.attivo_circolante':       { desc: 'Crediti clienti + Rimanenze + Altri crediti',
+      c: [{k:'crediti_clienti',l:'Crediti clienti',s:'+'},{k:'rimanenze',l:'Rimanenze',s:'+'},{k:'altri_crediti',l:'Altri crediti',s:'+'}] },
+    'sp.crediti_clienti':         { desc: 'Ricavi × DSO / 360 + residuo storico' },
+    'sp.debiti_fornitori':        { desc: '(Costi + Personale) × DPO / 360 + residuo storico' },
+    'sp.rimanenze':               { desc: 'max(Costi × DIO / 360, rimanenze precedenti)' },
+    'sp.totale_attivo':           { desc: 'Immobilizzazioni + Attivo circolante + Disponibilità liquide',
+      c: [{k:'immobilizzazioni_nette',l:'Immobilizzazioni',s:'+'},{k:'attivo_circolante',l:'Attivo circolante',s:'+'},{k:'cassa_attivo',l:'Disponibilità liquide',s:'+'}] },
+    // ── SP Passivo ──
+    'sp.patrimonio_netto':        { desc: 'Capitale + Riserve + Utili a nuovo + Utile esercizio',
+      c: [{k:'capitale_sociale',l:'Capitale sociale',s:'+'},{k:'riserve',l:'Riserve',s:'+'},{k:'utili_portati_nuovo',l:'Utili a nuovo',s:'+'},{k:'utile_esercizio',l:'Utile esercizio',s:'+'}] },
+    'sp.utili_portati_nuovo':     { desc: 'Utili a nuovo prec. + Utile esercizio prec.' },
+    'sp.cassa_attivo':            { desc: 'max(0, Totale passivo - Immobilizzazioni - Attivo circolante)' },
+    'sp.cassa_passivo':           { desc: 'Scoperto: max(0, -(Totale passivo - Immobilizzazioni - Attivo circ.))' },
+    'sp.totale_passivo':          { desc: 'PN + Debiti fin. + Deb. forn. + Deb. trib. + Deb. prev. + Fin. soci + Altre pass. + TFR + Scoperti c/c',
+      c: [{k:'patrimonio_netto',l:'Patrimonio netto',s:'+'},{k:'debiti_finanziari',l:'Debiti finanziari',s:'+'},{k:'debiti_fornitori',l:'Debiti fornitori',s:'+'},{k:'debiti_tributari',l:'Debiti tributari',s:'+'},{k:'debiti_previdenziali',l:'Debiti previdenziali',s:'+'},{k:'fin_soci',l:'Fin. soci',s:'+'},{k:'altri_debiti_residui',l:'Altre passività',s:'+'},{k:'tfr',l:'TFR',s:'+'},{k:'cassa_passivo',l:'Scoperti c/c',s:'+'}] },
+    // ── CF ──
+    'cash_flow.flusso_operativo': { desc: 'Utile + Ammort. + Var. circolante',
+      c: [{k:'utile_netto',l:'Utile netto',s:'+'},{k:'ammortamenti',l:'Ammortamenti',s:'+'},{k:'var_crediti',l:'Var. crediti',s:'+'},{k:'var_rimanenze',l:'Var. rimanenze',s:'+'},{k:'var_debiti_fornitori',l:'Var. deb. fornitori',s:'+'},{k:'var_debiti_tributari',l:'Var. deb. tributari',s:'+'},{k:'var_tfr',l:'Var. TFR',s:'+'},{k:'var_altri',l:'Var. altri',s:'+'}] },
+    'cash_flow.flusso_netto':     { desc: 'Fl. operativo + Fl. investimenti + Fl. finanziario',
+      c: [{k:'flusso_operativo',l:'Flusso operativo',s:'+'},{k:'flusso_investimenti',l:'Flusso investimenti',s:'+'},{k:'flusso_finanziario',l:'Flusso finanziario',s:'+'}] }
+  };
+
+  /** Genera tooltip HTML per l'etichetta (descrizione formula) */
+  function _tipLabel(formulaKey) {
+    var f = _formule[formulaKey];
+    if (!f) return '';
+    return ' title="' + _escapeHtml(f.desc) + '"';
+  }
+
+  /** Genera tooltip HTML per il valore (breakdown numerico) */
+  function _tipValue(formulaKey, data) {
+    var f = _formule[formulaKey];
+    if (!f || !f.c || !data) return '';
+    var rows = '';
+    for (var i = 0; i < f.c.length; i++) {
+      var comp = f.c[i];
+      var val = data[comp.k] || 0;
+      if (val === 0 && f.c.length > 4) continue; // nascondi zeri se formula lunga
+      // Contributo effettivo: il segno della formula applicato al valore
+      var effVal = comp.s === '-' ? -val : val;
+      var sign = effVal < 0 ? '−' : '+';
+      var negCls = effVal < 0 ? ' neg' : '';
+      var absVal = Math.abs(effVal);
+      rows += '<div class="tip-row"><span class="tip-sign">' + (i === 0 ? '' : sign) +
+        '</span><span class="tip-label">' + _escapeHtml(comp.l) +
+        '</span><span class="tip-val' + negCls + '">' + _formatImporto(absVal) + '</span></div>';
+    }
+    return '<span class="formula-tip"><span class="tip-box">' + rows + '</span>';
+  }
+
   /* ── Helper riga prospetto ───────────────────────────────── */
 
   function _prospettoRow(v, anniPrev, proiezioni, sezione) {
     var cls = v.highlight ? 'row-totale' : (v.bold ? 'row-totale' : 'row-conto');
     var pad = v.indent ? 'padding-left:24px' : '';
-    var html = '<tr class="' + cls + '"><td style="' + pad + '">' + v.label + '</td>';
+    var fKey = sezione + '.' + v.key;
+    var tipAttr = _tipLabel(fKey);
+    var html = '<tr class="' + cls + '"><td style="' + pad + '"' + tipAttr + '>' + v.label + '</td>';
     for (var a = 0; a < anniPrev.length; a++) {
       var data = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])][sezione];
       var val = data ? (data[v.key] || 0) : 0;
       var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
-      html += '<td class="cell-amount"><span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span></td>';
+      var tipOpen = _tipValue(fKey, data);
+      var tipClose = tipOpen ? '</span>' : '';
+      html += '<td class="cell-amount">' + tipOpen + '<span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span>' + tipClose + '</td>';
     }
     html += '</tr>';
     return html;
