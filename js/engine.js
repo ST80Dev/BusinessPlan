@@ -199,6 +199,22 @@ const Engine = (() => {
     // Stato SP portato avanti anno per anno
     var spPrev = _inizializzaSP(p, annoBase);
 
+    // Pre-calcola smobilizzo crediti/debiti storici
+    var smob = driver.smobilizzo || [];
+    var smobMap = {};
+    for (var si = 0; si < smob.length; si++) {
+      smobMap[smob[si].voce_sp] = smob[si];
+    }
+    // Baseline: componenti di altri_crediti e altri_debiti NON soggette a smobilizzo
+    var smobAltriCreditiSaldo = 0;
+    ['sp.CII.5b','sp.CII.5t','sp.CII.5q'].forEach(function(v) {
+      if (smobMap[v]) smobAltriCreditiSaldo += smobMap[v].saldo;
+    });
+    var altriCreditiNonSmob = spPrev.altri_crediti - smobAltriCreditiSaldo;
+    var smobAltriDebitiSaldo = 0;
+    if (smobMap['sp.D_pass.13']) smobAltriDebitiSaldo += smobMap['sp.D_pass.13'].saldo;
+    var altriDebitiNonSmob = spPrev.altri_debiti - smobAltriDebitiSaldo;
+
     for (var i = 0; i < anniPrev.length; i++) {
       var anno = anniPrev[i];
       var annoStr = String(anno);
@@ -440,6 +456,43 @@ const Engine = (() => {
       // 9. SP
       // SP: usa ammortPerSP (senza nuovi investimenti dell'anno, che vengono aggiunti dopo)
       var sp = _calcolaSPAnno(spPrev, ce, finanz, ammortPerSP, driver, anno, annoBase, p);
+
+      // SP: smobilizzo crediti/debiti storici
+      // I saldi storici decrescono linearmente in base ai mesi di incasso/pagamento configurati.
+      if (smob.length > 0) {
+        var mesiTrascorsi = (i + 1) * 12;
+        var _smobRes = function(item) {
+          if (!item) return 0;
+          var m = item.mesi_incasso || 12;
+          return Math.max(0, Math.round(item.saldo * (1 - mesiTrascorsi / m)));
+        };
+        // Crediti clienti: DSO-based (già calcolato) + residuo storico
+        if (smobMap['sp.CII.1']) {
+          sp.crediti_clienti += _smobRes(smobMap['sp.CII.1']);
+        }
+        // Altri crediti: parte non-smob costante + residui smob
+        if (smobAltriCreditiSaldo > 0) {
+          var resAC = 0;
+          ['sp.CII.5b','sp.CII.5t','sp.CII.5q'].forEach(function(v) {
+            resAC += _smobRes(smobMap[v]);
+          });
+          sp.altri_crediti = altriCreditiNonSmob + resAC;
+        }
+        // Debiti fornitori: DPO-based + residuo storico
+        if (smobMap['sp.D_pass.7']) {
+          sp.debiti_fornitori += _smobRes(smobMap['sp.D_pass.7']);
+        }
+        // Debiti tributari: imposte-based + residuo storico
+        if (smobMap['sp.D_pass.12']) {
+          sp.debiti_tributari += _smobRes(smobMap['sp.D_pass.12']);
+        }
+        // Altri debiti: parte non-smob costante + residui smob
+        if (smobAltriDebitiSaldo > 0) {
+          sp.altri_debiti = altriDebitiNonSmob + _smobRes(smobMap['sp.D_pass.13']);
+        }
+        // Ricalcola attivo circolante con valori aggiornati
+        sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
+      }
 
       // SP: aggiungi investimenti dell'anno AL NETTO del loro ammortamento pro-rata
       var invImmatAnno = 0, invMatAnno = 0;
@@ -886,7 +939,7 @@ const Engine = (() => {
     // consumate esplicitamente tramite eventi "utilizzo_rimanenze".
     var rimanenzeDIO = Math.round(ce.costi_totale * (circ.dio || 0) / 365);
     sp.rimanenze = Math.max(rimanenzeDIO, spPrev.rimanenze);
-    sp.altri_crediti = spPrev.altri_crediti; // per ora costanti
+    sp.altri_crediti = spPrev.altri_crediti; // default; sovrascritto da smobilizzo nel loop principale
     sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
 
     // Debiti finanziari: precedente - rimborso capitale
@@ -898,7 +951,7 @@ const Engine = (() => {
     // TFR: accumula quota annua
     sp.tfr = spPrev.tfr + ce.personale.tfr;
 
-    // Altri debiti: costanti per ora
+    // Altri debiti: default; sovrascritto da smobilizzo nel loop principale
     sp.altri_debiti = spPrev.altri_debiti;
 
     // Patrimonio netto: precedente + utile
@@ -915,8 +968,9 @@ const Engine = (() => {
   // delle variazioni SP (cassa = residuo che quadra A = P).
 
   /* ── Smobilizzo crediti/debiti (primi mesi) ──────────────── */
-  // TODO: implementare effetto mensile dello smobilizzo nei primi mesi
-  // Per ora i crediti/debiti storici vengono sostituiti dai valori DSO/DPO
+  // Smobilizzo implementato nel loop principale di calcolaProiezioni():
+  // i saldi storici decrescono linearmente in base ai mesi_incasso configurati,
+  // sommandosi ai valori operativi (DSO/DPO) per le voci con driver.
 
   /* ── Helper eventi ───────────────────────────────────────── */
 
