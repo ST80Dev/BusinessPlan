@@ -3490,19 +3490,25 @@ const UI = (() => {
       { key: 'crediti_clienti',        label: 'C.II Crediti verso clienti',         indent: 1 },
       { key: 'altri_crediti',          label: 'C.II Altri crediti',                 indent: 1 },
       { key: 'attivo_circolante',      label: 'C. Attivo circolante',              bold: true },
-      { key: 'cassa',                  label: 'C.IV Disponibilità liquide',         indent: 1 },
+      { key: 'cassa_attivo',           label: 'C.IV Disponibilità liquide',         indent: 1 },
       { key: 'totale_attivo',          label: 'TOTALE ATTIVO',                     bold: true, highlight: true }
     ];
 
     var vociPass = [
-      { key: 'patrimonio_netto',  label: 'A. Patrimonio netto',   bold: true },
-      { key: 'utile_esercizio',   label: 'di cui: Utile (perdita) esercizio', indent: 1 },
-      { key: 'tfr',               label: 'C. TFR',                indent: 1 },
-      { key: 'debiti_finanziari', label: 'D.4 Debiti finanziari', indent: 1 },
-      { key: 'debiti_fornitori',  label: 'D.7 Debiti fornitori',  indent: 1 },
-      { key: 'debiti_tributari',  label: 'D.12 Debiti tributari', indent: 1 },
-      { key: 'altri_debiti',     label: 'Altre passività',        indent: 1 },
-      { key: 'totale_passivo',   label: 'TOTALE PASSIVO + PN',   bold: true, highlight: true }
+      { key: 'patrimonio_netto',    label: 'A. Patrimonio netto',                bold: true },
+      { key: 'capitale_sociale',    label: 'A.I Capitale sociale',               indent: 1 },
+      { key: 'riserve',             label: 'A.II-VI Riserve',                    indent: 1 },
+      { key: 'utili_portati_nuovo', label: 'A.VIII Utili (perdite) a nuovo',     indent: 1 },
+      { key: 'utile_esercizio',     label: 'A.IX Utile (perdita) esercizio',     indent: 1 },
+      { key: 'tfr',                 label: 'C. TFR',                             indent: 1 },
+      { key: 'debiti_finanziari',   label: 'D.4 Debiti finanziari',              indent: 1 },
+      { key: 'debiti_fornitori',    label: 'D.7 Debiti fornitori',               indent: 1 },
+      { key: 'debiti_tributari',    label: 'D.12 Debiti tributari',              indent: 1 },
+      { key: 'debiti_previdenziali',label: 'D.13 Debiti previdenziali',          indent: 1 },
+      { key: 'fin_soci',           label: 'D.14 Finanziamenti soci',             indent: 1 },
+      { key: 'altri_debiti_residui',label: 'Altre passività',                    indent: 1 },
+      { key: 'cassa_passivo',       label: 'Scoperti di c/c (debiti vs banche)', indent: 1 },
+      { key: 'totale_passivo',      label: 'TOTALE PASSIVO + PN',               bold: true, highlight: true }
     ];
 
     // Sezione Attivo
