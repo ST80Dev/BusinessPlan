@@ -211,9 +211,7 @@ const Engine = (() => {
       if (smobMap[v]) smobAltriCreditiSaldo += smobMap[v].saldo;
     });
     var altriCreditiNonSmob = spPrev.altri_crediti - smobAltriCreditiSaldo;
-    var smobAltriDebitiSaldo = 0;
-    if (smobMap['sp.D_pass.13']) smobAltriDebitiSaldo += smobMap['sp.D_pass.13'].saldo;
-    var altriDebitiNonSmob = spPrev.altri_debiti - smobAltriDebitiSaldo;
+    // (debiti_previdenziali gestito direttamente tramite sotto-componente sp.debiti_previdenziali)
 
     for (var i = 0; i < anniPrev.length; i++) {
       var anno = anniPrev[i];
@@ -486,9 +484,10 @@ const Engine = (() => {
         if (smobMap['sp.D_pass.12']) {
           sp.debiti_tributari += _smobRes(smobMap['sp.D_pass.12']);
         }
-        // Altri debiti: parte non-smob costante + residui smob
-        if (smobAltriDebitiSaldo > 0) {
-          sp.altri_debiti = altriDebitiNonSmob + _smobRes(smobMap['sp.D_pass.13']);
+        // Debiti previdenziali (sotto-componente di altri_debiti): smobilizzo
+        if (smobMap['sp.D_pass.13']) {
+          sp.debiti_previdenziali = _smobRes(smobMap['sp.D_pass.13']);
+          sp.altri_debiti = sp.debiti_previdenziali + sp.altri_debiti_residui + sp.fin_soci;
         }
         // Ricalcola attivo circolante con valori aggiornati
         sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
@@ -544,7 +543,7 @@ const Engine = (() => {
         ce.utile_netto = ce.risultato_ante_imposte - ce.imposte;
         // Aggiorna SP: patrimonio netto e debiti tributari con il nuovo utile
         sp.utile_esercizio = ce.utile_netto;
-        sp.patrimonio_netto = spPrev.patrimonio_netto + ce.utile_netto;
+        sp.patrimonio_netto = sp.capitale_sociale + sp.riserve + sp.utili_portati_nuovo + sp.utile_esercizio;
         sp.debiti_tributari = Math.round(ce.imposte / 2);
       }
 
@@ -560,14 +559,21 @@ const Engine = (() => {
           finSociNettoAnno -= (op.importo || 0);
         }
       }
+      sp.capitale_sociale += versCapitaleAnno;
       sp.patrimonio_netto += versCapitaleAnno;
+      sp.fin_soci += finSociNettoAnno;
       sp.altri_debiti += finSociNettoAnno;
 
       // 10. SP QUADRATO: cassa come residuo (A = P per costruzione)
       sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.debiti_fornitori +
         sp.debiti_tributari + sp.altri_debiti + sp.tfr;
       sp.cassa = sp.totale_passivo - sp.immobilizzazioni_nette - sp.attivo_circolante;
-      sp.totale_attivo = sp.totale_passivo; // quadrato per costruzione
+      sp.cassa_attivo = Math.max(0, sp.cassa);
+      sp.cassa_passivo = Math.max(0, -sp.cassa);
+      // Totale attivo/passivo con cassa split: se cassa negativa va nel passivo
+      sp.totale_attivo = sp.immobilizzazioni_nette + sp.attivo_circolante + sp.cassa_attivo;
+      sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.debiti_fornitori +
+        sp.debiti_tributari + sp.altri_debiti + sp.tfr + sp.cassa_passivo;
 
       // 11. RENDICONTO FINANZIARIO (derivato da variazioni SP, non driver di cassa)
       var cf = {};
@@ -633,11 +639,20 @@ const Engine = (() => {
       rimanenze: 0,
       altri_crediti: 0,
       cassa: 0,
+      cassa_attivo: 0,
+      cassa_passivo: 0,
       patrimonio_netto: 0,
+      capitale_sociale: 0,
+      riserve: 0,
+      utili_portati_nuovo: 0,
+      utile_esercizio: 0,
       debiti_finanziari: 0,
       debiti_fornitori: 0,
       debiti_tributari: 0,
+      debiti_previdenziali: 0,
+      fin_soci: 0,
       altri_debiti: 0,
+      altri_debiti_residui: 0,
       tfr: 0,
       totale_attivo: 0,
       totale_passivo: 0
@@ -648,9 +663,12 @@ const Engine = (() => {
     if (progetto.meta.scenario === 'costituenda' && storico.sp_avvio) {
       var av = storico.sp_avvio;
       // PN: capitale sottoscritto + versamenti c/capitale
-      sp.patrimonio_netto = (av['spc.PN.1'] || 0) + (av['spc.PN.3'] || 0);
+      sp.capitale_sociale = (av['spc.PN.1'] || 0) + (av['spc.PN.3'] || 0);
+      sp.patrimonio_netto = sp.capitale_sociale;
       sp.debiti_finanziari = (av['spc.FIN.1'] || 0) + (av['spc.FIN.2'] || 0);
       sp.cassa = av['spc.LIQ.1'] || 0;
+      sp.cassa_attivo = Math.max(0, sp.cassa);
+      sp.cassa_passivo = Math.max(0, -sp.cassa);
       sp.immobilizzazioni_nette = (av['spc.INV.1'] || 0) + (av['spc.INV.2'] || 0) + (av['spc.INV.3'] || 0);
       // Crediti vs soci per versamenti ancora dovuti
       sp.crediti_soci = av['spc.CRED.1'] || 0;
@@ -658,8 +676,8 @@ const Engine = (() => {
       sp.immob_immateriali_nette = (sp.immob_immateriali_nette || 0) +
         (av['spc.SPESE.1'] || 0) + (av['spc.SPESE.2'] || 0);
       sp.immobilizzazioni_nette += (av['spc.SPESE.1'] || 0) + (av['spc.SPESE.2'] || 0);
-      sp.totale_attivo = sp.immobilizzazioni_nette + sp.cassa + sp.crediti_soci;
-      sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari;
+      sp.totale_attivo = sp.immobilizzazioni_nette + sp.cassa_attivo + sp.crediti_soci;
+      sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.cassa_passivo;
     } else if (storico.sp) {
       var att = storico.sp.attivo || {};
       var pas = storico.sp.passivo || {};
@@ -687,22 +705,30 @@ const Engine = (() => {
       sp.rimanenze = (att['sp.CI.1'] || 0) + (att['sp.CI.2'] || 0) + (att['sp.CI.3'] || 0) + (att['sp.CI.4'] || 0) + (att['sp.CI.5'] || 0);
       sp.altri_crediti = (att['sp.CII.5b'] || 0) + (att['sp.CII.5t'] || 0) + (att['sp.CII.5q'] || 0);
       sp.cassa = (att['sp.CIV.1'] || 0) + (att['sp.CIV.2'] || 0) + (att['sp.CIV.3'] || 0);
+      sp.cassa_attivo = Math.max(0, sp.cassa);
+      sp.cassa_passivo = Math.max(0, -sp.cassa);
       sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
 
-      // Passivo
-      sp.patrimonio_netto = (pas['sp.PN.I'] || 0) + (pas['sp.PN.II'] || 0) + (pas['sp.PN.III'] || 0) +
-        (pas['sp.PN.IV'] || 0) + (pas['sp.PN.V'] || 0) + (pas['sp.PN.VI'] || 0) +
-        (pas['sp.PN.VIII'] || 0) + (pas['sp.PN.IX'] || 0);
+      // Passivo — dettaglio PN
+      sp.capitale_sociale = (pas['sp.PN.I'] || 0);
+      sp.riserve = (pas['sp.PN.II'] || 0) + (pas['sp.PN.III'] || 0) +
+        (pas['sp.PN.IV'] || 0) + (pas['sp.PN.V'] || 0) + (pas['sp.PN.VI'] || 0);
+      sp.utili_portati_nuovo = (pas['sp.PN.VIII'] || 0);
+      sp.utile_esercizio = (pas['sp.PN.IX'] || 0);
+      sp.patrimonio_netto = sp.capitale_sociale + sp.riserve + sp.utili_portati_nuovo + sp.utile_esercizio;
       sp.debiti_finanziari = (pas['sp.D_pass.4'] || 0) + (pas['sp.D_pass.3'] || 0);
       sp.debiti_fornitori = pas['sp.D_pass.7'] || 0;
       sp.debiti_tributari = pas['sp.D_pass.12'] || 0;
-      sp.altri_debiti = (pas['sp.D_pass.13'] || 0) + (pas['sp.D_pass.14'] || 0) + (pas['sp.B_pass.1'] || 0) +
+      sp.debiti_previdenziali = pas['sp.D_pass.13'] || 0;
+      sp.altri_debiti_residui = (pas['sp.D_pass.14'] || 0) + (pas['sp.B_pass.1'] || 0) +
         (pas['sp.B_pass.4'] || 0) + (pas['sp.E_pass'] || 0);
+      sp.fin_soci = 0;
+      sp.altri_debiti = sp.debiti_previdenziali + sp.altri_debiti_residui + sp.fin_soci;
       sp.tfr = pas['sp.C_pass'] || 0;
 
-      sp.totale_attivo = sp.immobilizzazioni_nette + sp.attivo_circolante + sp.cassa;
+      sp.totale_attivo = sp.immobilizzazioni_nette + sp.attivo_circolante + sp.cassa_attivo;
       sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.debiti_fornitori +
-        sp.debiti_tributari + sp.altri_debiti + sp.tfr;
+        sp.debiti_tributari + sp.altri_debiti + sp.tfr + sp.cassa_passivo;
     }
 
     return sp;
@@ -951,12 +977,20 @@ const Engine = (() => {
     // TFR: accumula quota annua
     sp.tfr = spPrev.tfr + ce.personale.tfr;
 
-    // Altri debiti: default; sovrascritto da smobilizzo nel loop principale
-    sp.altri_debiti = spPrev.altri_debiti;
+    // Altri debiti: default; sotto-componenti sovrascritte da smobilizzo nel loop principale
+    sp.debiti_previdenziali = spPrev.debiti_previdenziali;
+    sp.altri_debiti_residui = spPrev.altri_debiti_residui;
+    sp.fin_soci = spPrev.fin_soci;
+    sp.altri_debiti = sp.debiti_previdenziali + sp.altri_debiti_residui + sp.fin_soci;
 
-    // Patrimonio netto: precedente + utile
+    // Patrimonio netto: dettaglio componenti
+    // Capitale e riserve restano costanti; l'utile dell'esercizio precedente
+    // viene portato a nuovo, e il nuovo utile è dell'anno corrente.
+    sp.capitale_sociale = spPrev.capitale_sociale;
+    sp.riserve = spPrev.riserve;
+    sp.utili_portati_nuovo = spPrev.utili_portati_nuovo + spPrev.utile_esercizio;
     sp.utile_esercizio = ce.utile_netto;
-    sp.patrimonio_netto = spPrev.patrimonio_netto + ce.utile_netto;
+    sp.patrimonio_netto = sp.capitale_sociale + sp.riserve + sp.utili_portati_nuovo + sp.utile_esercizio;
 
     // cassa, totale_attivo, totale_passivo calcolati nel loop principale
     // (cassa = residuo che quadra A = P)
