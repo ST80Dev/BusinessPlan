@@ -205,6 +205,21 @@ const Engine = (() => {
     for (var si = 0; si < smob.length; si++) {
       smobMap[smob[si].voce_sp] = smob[si];
     }
+    // Auto-smobilizzo: se crediti clienti e debiti fornitori iniziali non hanno
+    // smobilizzo esplicito, li aggiungiamo automaticamente con DSO/DPO come periodo.
+    var circ0 = driver.circolante || {};
+    if (!smobMap['sp.CII.1'] && spPrev.crediti_clienti > 0) {
+      var dsoMesi = Math.max(1, Math.round((circ0.dso || 30) / 30));
+      smobMap['sp.CII.1'] = { voce_sp: 'sp.CII.1', saldo: spPrev.crediti_clienti, mesi_incasso: dsoMesi };
+    }
+    if (!smobMap['sp.D_pass.7'] && spPrev.debiti_fornitori > 0) {
+      var dpoMesi = Math.max(1, Math.round((circ0.dpo || 30) / 30));
+      smobMap['sp.D_pass.7'] = { voce_sp: 'sp.D_pass.7', saldo: spPrev.debiti_fornitori, mesi_incasso: dpoMesi };
+    }
+    // Debiti tributari: auto-smobilizzo se presenti nello SP iniziale
+    if (!smobMap['sp.D_pass.12'] && spPrev.debiti_tributari > 0) {
+      smobMap['sp.D_pass.12'] = { voce_sp: 'sp.D_pass.12', saldo: spPrev.debiti_tributari, mesi_incasso: 6 };
+    }
     // Baseline: componenti di altri_crediti e altri_debiti NON soggette a smobilizzo
     var smobAltriCreditiSaldo = 0;
     ['sp.CII.5b','sp.CII.5t','sp.CII.5q'].forEach(function(v) {
@@ -458,7 +473,9 @@ const Engine = (() => {
 
       // SP: smobilizzo crediti/debiti storici
       // I saldi storici decrescono linearmente in base ai mesi di incasso/pagamento configurati.
-      if (smob.length > 0) {
+      // smobMap contiene sia voci configurate dall'utente che auto-generate (crediti/debiti).
+      var hasSmob = Object.keys(smobMap).length > 0;
+      if (hasSmob) {
         var mesiTrascorsi = (i + 1) * 12;
         var _smobRes = function(item) {
           if (!item) return 0;
@@ -979,8 +996,12 @@ const Engine = (() => {
     t['sp.immob_immateriali_nette'] = 'Prec. ' + _fmt(spPrev.immob_immateriali_nette) + ' − Ammort. ' + _fmt(spPrev.immob_immateriali_nette - sp.immob_immateriali_nette);
     t['sp.immob_materiali_nette'] = 'Prec. ' + _fmt(spPrev.immob_materiali_nette) + ' − Ammort. ' + _fmt(spPrev.immob_materiali_nette - sp.immob_materiali_nette);
     t['sp.immob_finanziarie'] = 'Invariate dal periodo precedente';
-    t['sp.crediti_clienti'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' × DSO ' + (circ.dso || 0) + 'gg / 360' + (sp.crediti_clienti > Math.round(ce.ricavi_totale * (circ.dso || 0) / 360) ? ' + residuo storico smob.' : '');
-    t['sp.debiti_fornitori'] = '(Costi ' + _fmt(ce.costi_totale) + ' + Pers. ' + _fmt(ce.personale_totale) + ') × DPO ' + (circ.dpo || 0) + 'gg / 360' + (sp.debiti_fornitori > Math.round((ce.costi_totale + ce.personale_totale) * (circ.dpo || 0) / 360) ? ' + residuo storico smob.' : '');
+    var creditiDSO = Math.round(ce.ricavi_totale * (circ.dso || 0) / 360);
+    var residuoCred = sp.crediti_clienti - creditiDSO;
+    t['sp.crediti_clienti'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' × DSO ' + (circ.dso || 0) + 'gg / 360 = ' + _fmt(creditiDSO) + (residuoCred > 0 ? ' + residuo SP iniziale ' + _fmt(residuoCred) : '');
+    var debitiDPO = Math.round((ce.costi_totale + ce.personale_totale) * (circ.dpo || 0) / 360);
+    var residuoDeb = sp.debiti_fornitori - debitiDPO;
+    t['sp.debiti_fornitori'] = '(Costi ' + _fmt(ce.costi_totale) + ' + Pers. ' + _fmt(ce.personale_totale) + ') × DPO ' + (circ.dpo || 0) + 'gg / 360 = ' + _fmt(debitiDPO) + (residuoDeb > 0 ? ' + residuo SP iniziale ' + _fmt(residuoDeb) : '');
     t['sp.rimanenze'] = 'max(Costi ' + _fmt(ce.costi_totale) + ' × DIO ' + (circ.dio || 0) + 'gg / 360 = ' + _fmt(Math.round(ce.costi_totale * (circ.dio || 0) / 360)) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
     t['sp.altri_crediti'] = 'Smobilizzo residuo (mesi incasso configurati)';
     t['sp.debiti_finanziari'] = 'Residuo finanziamenti in essere + nuovi eventi';
