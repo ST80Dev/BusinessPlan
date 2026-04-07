@@ -3360,6 +3360,12 @@ const UI = (() => {
       if (!hasNonZero(ricaviDet[ri].values)) continue;
       html += detRow(ricaviDet[ri].label, ricaviDet[ri].values, 'ce-det-ricavi', 48);
     }
+    // A.1 Ricavi + A.2 Variazione rimanenze (mostrata solo se diversa da zero)
+    var varRimValues = anniPrev.map(function(a) { return risultati[a] ? risultati[a].ce.variazione_rimanenze || 0 : 0; });
+    var hasVarRim = varRimValues.some(function(v) { return v !== 0; });
+    if (hasVarRim) {
+      html += ceRow('variazione_rimanenze', 'A.2 Var. rimanenze', { indent: 1 });
+    }
 
     // ── B. Costi operativi (con dettaglio categorizzato) ──
     html += ceRow('costi_totale', 'B.6-8,11-14 Costi operativi', { indent: 1, toggle: 'ce-det-costi' });

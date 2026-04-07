@@ -413,6 +413,7 @@ const Engine = (() => {
       ce.ammort_immateriali = ammort.immateriali;
       ce.ammort_materiali = ammort.materiali;
       ce.oneri_finanziari = finanz.interessi_totale;
+      ce.variazione_rimanenze = 0; // calcolato dopo SP (art. 2425 c.c.)
 
       // Valore produzione (A) e Costi produzione (B)
       ce.valore_produzione = ce.ricavi_totale;
@@ -457,16 +458,41 @@ const Engine = (() => {
       // SP: debiti finanziari calcolati direttamente (residuo essere + residuo eventi)
       sp.debiti_finanziari = finanz.residuo_totale + nuoviFinDebito;
 
-      // SP: utilizzo rimanenze — riduce rimanenze e costi MP
+      // SP: utilizzo rimanenze — riduce rimanenze e costi MP nel CE
+      var valoreUtilizzato = 0;
       if (utilizzoRimanenzeAnno.length > 0) {
         var pctTotale = 0;
         for (var ur = 0; ur < utilizzoRimanenzeAnno.length; ur++) {
           pctTotale += (utilizzoRimanenzeAnno[ur].pct_utilizzo || 0);
         }
         pctTotale = Math.min(pctTotale, 1); // max 100%
-        var valoreUtilizzato = Math.round(sp.rimanenze * pctTotale);
+        valoreUtilizzato = Math.round(sp.rimanenze * pctTotale);
         sp.rimanenze -= valoreUtilizzato;
         sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
+        // Riduce costi MP nel CE: le materie utilizzate dal magazzino
+        // non richiedono nuovi acquisti
+        ce.costi_totale -= valoreUtilizzato;
+      }
+
+      // Variazione rimanenze nel CE (art. 2425 c.c., voce A.2/B.11)
+      // Riflette la variazione del magazzino tra inizio e fine esercizio.
+      ce.variazione_rimanenze = sp.rimanenze - spPrev.rimanenze;
+      if (ce.variazione_rimanenze !== 0 || valoreUtilizzato > 0) {
+        // Ricalcola CE con variazione rimanenze e costi aggiornati
+        ce.valore_produzione = ce.ricavi_totale + ce.variazione_rimanenze;
+        ce.costi_produzione = ce.costi_totale + ce.personale_totale + ce.ammortamenti;
+        ce.ebitda = ce.valore_produzione - ce.costi_totale - ce.personale_totale;
+        ce.ebit = ce.ebitda - ce.ammortamenti;
+        ce.risultato_ante_imposte = ce.ebit - ce.oneri_finanziari;
+        ce.ires = Math.max(0, Math.round(ce.risultato_ante_imposte * (fisc.aliquota_ires || 0.24)));
+        var baseIrapAdj = ce.valore_produzione - ce.costi_totale - ce.ammortamenti;
+        ce.irap = Math.max(0, Math.round(baseIrapAdj * (fisc.aliquota_irap || 0.039)));
+        ce.imposte = ce.ires + ce.irap;
+        ce.utile_netto = ce.risultato_ante_imposte - ce.imposte;
+        // Aggiorna SP: patrimonio netto e debiti tributari con il nuovo utile
+        sp.utile_esercizio = ce.utile_netto;
+        sp.patrimonio_netto = spPrev.patrimonio_netto + ce.utile_netto;
+        sp.debiti_tributari = Math.round(ce.imposte / 2);
       }
 
       // SP: operazioni soci
@@ -855,7 +881,11 @@ const Engine = (() => {
     // Circolante da DSO/DPO/DIO sulle nuove operazioni
     sp.crediti_clienti = Math.round(ce.ricavi_totale * (circ.dso || 0) / 365);
     sp.debiti_fornitori = Math.round((ce.costi_totale + ce.personale_totale) * (circ.dpo || 0) / 365);
-    sp.rimanenze = Math.round(ce.costi_totale * (circ.dio || 0) / 365);
+    // Rimanenze: il livello DIO rappresenta il fabbisogno operativo;
+    // le rimanenze storiche eccedenti il DIO vengono preservate finché non
+    // consumate esplicitamente tramite eventi "utilizzo_rimanenze".
+    var rimanenzeDIO = Math.round(ce.costi_totale * (circ.dio || 0) / 365);
+    sp.rimanenze = Math.max(rimanenzeDIO, spPrev.rimanenze);
     sp.altri_crediti = spPrev.altri_crediti; // per ora costanti
     sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
 
