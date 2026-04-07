@@ -3177,8 +3177,8 @@ const UI = (() => {
     if (items.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessuna operazione soci pianificata.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:170px"><col style="width:120px"><col style="width:90px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Tipo operazione</td><td class="cell-amount">Importo</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:60px"><col style="width:60px"><col style="width:170px"><col style="width:120px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Anno</td><td class="cell-amount">Mese</td><td class="cell-amount">Tipo operazione</td><td class="cell-amount">Importo</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < items.length; i++) {
         var e = items[i].evt, idx = items[i].idx;
@@ -3191,7 +3191,6 @@ const UI = (() => {
         for (var st = 0; st < _stOpts.length; st++) { html += '<option value="' + _stOpts[st] + '"' + (e.sottotipo === _stOpts[st] ? ' selected' : '') + '>' + (_SOTTOTIPO_LABELS[_stOpts[st]] || _stOpts[st]) + '</option>'; }
         html += '</select></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleEvtField(this,' + idx + ',\'importo\')" onkeydown="UI._handleAmountKey(event)">' + (e.importo ? _formatImporto(e.importo) : '') + '</div></td>';
-        html += _renderAnnoFineCell(e, idx, ultimoAnno);
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
         html += '</tr>';
       }
