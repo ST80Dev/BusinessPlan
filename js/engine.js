@@ -940,27 +940,33 @@ const Engine = (() => {
       var mesiPassati = (anno - annoBase) * 12;
       if (mesiPassati >= durRes) return; // finanziamento estinto
 
-      // Per ogni mese dell'anno, calcola rata
+      // Ammortamento alla francese: rata costante
+      // rata = C × r / (1 - (1+r)^(-n))
+      var rata = tassoMese > 0
+        ? cap * tassoMese / (1 - Math.pow(1 + tassoMese, -durRes))
+        : cap / durRes;
+
       var interessiAnno = 0;
       var capitaleAnno = 0;
       var capResiduo = cap;
 
-      // Simula i mesi fino a inizio anno corrente (solo italiano: quota capitale costante)
+      // Simula i mesi fino a inizio anno corrente
       for (var m = 0; m < mesiPassati && m < durRes; m++) {
-        var quotaCap = cap / durRes;
-        capResiduo -= quotaCap;
+        var qInt = capResiduo * tassoMese;
+        var qCap = rata - qInt;
+        capResiduo -= qCap;
       }
 
       // Calcola i 12 mesi dell'anno corrente
       for (var mm = 0; mm < 12; mm++) {
         var meseAbs = mesiPassati + mm;
-        if (meseAbs >= durRes || capResiduo <= 0) break;
+        if (meseAbs >= durRes || capResiduo <= 0.5) break;
 
-        var qCap = cap / durRes;
-        var qInt = capResiduo * tassoMese;
-        interessiAnno += qInt;
-        capitaleAnno += qCap;
-        capResiduo -= qCap;
+        var qIntM = capResiduo * tassoMese;
+        var qCapM = rata - qIntM;
+        interessiAnno += qIntM;
+        capitaleAnno += qCapM;
+        capResiduo -= qCapM;
       }
 
       interessiTotale += Math.round(interessiAnno);
@@ -1432,23 +1438,30 @@ const Engine = (() => {
     var dur = fin.durata_mesi;
     var capResiduo = cap;
 
+    // Ammortamento alla francese: rata costante
+    var rata = tassoMese > 0
+      ? cap * tassoMese / (1 - Math.pow(1 + tassoMese, -dur))
+      : cap / dur;
+
     // Mese assoluto 0 = mese inizio finanziamento
     var meseAssInizioAnno = (annoCalc - annoInizio) * 12 + (1 - meseInizio);
     var meseAssFineAnno = meseAssInizioAnno + 11;
 
-    // Simula dalla partenza fino a inizio anno (solo italiano: quota capitale costante)
+    // Simula dalla partenza fino a inizio anno
     for (var m = 0; m < meseAssInizioAnno && m < dur; m++) {
-      if (capResiduo <= 0) break;
-      capResiduo -= cap / dur;
+      if (capResiduo <= 0.5) break;
+      var qInt = capResiduo * tassoMese;
+      capResiduo -= (rata - qInt);
     }
 
     var interessiAnno = 0, capitaleAnno = 0;
     for (var mm = Math.max(0, meseAssInizioAnno); mm <= meseAssFineAnno && mm < dur; mm++) {
-      if (capResiduo <= 0) break;
-      var qCap = cap / dur;
-      interessiAnno += capResiduo * tassoMese;
-      capitaleAnno += qCap;
-      capResiduo -= qCap;
+      if (capResiduo <= 0.5) break;
+      var qIntM = capResiduo * tassoMese;
+      var qCapM = rata - qIntM;
+      interessiAnno += qIntM;
+      capitaleAnno += qCapM;
+      capResiduo -= qCapM;
     }
 
     return {
