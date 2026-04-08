@@ -876,7 +876,7 @@ const Engine = (() => {
 
       totale += importo;
       dettaglio.push({ id: drv.id, label: drv.label, importo: importo, iva_credito: ivaCredito,
-        tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce });
+        iva_pct: ivaPct, tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce });
     });
 
     return { totale: totale, iva_credito: totaleIvaCredito, dettaglio: dettaglio };
@@ -1032,13 +1032,19 @@ const Engine = (() => {
     // ── Distribuzione costi mensili ──
     // I costi pct_ricavi seguono la distribuzione dei ricavi;
     // i costi fissi si distribuiscono uniformemente.
+    // Raggruppati per aliquota IVA per calcolo IVA credito mensile preciso.
     var costiPctRicavi = 0, costiFissi = 0;
+    var ivaFasce = {}; // { aliquota: { pctRicavi: importo, fissi: importo } }
     var dett = (ce.costi_dettaglio || []);
     for (var d = 0; d < dett.length; d++) {
+      var ivaPct = dett[d].iva_pct || 0;
+      if (!ivaFasce[ivaPct]) ivaFasce[ivaPct] = { pctRicavi: 0, fissi: 0 };
       if (dett[d].tipo_driver === 'pct_ricavi') {
         costiPctRicavi += dett[d].importo;
+        ivaFasce[ivaPct].pctRicavi += dett[d].importo;
       } else {
         costiFissi += dett[d].importo;
+        ivaFasce[ivaPct].fissi += dett[d].importo;
       }
     }
     var costiPctMensili = _distribuisciMensile(costiPctRicavi, profilo, meseAvvio, parziale);
@@ -1052,13 +1058,32 @@ const Engine = (() => {
     var personaleMensili = _distribuisciMensile(ce.personale_totale, _PROFILO_UNIFORME, meseAvvio, parziale);
 
     // ── IVA mensile ──
+    // IVA debito: usa aliquota IVA ricavi configurata
     var ivaRicaviPct = fisc.iva_ricavi || 0.22;
-    // Tasso medio IVA credito sui costi
-    var ivaCreditoRate = ce.costi_totale > 0 ? ((ce.iva && ce.iva.iva_credito) || 0) / ce.costi_totale : 0;
+    // IVA credito: calcolata per fascia IVA con distribuzione mensile propria
+    // (costi pct_ricavi seguono profilo stagionale, fissi uniformi)
+    var ivaCreditoMensilePerFascia = {};
+    var aliquote = Object.keys(ivaFasce);
+    for (d = 0; d < aliquote.length; d++) {
+      var aliq = parseFloat(aliquote[d]);
+      if (aliq === 0) continue; // nessuna IVA su questa fascia
+      var fascia = ivaFasce[aliquote[d]];
+      var pctM = fascia.pctRicavi > 0 ? _distribuisciMensile(fascia.pctRicavi, profilo, meseAvvio, parziale) : null;
+      var fixM = fascia.fissi > 0 ? _distribuisciMensile(fascia.fissi, _PROFILO_UNIFORME, meseAvvio, parziale) : null;
+      ivaCreditoMensilePerFascia[aliquote[d]] = { aliq: aliq, pctM: pctM, fixM: fixM };
+    }
     var ivaDebitoM = [], ivaCreditoM = [], ivaNettaM = [];
     for (m = 0; m < 12; m++) {
       ivaDebitoM[m] = Math.round(ricaviMensili[m] * ivaRicaviPct);
-      ivaCreditoM[m] = Math.round(costiMensili[m] * ivaCreditoRate);
+      // IVA credito: somma di ogni fascia × propria aliquota
+      var credM = 0;
+      for (d = 0; d < aliquote.length; d++) {
+        var info = ivaCreditoMensilePerFascia[aliquote[d]];
+        if (!info) continue;
+        var costoMese = (info.pctM ? info.pctM[m] : 0) + (info.fixM ? info.fixM[m] : 0);
+        credM += Math.round(costoMese * info.aliq);
+      }
+      ivaCreditoM[m] = credM;
       ivaNettaM[m] = ivaDebitoM[m] - ivaCreditoM[m];
     }
 
@@ -1384,7 +1409,7 @@ const Engine = (() => {
 
       totale += importo;
       dettaglio.push({ id: drv.id, label: drv.label, importo: importo, iva_credito: ivaCredito,
-        tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce });
+        iva_pct: ivaPct, tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce });
     });
 
     return { totale: totale, iva_credito: totaleIvaCredito, dettaglio: dettaglio };
