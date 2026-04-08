@@ -766,8 +766,9 @@ const Engine = (() => {
         }
       }
       // Crescita cumulativa anno su anno con % distinta per anno + inflazione per anno
+      // La crescita parte dall'anno successivo al base (il base usa i valori driver as-is)
       var importo = base;
-      for (var a = primoAnnoPrev; a <= anno; a++) {
+      for (var a = annoBase + 1; a <= anno; a++) {
         var crescita = 0;
         if (typeof drv.crescita_annua === 'object' && drv.crescita_annua) {
           crescita = drv.crescita_annua[String(a)] || 0;
