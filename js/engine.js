@@ -459,10 +459,20 @@ const Engine = (() => {
       iva.a_credito = iva.saldo < 0 ? -iva.saldo : 0;
       ce.iva = iva;
 
+      // 8b. CALCOLO MENSILE: distribuzione infrannuale per crediti/debiti/IVA
+      var mensile = _calcolaMensile(ce, driver, fisc, p.meta, anno, annoBase);
+
       // 9. SP
       // SP: usa ammortPerSP (senza nuovi investimenti dell'anno, che vengono aggiunti dopo)
       var spPrev_saved = spPrev; // salva per trace
       var sp = _calcolaSPAnno(spPrev, ce, finanz, ammortPerSP, driver, anno, annoBase, p, impostePrecedenti);
+
+      // 9b. Override SP con valori dal motore mensile (più precisi della formula annuale)
+      sp.crediti_clienti = mensile.crediti_clienti;
+      sp.debiti_fornitori = mensile.debiti_fornitori;
+      sp._deb_trib_iva = mensile.iva_debito_31dic;
+      sp.debiti_tributari = sp._deb_trib_imposte + mensile.iva_debito_31dic;
+      sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
 
       // SP: smobilizzo crediti/debiti storici
       // I saldi storici decrescono linearmente in base ai mesi di incasso/pagamento configurati.
@@ -630,7 +640,8 @@ const Engine = (() => {
         sp: sp,
         cash_flow: cf,
         iva: iva,
-        _trace: _buildTrace(ce, sp, cf, spPrev_saved, driver, fisc, smobResidui)
+        mensile: mensile,
+        _trace: _buildTrace(ce, sp, cf, spPrev_saved, driver, fisc, smobResidui, mensile)
       };
 
       // Porta avanti lo SP e le imposte per l'anno successivo
@@ -955,7 +966,158 @@ const Engine = (() => {
     };
   }
 
-  /* ── IVA annuale ─────────────────────────────────────────── */
+  /* ── Motore mensile: distribuzione e calcolo infrannuale ──── */
+
+  var _PROFILO_UNIFORME = [8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34, 8.33, 8.33, 8.34];
+
+  /**
+   * Distribuisce un importo annuale in 12 valori mensili secondo un profilo %.
+   * Per il primo anno di una costituenda, i mesi pre-avvio sono azzerati e
+   * il totale viene redistribuito sui mesi operativi.
+   */
+  function _distribuisciMensile(annuale, profilo, meseAvvio, isPrimoAnnoParziale) {
+    var pesi = [];
+    var totPeso = 0;
+    for (var m = 0; m < 12; m++) {
+      var p = (isPrimoAnnoParziale && m < meseAvvio - 1) ? 0 : (profilo[m] || 0);
+      pesi[m] = p;
+      totPeso += p;
+    }
+    var result = [];
+    var somma = 0;
+    for (m = 0; m < 12; m++) {
+      result[m] = totPeso > 0 ? Math.round(annuale * pesi[m] / totPeso) : 0;
+      somma += result[m];
+    }
+    // Aggiusta arrotondamento sull'ultimo mese attivo
+    var diff = annuale - somma;
+    if (diff !== 0) {
+      for (m = 11; m >= 0; m--) {
+        if (result[m] > 0) { result[m] += diff; break; }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Calcola i dati mensili per un anno: distribuzione ricavi/costi,
+   * crediti/debiti al 31/12, IVA con liquidazione periodica.
+   *
+   * @returns {Object} { ricavi[], costi[], personale[], iva_debito[], iva_credito[],
+   *   iva_netta[], crediti_clienti, debiti_fornitori, iva_debito_31dic,
+   *   iva_credito_31dic }
+   */
+  function _calcolaMensile(ce, driver, fisc, meta, anno, annoBase) {
+    var circ = driver.circolante || {};
+    var isCostitutenda = meta && meta.scenario === 'costituenda';
+    var meseAvvio = (meta && meta.mese_avvio) || 1;
+    var parziale = isCostitutenda && anno === annoBase && meseAvvio > 1;
+
+    // Profilo: stagionalità se attiva, altrimenti uniforme
+    var profilo = driver.stagionalita_attiva ? (driver.profilo_stagionale || _PROFILO_UNIFORME) : _PROFILO_UNIFORME;
+
+    // ── Distribuzione ricavi mensili ──
+    var ricaviMensili = _distribuisciMensile(ce.ricavi_totale, profilo, meseAvvio, parziale);
+
+    // ── Distribuzione costi mensili ──
+    // I costi pct_ricavi seguono la distribuzione dei ricavi;
+    // i costi fissi si distribuiscono uniformemente.
+    var costiPctRicavi = 0, costiFissi = 0;
+    var dett = (ce.costi_dettaglio || []);
+    for (var d = 0; d < dett.length; d++) {
+      if (dett[d].tipo_driver === 'pct_ricavi') {
+        costiPctRicavi += dett[d].importo;
+      } else {
+        costiFissi += dett[d].importo;
+      }
+    }
+    var costiPctMensili = _distribuisciMensile(costiPctRicavi, profilo, meseAvvio, parziale);
+    var costiFissiMensili = _distribuisciMensile(costiFissi, _PROFILO_UNIFORME, meseAvvio, parziale);
+    var costiMensili = [];
+    for (var m = 0; m < 12; m++) {
+      costiMensili[m] = costiPctMensili[m] + costiFissiMensili[m];
+    }
+
+    // Personale: uniforme (il calcolo mensile dettagliato è in calcolaPersonaleAnno)
+    var personaleMensili = _distribuisciMensile(ce.personale_totale, _PROFILO_UNIFORME, meseAvvio, parziale);
+
+    // ── IVA mensile ──
+    var ivaRicaviPct = fisc.iva_ricavi || 0.22;
+    // Tasso medio IVA credito sui costi
+    var ivaCreditoRate = ce.costi_totale > 0 ? ((ce.iva && ce.iva.iva_credito) || 0) / ce.costi_totale : 0;
+    var ivaDebitoM = [], ivaCreditoM = [], ivaNettaM = [];
+    for (m = 0; m < 12; m++) {
+      ivaDebitoM[m] = Math.round(ricaviMensili[m] * ivaRicaviPct);
+      ivaCreditoM[m] = Math.round(costiMensili[m] * ivaCreditoRate);
+      ivaNettaM[m] = ivaDebitoM[m] - ivaCreditoM[m];
+    }
+
+    // ── IVA liquidazione e debito al 31/12 ──
+    var liqTrimestrale = (fisc.liquidazione_iva === 'trimestrale');
+    var ivaDebito31dic = 0;
+    var ivaCumuloCredito = 0; // credito IVA riportato
+    if (liqTrimestrale) {
+      // Trimestrale: Q1(gen-mar)→mag16, Q2(apr-giu)→ago16, Q3(lug-set)→nov16, Q4(ott-dic)→feb16
+      // Al 31/12 non pagato = Q4
+      var q4 = 0;
+      for (m = 9; m <= 11; m++) q4 += ivaNettaM[m];
+      // Riporto credito da trimestri precedenti
+      for (var q = 0; q < 3; q++) { // Q1, Q2, Q3
+        var qStart = q * 3;
+        var qSum = 0;
+        for (var qm = qStart; qm < qStart + 3; qm++) qSum += ivaNettaM[qm];
+        var saldoQ = ivaCumuloCredito + qSum;
+        if (saldoQ < 0) {
+          ivaCumuloCredito = saldoQ; // credito riportato
+        } else {
+          ivaCumuloCredito = 0; // pagato, azzerato
+        }
+      }
+      var saldoQ4 = ivaCumuloCredito + q4;
+      ivaDebito31dic = Math.max(0, saldoQ4);
+      ivaCumuloCredito = saldoQ4 < 0 ? saldoQ4 : 0;
+    } else {
+      // Mensile: dicembre pagato il 16 gennaio
+      // Riporto credito mese per mese
+      for (m = 0; m < 11; m++) { // gen-nov: pagati entro il 16 del mese successivo
+        var saldoM = ivaCumuloCredito + ivaNettaM[m];
+        ivaCumuloCredito = saldoM < 0 ? saldoM : 0;
+      }
+      var saldoDic = ivaCumuloCredito + ivaNettaM[11];
+      ivaDebito31dic = Math.max(0, saldoDic);
+      ivaCumuloCredito = saldoDic < 0 ? saldoDic : 0;
+    }
+
+    // ── Crediti clienti al 31/12: fatturato degli ultimi ceil(DSO/30) mesi ──
+    var mesiDSO = Math.max(1, Math.ceil((circ.dso || 30) / 30));
+    var creditiClienti = 0;
+    for (m = Math.max(0, 12 - mesiDSO); m < 12; m++) {
+      creditiClienti += ricaviMensili[m];
+    }
+
+    // ── Debiti fornitori al 31/12: costi degli ultimi ceil(DPO/30) mesi ──
+    // Solo costi operativi, NON personale (che genera debiti vs dipendenti/INPS)
+    var mesiDPO = Math.max(1, Math.ceil((circ.dpo || 30) / 30));
+    var debitiFornitori = 0;
+    for (m = Math.max(0, 12 - mesiDPO); m < 12; m++) {
+      debitiFornitori += costiMensili[m];
+    }
+
+    return {
+      ricavi: ricaviMensili,
+      costi: costiMensili,
+      personale: personaleMensili,
+      iva_debito: ivaDebitoM,
+      iva_credito: ivaCreditoM,
+      iva_netta: ivaNettaM,
+      crediti_clienti: creditiClienti,
+      debiti_fornitori: debitiFornitori,
+      iva_debito_31dic: ivaDebito31dic,
+      iva_credito_annuo: Math.max(0, -ivaCumuloCredito) // eventuale credito residuo
+    };
+  }
+
+  /* ── IVA annuale (mantenuta per CE aggregato) ──────────────── */
 
   function _calcolaIvaAnno(ricaviTotale, costiResult, driver, fisc) {
     var ivaRicavi = fisc.iva_ricavi || 0.22;
@@ -982,8 +1144,9 @@ const Engine = (() => {
   }
   function _pct(v) { return (v * 100).toFixed(1).replace('.', ',') + '%'; }
 
-  function _buildTrace(ce, sp, cf, spPrev, driver, fisc, smobResidui) {
+  function _buildTrace(ce, sp, cf, spPrev, driver, fisc, smobResidui, mensile) {
     smobResidui = smobResidui || {};
+    mensile = mensile || {};
     var circ = (driver && driver.circolante) || {};
     var t = {};
     // ── CE ──
@@ -1005,17 +1168,18 @@ const Engine = (() => {
     t['sp.immob_immateriali_nette'] = 'Prec. ' + _fmt(spPrev.immob_immateriali_nette) + ' − Ammort. ' + _fmt(spPrev.immob_immateriali_nette - sp.immob_immateriali_nette);
     t['sp.immob_materiali_nette'] = 'Prec. ' + _fmt(spPrev.immob_materiali_nette) + ' − Ammort. ' + _fmt(spPrev.immob_materiali_nette - sp.immob_materiali_nette);
     t['sp.immob_finanziarie'] = 'Invariate dal periodo precedente';
-    var creditiDSO = Math.round(ce.ricavi_totale * (circ.dso || 0) / 360);
+    var mesiDSO = Math.max(1, Math.ceil((circ.dso || 30) / 30));
     var smobCred = smobResidui.crediti_clienti || 0;
-    t['sp.crediti_clienti'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' × DSO ' + (circ.dso || 0) + 'gg / 360 = ' + _fmt(creditiDSO) + (smobCred > 0 ? ' + smobilizzo pregressi ' + _fmt(smobCred) : '');
-    var debitiDPO = Math.round((ce.costi_totale + ce.personale_totale) * (circ.dpo || 0) / 360);
+    t['sp.crediti_clienti'] = 'Fatt. ultimi ' + mesiDSO + ' mesi (DSO ' + (circ.dso || 30) + 'gg) = ' + _fmt(mensile.crediti_clienti || 0) + (smobCred > 0 ? ' + smobilizzo pregressi ' + _fmt(smobCred) : '');
+    var mesiDPO = Math.max(1, Math.ceil((circ.dpo || 30) / 30));
     var smobDeb = smobResidui.debiti_fornitori || 0;
-    t['sp.debiti_fornitori'] = '(Costi ' + _fmt(ce.costi_totale) + ' + Pers. ' + _fmt(ce.personale_totale) + ') × DPO ' + (circ.dpo || 0) + 'gg / 360 = ' + _fmt(debitiDPO) + (smobDeb > 0 ? ' + smobilizzo pregressi ' + _fmt(smobDeb) : '');
+    t['sp.debiti_fornitori'] = 'Costi ultimi ' + mesiDPO + ' mesi (DPO ' + (circ.dpo || 30) + 'gg) = ' + _fmt(mensile.debiti_fornitori || 0) + (smobDeb > 0 ? ' + smobilizzo pregressi ' + _fmt(smobDeb) : '');
     t['sp.rimanenze'] = 'max(Costi ' + _fmt(ce.costi_totale) + ' × DIO ' + (circ.dio || 0) + 'gg / 360 = ' + _fmt(Math.round(ce.costi_totale * (circ.dio || 0) / 360)) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
     t['sp.altri_crediti'] = 'Smobilizzo residuo (mesi incasso configurati)';
     t['sp.debiti_finanziari'] = 'Residuo finanziamenti in essere + nuovi eventi';
     var smobTrib = smobResidui.debiti_tributari || 0;
-    t['sp.debiti_tributari'] = 'Saldo imposte ' + _fmt(sp._deb_trib_imposte) + ' + IVA dic. ' + _fmt(sp._deb_trib_iva) + (smobTrib > 0 ? ' + smobilizzo pregressi ' + _fmt(smobTrib) : '');
+    var liqLabel = (fisc.liquidazione_iva === 'trimestrale') ? 'IVA Q4' : 'IVA dic.';
+    t['sp.debiti_tributari'] = 'Saldo imposte ' + _fmt(sp._deb_trib_imposte) + ' + ' + liqLabel + ' ' + _fmt(sp._deb_trib_iva) + (smobTrib > 0 ? ' + smobilizzo pregressi ' + _fmt(smobTrib) : '');
     t['sp.tfr'] = 'Prec. ' + _fmt(spPrev.tfr) + ' + Quota anno ' + _fmt(ce.personale.tfr);
     t['sp.capitale_sociale'] = sp.capitale_sociale !== spPrev.capitale_sociale ? 'Prec. ' + _fmt(spPrev.capitale_sociale) + ' + Versamenti ' + _fmt(sp.capitale_sociale - spPrev.capitale_sociale) : 'Invariato dal periodo precedente';
     t['sp.riserve'] = 'Invariate dal periodo precedente';
@@ -1057,9 +1221,9 @@ const Engine = (() => {
     sp.immob_finanziarie = spPrev.immob_finanziarie;
     sp.immobilizzazioni_nette = sp.immob_immateriali_nette + sp.immob_materiali_nette + sp.immob_finanziarie;
 
-    // Circolante da DSO/DPO/DIO sulle nuove operazioni (convenzione 30/360)
+    // Circolante: valori iniziali (sovrascritti dal motore mensile nel loop principale)
     sp.crediti_clienti = Math.round(ce.ricavi_totale * (circ.dso || 0) / 360);
-    sp.debiti_fornitori = Math.round((ce.costi_totale + ce.personale_totale) * (circ.dpo || 0) / 360);
+    sp.debiti_fornitori = Math.round(ce.costi_totale * (circ.dpo || 0) / 360);
     // Rimanenze: il livello DIO rappresenta il fabbisogno operativo;
     // le rimanenze storiche eccedenti il DIO vengono preservate finché non
     // consumate esplicitamente tramite eventi "utilizzo_rimanenze".
