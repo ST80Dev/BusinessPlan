@@ -80,7 +80,7 @@ const Engine = (() => {
    * @param {number} annoBase  - anno base del progetto
    * @returns {Object} { headcount_medio, salari, oneri, tfr, totale }
    */
-  function calcolaPersonaleAnno(personale, anno, annoBase) {
+  function calcolaPersonaleAnno(personale, anno, annoBase, meta) {
     if (!personale || !personale.headcount) {
       return { headcount_medio: 0, headcount_fine: 0, salari: 0, oneri: 0, tfr: 0, totale: 0 };
     }
@@ -92,6 +92,10 @@ const Engine = (() => {
     var varRal = personale.var_ral_pct || {};
     var ha13 = personale.tredicesima !== false;   // default true
     var ha14 = personale.quattordicesima !== false; // default true
+    // Costituenda: primo anno, i mesi prima dell'avvio hanno headcount 0
+    var isCostitutenda = meta && meta.scenario === 'costituenda';
+    var meseAvvio = (meta && meta.mese_avvio) || 1;
+    var primAnno = isCostitutenda && anno === annoBase && meseAvvio > 1;
 
     // Numero mensilità: base 12 + 13ª + 14ª
     var numMensilita = 12 + (ha13 ? 1 : 0) + (ha14 ? 1 : 0);
@@ -119,7 +123,8 @@ const Engine = (() => {
           hcCorrente += (v.delta || 0);
         }
       });
-      mesiHc.push(Math.max(0, hcCorrente));
+      // Primo anno costituenda: mesi prima dell'avvio = 0 dipendenti
+      mesiHc.push(primAnno && m < meseAvvio ? 0 : Math.max(0, hcCorrente));
     }
 
     var sommaHc = 0;
@@ -343,7 +348,7 @@ const Engine = (() => {
         var_ral_pct: persDriver.var_ral_pct,
         variazioni_organico: varOrgTemp
       };
-      var pers = calcolaPersonaleAnno(persTemp, anno, annoBase);
+      var pers = calcolaPersonaleAnno(persTemp, anno, annoBase, p.meta);
 
       // 4a. Registra nuovi investimenti di quest'anno (prima del calcolo ammortamenti)
       var investimentiCassaAnno = 0;
@@ -754,15 +759,20 @@ const Engine = (() => {
     var meseAvvio = (meta && meta.mese_avvio) || 1;
     var primoAnnoPrev = isCostitutenda ? annoBase : annoBase + 1;
 
+    var mesiOperativi1anno = 13 - meseAvvio; // mesi operativi primo anno (mag=8)
+    var isPrimoAnnoParziale = isCostitutenda && meseAvvio > 1;
+
     (driverRicavi || []).forEach(function(drv) {
       var base = drv.base_annuale || 0;
-      // Se base_tipo è 'mensile', converti a importo annuale
       if (drv.base_tipo === 'mensile') {
-        if (isCostitutenda && anno === annoBase && meseAvvio > 1) {
-          // Primo anno costituenda: mesi operativi = 13 - mese_avvio
-          base = base * (13 - meseAvvio);
-        } else {
-          base = base * 12;
+        // Mensile: moltiplica per i mesi effettivi
+        base = (isPrimoAnnoParziale && anno === annoBase)
+          ? base * mesiOperativi1anno
+          : base * 12;
+      } else {
+        // Annuale: pro-rata nel primo anno parziale
+        if (isPrimoAnnoParziale && anno === annoBase) {
+          base = Math.round(base * mesiOperativi1anno / 12);
         }
       }
       // Crescita cumulativa anno su anno con % distinta per anno + inflazione per anno
@@ -812,12 +822,17 @@ const Engine = (() => {
       } else {
         // Importo fisso con inflazione
         var base = drv.importo_fisso || 0;
-        // Se base_tipo è 'mensile', converti a importo annuale
+        var isPrimoAnnoParziale = isCostitutenda && meseAvvio > 1;
+        var mesiOp = 13 - meseAvvio;
         if (drv.base_tipo === 'mensile') {
-          if (isCostitutenda && anno === annoBase && meseAvvio > 1) {
-            base = base * (13 - meseAvvio);
-          } else {
-            base = base * 12;
+          // Mensile: moltiplica per i mesi effettivi
+          base = (isPrimoAnnoParziale && anno === annoBase)
+            ? base * mesiOp
+            : base * 12;
+        } else {
+          // Annuale: pro-rata nel primo anno parziale
+          if (isPrimoAnnoParziale && anno === annoBase) {
+            base = Math.round(base * mesiOp / 12);
           }
         }
         if (drv.soggetto_inflazione && anno > annoBase) {
@@ -1133,16 +1148,19 @@ const Engine = (() => {
         importo = Math.round(importo * multVar);
       } else {
         var base = drv.importo_fisso || 0;
-        // Se base_tipo è 'mensile', converti a importo annuale
+        var isPrimoAnnoParz = isCostitutenda && meseAvvio > 1;
+        var mesiOp2 = 13 - meseAvvio;
         if (drv.base_tipo === 'mensile') {
-          if (isCostitutenda && anno === annoBase && meseAvvio > 1) {
-            base = base * (13 - meseAvvio);
-          } else {
-            base = base * 12;
+          base = (isPrimoAnnoParz && anno === annoBase)
+            ? base * mesiOp2
+            : base * 12;
+        } else {
+          // Annuale: pro-rata nel primo anno parziale
+          if (isPrimoAnnoParz && anno === annoBase) {
+            base = Math.round(base * mesiOp2 / 12);
           }
         }
         if (drv.soggetto_inflazione && anno > annoBase) {
-          // Inflazione cumulativa anno per anno con il tasso specifico di ogni anno
           var fattoreInfl = 1;
           for (var a = annoBase + 1; a <= anno; a++) {
             var infAnno = (inflazioneMap && inflazioneMap[String(a)]) || 0;
