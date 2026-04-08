@@ -207,6 +207,9 @@ const Engine = (() => {
     // Imposte anno precedente per calcolo acconti (metodo storico)
     var impostePrecedenti = 0; // anno 1: nessun acconto conosciuto
 
+    // IVA credito riportato da anno precedente (negativo = credito, 0 = nessun riporto)
+    var ivaCreditoRiportoAnno = 0;
+
     // Pre-calcola smobilizzo crediti/debiti storici
     var smob = driver.smobilizzo || [];
     var smobMap = {};
@@ -460,7 +463,7 @@ const Engine = (() => {
       ce.iva = iva;
 
       // 8b. CALCOLO MENSILE: distribuzione infrannuale per crediti/debiti/IVA
-      var mensile = _calcolaMensile(ce, driver, fisc, p.meta, anno, annoBase);
+      var mensile = _calcolaMensile(ce, driver, fisc, p.meta, anno, annoBase, ivaCreditoRiportoAnno);
 
       // 9. SP
       // SP: usa ammortPerSP (senza nuovi investimenti dell'anno, che vengono aggiunti dopo)
@@ -472,7 +475,10 @@ const Engine = (() => {
       sp.debiti_fornitori = mensile.debiti_fornitori;
       sp._deb_trib_iva = mensile.iva_debito_31dic;
       sp.debiti_tributari = sp._deb_trib_imposte + mensile.iva_debito_31dic;
-      sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
+      // Crediti tributari IVA: se a fine anno IVA credito > IVA debito, il credito
+      // verso l'Erario va nell'attivo (C.II.5-bis art. 2424 c.c.)
+      sp.crediti_tributari_iva = mensile.iva_credito_fine_anno;
+      sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti + sp.crediti_tributari_iva;
 
       // SP: smobilizzo crediti/debiti storici
       // I saldi storici decrescono linearmente in base ai mesi di incasso/pagamento configurati.
@@ -509,7 +515,7 @@ const Engine = (() => {
           sp.altri_debiti = sp.debiti_previdenziali + sp.altri_debiti_residui + sp.fin_soci;
         }
         // Ricalcola attivo circolante con valori aggiornati
-        sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
+        sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti + sp.crediti_tributari_iva;
       }
 
       // SP: aggiungi investimenti dell'anno AL NETTO del loro ammortamento pro-rata
@@ -539,7 +545,7 @@ const Engine = (() => {
         pctTotale = Math.min(pctTotale, 1); // max 100%
         valoreUtilizzato = Math.round(sp.rimanenze * pctTotale);
         sp.rimanenze -= valoreUtilizzato;
-        sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
+        sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti + sp.crediti_tributari_iva;
         // Riduce costi MP nel CE: le materie utilizzate dal magazzino
         // non richiedono nuovi acquisti
         ce.costi_totale -= valoreUtilizzato;
@@ -611,7 +617,8 @@ const Engine = (() => {
       cf.var_debiti_fornitori = sp.debiti_fornitori - spPrev.debiti_fornitori;
       cf.var_debiti_tributari = sp.debiti_tributari - spPrev.debiti_tributari;
       cf.var_tfr = sp.tfr - spPrev.tfr;
-      cf.var_altri = (sp.altri_debiti - spPrev.altri_debiti) - (sp.altri_crediti - spPrev.altri_crediti);
+      cf.var_crediti_tributari_iva = -(sp.crediti_tributari_iva - spPrev.crediti_tributari_iva);
+      cf.var_altri = (sp.altri_debiti - spPrev.altri_debiti) - (sp.altri_crediti - spPrev.altri_crediti) + cf.var_crediti_tributari_iva;
       cf.flusso_operativo = cf.utile_netto + cf.ammortamenti +
         cf.var_crediti + cf.var_rimanenze + cf.var_debiti_fornitori +
         cf.var_debiti_tributari + cf.var_tfr + cf.var_altri;
@@ -644,8 +651,9 @@ const Engine = (() => {
         _trace: _buildTrace(ce, sp, cf, spPrev_saved, driver, fisc, smobResidui, mensile)
       };
 
-      // Porta avanti lo SP e le imposte per l'anno successivo
+      // Porta avanti lo SP, le imposte e il credito IVA per l'anno successivo
       impostePrecedenti = ce.imposte;
+      ivaCreditoRiportoAnno = mensile._ivaCumuloCredito; // carry-forward IVA (negativo = credito)
       spPrev = sp;
     }
   }
@@ -665,6 +673,7 @@ const Engine = (() => {
       crediti_clienti: 0,
       rimanenze: 0,
       altri_crediti: 0,
+      crediti_tributari_iva: 0,
       cassa: 0,
       cassa_attivo: 0,
       cassa_passivo: 0,
@@ -734,6 +743,7 @@ const Engine = (() => {
       sp.cassa = (att['sp.CIV.1'] || 0) + (att['sp.CIV.2'] || 0) + (att['sp.CIV.3'] || 0);
       sp.cassa_attivo = Math.max(0, sp.cassa);
       sp.cassa_passivo = Math.max(0, -sp.cassa);
+      sp.crediti_tributari_iva = 0; // nello storico, già incluso in altri_crediti (CII.5b)
       sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
 
       // Passivo — dettaglio PN
@@ -1007,7 +1017,7 @@ const Engine = (() => {
    *   iva_netta[], crediti_clienti, debiti_fornitori, iva_debito_31dic,
    *   iva_credito_31dic }
    */
-  function _calcolaMensile(ce, driver, fisc, meta, anno, annoBase) {
+  function _calcolaMensile(ce, driver, fisc, meta, anno, annoBase, ivaCreditoRiporto) {
     var circ = driver.circolante || {};
     var isCostitutenda = meta && meta.scenario === 'costituenda';
     var meseAvvio = (meta && meta.mese_avvio) || 1;
@@ -1055,7 +1065,7 @@ const Engine = (() => {
     // ── IVA liquidazione e debito al 31/12 ──
     var liqTrimestrale = (fisc.liquidazione_iva === 'trimestrale');
     var ivaDebito31dic = 0;
-    var ivaCumuloCredito = 0; // credito IVA riportato
+    var ivaCumuloCredito = ivaCreditoRiporto || 0; // credito IVA riportato da anno precedente
     if (liqTrimestrale) {
       // Trimestrale: Q1(gen-mar)→mag16, Q2(apr-giu)→ago16, Q3(lug-set)→nov16, Q4(ott-dic)→feb16
       // Al 31/12 non pagato = Q4
@@ -1115,7 +1125,8 @@ const Engine = (() => {
       crediti_clienti: creditiClienti,
       debiti_fornitori: debitiFornitori,
       iva_debito_31dic: ivaDebito31dic,
-      iva_credito_annuo: Math.max(0, -ivaCumuloCredito) // eventuale credito residuo
+      iva_credito_fine_anno: Math.max(0, -ivaCumuloCredito), // credito IVA residuo a fine anno (va in attivo SP)
+      _ivaCumuloCredito: ivaCumuloCredito // carry-forward per anno successivo (negativo = credito)
     };
   }
 
@@ -1178,6 +1189,10 @@ const Engine = (() => {
     t['sp.debiti_fornitori'] = 'Costi lordi (IVA incl.) ultimi ' + mesiDPO + ' mesi (DPO ' + (circ.dpo || 30) + 'gg) = ' + _fmt(mensile.debiti_fornitori || 0) + (smobDeb > 0 ? ' + smobilizzo pregressi ' + _fmt(smobDeb) : '');
     t['sp.rimanenze'] = 'max(Costi ' + _fmt(ce.costi_totale) + ' × DIO ' + (circ.dio || 0) + 'gg / 360 = ' + _fmt(Math.round(ce.costi_totale * (circ.dio || 0) / 360)) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
     t['sp.altri_crediti'] = 'Smobilizzo residuo (mesi incasso configurati)';
+    var ivaCredFine = (mensile.iva_credito_fine_anno || 0);
+    t['sp.crediti_tributari_iva'] = ivaCredFine > 0
+      ? 'Credito IVA residuo a fine anno (C.II.5-bis): ' + _fmt(ivaCredFine)
+      : 'Nessun credito IVA residuo';
     t['sp.debiti_finanziari'] = 'Residuo finanziamenti in essere + nuovi eventi';
     var smobTrib = smobResidui.debiti_tributari || 0;
     var liqLabel = (fisc.liquidazione_iva === 'trimestrale') ? 'IVA Q4' : 'IVA dic.';
@@ -1232,6 +1247,7 @@ const Engine = (() => {
     var rimanenzeDIO = Math.round(ce.costi_totale * (circ.dio || 0) / 360);
     sp.rimanenze = Math.max(rimanenzeDIO, spPrev.rimanenze);
     sp.altri_crediti = spPrev.altri_crediti; // default; sovrascritto da smobilizzo nel loop principale
+    sp.crediti_tributari_iva = 0; // default; sovrascritto dal motore mensile nel loop principale
     sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
 
     // Debiti finanziari: precedente - rimborso capitale

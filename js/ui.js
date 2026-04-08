@@ -3495,6 +3495,7 @@ const UI = (() => {
       { key: 'immobilizzazioni_nette',  label: 'B. Totale immobilizzazioni',       bold: true },
       { key: 'rimanenze',              label: 'C.I Rimanenze',                     indent: 1 },
       { key: 'crediti_clienti',        label: 'C.II Crediti verso clienti',         indent: 1 },
+      { key: 'crediti_tributari_iva',  label: 'C.II Crediti tributari (IVA)',       indent: 1 },
       { key: 'altri_crediti',          label: 'C.II Altri crediti',                 indent: 1 },
       { key: 'attivo_circolante',      label: 'C. Attivo circolante',              bold: true },
       { key: 'cassa_attivo',           label: 'C.IV Disponibilità liquide',         indent: 1 },
@@ -4040,8 +4041,8 @@ const UI = (() => {
     // ── SP Attivo ──
     'sp.immobilizzazioni_nette':  { desc: 'Immob. immat. + Immob. mat. + Immob. finanz.',
       c: [{k:'immob_immateriali_nette',l:'Immob. immateriali',s:'+'},{k:'immob_materiali_nette',l:'Immob. materiali',s:'+'},{k:'immob_finanziarie',l:'Immob. finanziarie',s:'+'}] },
-    'sp.attivo_circolante':       { desc: 'Crediti clienti + Rimanenze + Altri crediti',
-      c: [{k:'crediti_clienti',l:'Crediti clienti',s:'+'},{k:'rimanenze',l:'Rimanenze',s:'+'},{k:'altri_crediti',l:'Altri crediti',s:'+'}] },
+    'sp.attivo_circolante':       { desc: 'Crediti clienti + Crediti tributari IVA + Rimanenze + Altri crediti',
+      c: [{k:'crediti_clienti',l:'Crediti clienti',s:'+'},{k:'crediti_tributari_iva',l:'Crediti tributari IVA',s:'+'},{k:'rimanenze',l:'Rimanenze',s:'+'},{k:'altri_crediti',l:'Altri crediti',s:'+'}] },
     'sp.crediti_clienti':         { desc: 'Ricavi × DSO / 360 + residuo storico' },
     'sp.debiti_fornitori':        { desc: '(Costi + Personale) × DPO / 360 + residuo storico' },
     'sp.rimanenze':               { desc: 'max(Costi × DIO / 360, rimanenze precedenti)' },
