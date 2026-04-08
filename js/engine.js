@@ -199,6 +199,9 @@ const Engine = (() => {
     // Stato SP portato avanti anno per anno
     var spPrev = _inizializzaSP(p, annoBase);
 
+    // Imposte anno precedente per calcolo acconti (metodo storico)
+    var impostePrecedenti = 0; // anno 1: nessun acconto conosciuto
+
     // Pre-calcola smobilizzo crediti/debiti storici
     var smob = driver.smobilizzo || [];
     var smobMap = {};
@@ -454,7 +457,7 @@ const Engine = (() => {
       // 9. SP
       // SP: usa ammortPerSP (senza nuovi investimenti dell'anno, che vengono aggiunti dopo)
       var spPrev_saved = spPrev; // salva per trace
-      var sp = _calcolaSPAnno(spPrev, ce, finanz, ammortPerSP, driver, anno, annoBase, p);
+      var sp = _calcolaSPAnno(spPrev, ce, finanz, ammortPerSP, driver, anno, annoBase, p, impostePrecedenti);
 
       // SP: smobilizzo crediti/debiti storici
       // I saldi storici decrescono linearmente in base ai mesi di incasso/pagamento configurati.
@@ -484,9 +487,10 @@ const Engine = (() => {
         // Debiti tributari: imposte-based + residuo storico
         smobResidui.debiti_tributari = _smobRes(smobMap['sp.D_pass.12']);
         sp.debiti_tributari += smobResidui.debiti_tributari;
-        // Debiti previdenziali (sotto-componente di altri_debiti): smobilizzo
+        // Debiti previdenziali: contributi mensili + residuo storico smobilizzo
         if (smobMap['sp.D_pass.13']) {
-          sp.debiti_previdenziali = _smobRes(smobMap['sp.D_pass.13']);
+          smobResidui.debiti_previdenziali = _smobRes(smobMap['sp.D_pass.13']);
+          sp.debiti_previdenziali += smobResidui.debiti_previdenziali;
           sp.altri_debiti = sp.debiti_previdenziali + sp.altri_debiti_residui + sp.fin_soci;
         }
         // Ricalcola attivo circolante con valori aggiornati
@@ -541,10 +545,15 @@ const Engine = (() => {
         ce.irap = Math.max(0, Math.round(baseIrapAdj * (fisc.aliquota_irap || 0.039)));
         ce.imposte = ce.ires + ce.irap;
         ce.utile_netto = ce.risultato_ante_imposte - ce.imposte;
-        // Aggiorna SP: patrimonio netto e debiti tributari con il nuovo utile
+        // Aggiorna SP: patrimonio netto e debiti tributari con il nuovo utile/imposte
         sp.utile_esercizio = ce.utile_netto;
         sp.patrimonio_netto = sp.capitale_sociale + sp.riserve + sp.utili_portati_nuovo + sp.utile_esercizio;
-        sp.debiti_tributari = Math.round(ce.imposte / 2) + (smobResidui.debiti_tributari || 0);
+        // Ricalcola debiti tributari con imposte aggiornate
+        var saldoImpAdj = impostePrecedenti > 0
+          ? Math.max(0, Math.round(ce.imposte - impostePrecedenti))
+          : Math.round(ce.imposte / 2);
+        sp._deb_trib_imposte = saldoImpAdj;
+        sp.debiti_tributari = saldoImpAdj + sp._deb_trib_iva + (smobResidui.debiti_tributari || 0);
       }
 
       // SP: operazioni soci
@@ -619,7 +628,8 @@ const Engine = (() => {
         _trace: _buildTrace(ce, sp, cf, spPrev_saved, driver, fisc, smobResidui)
       };
 
-      // Porta avanti lo SP per l'anno successivo
+      // Porta avanti lo SP e le imposte per l'anno successivo
+      impostePrecedenti = ce.imposte;
       spPrev = sp;
     }
   }
@@ -989,13 +999,15 @@ const Engine = (() => {
     t['sp.altri_crediti'] = 'Smobilizzo residuo (mesi incasso configurati)';
     t['sp.debiti_finanziari'] = 'Residuo finanziamenti in essere + nuovi eventi';
     var smobTrib = smobResidui.debiti_tributari || 0;
-    t['sp.debiti_tributari'] = 'Imposte ' + _fmt(ce.imposte) + ' / 2 = ' + _fmt(Math.round(ce.imposte / 2)) + (smobTrib > 0 ? ' + smobilizzo pregressi ' + _fmt(smobTrib) : '');
+    t['sp.debiti_tributari'] = 'Saldo imposte ' + _fmt(sp._deb_trib_imposte) + ' + IVA dic. ' + _fmt(sp._deb_trib_iva) + (smobTrib > 0 ? ' + smobilizzo pregressi ' + _fmt(smobTrib) : '');
     t['sp.tfr'] = 'Prec. ' + _fmt(spPrev.tfr) + ' + Quota anno ' + _fmt(ce.personale.tfr);
     t['sp.capitale_sociale'] = sp.capitale_sociale !== spPrev.capitale_sociale ? 'Prec. ' + _fmt(spPrev.capitale_sociale) + ' + Versamenti ' + _fmt(sp.capitale_sociale - spPrev.capitale_sociale) : 'Invariato dal periodo precedente';
     t['sp.riserve'] = 'Invariate dal periodo precedente';
     t['sp.utili_portati_nuovo'] = 'Prec. ' + _fmt(spPrev.utili_portati_nuovo) + ' + Utile es. prec. ' + _fmt(spPrev.utile_esercizio);
     t['sp.utile_esercizio'] = 'Utile netto CE: ' + _fmt(ce.utile_netto);
-    t['sp.debiti_previdenziali'] = spPrev.debiti_previdenziali !== sp.debiti_previdenziali ? 'Smobilizzo da ' + _fmt(spPrev.debiti_previdenziali) : 'Invariati';
+    var smobPrev = smobResidui.debiti_previdenziali || 0;
+    var contribBase = Math.round(ce.personale.oneri / 12);
+    t['sp.debiti_previdenziali'] = 'Contributi dic. ' + _fmt(contribBase) + (smobPrev > 0 ? ' + smobilizzo pregressi ' + _fmt(smobPrev) : '');
     t['sp.fin_soci'] = sp.fin_soci !== spPrev.fin_soci ? 'Prec. ' + _fmt(spPrev.fin_soci) + ' + Movimenti ' + _fmt(sp.fin_soci - spPrev.fin_soci) : 'Invariato';
     t['sp.cassa_attivo'] = 'max(0, cassa netta ' + _fmt(sp.cassa) + ')';
     t['sp.cassa_passivo'] = sp.cassa_passivo > 0 ? 'Scoperto: |cassa netta ' + _fmt(sp.cassa) + '|' : 'Nessuno scoperto';
@@ -1019,7 +1031,7 @@ const Engine = (() => {
 
   /* ── SP previsionale ─────────────────────────────────────── */
 
-  function _calcolaSPAnno(spPrev, ce, finanz, ammort, driver, anno, annoBase, progetto) {
+  function _calcolaSPAnno(spPrev, ce, finanz, ammort, driver, anno, annoBase, progetto, impostePrecedenti) {
     var circ = driver.circolante || {};
     var sp = {};
 
@@ -1043,14 +1055,26 @@ const Engine = (() => {
     // Debiti finanziari: precedente - rimborso capitale
     sp.debiti_finanziari = Math.max(0, spPrev.debiti_finanziari - finanz.capitale_rimborsato);
 
-    // Debiti tributari: imposte da versare + IVA
-    sp.debiti_tributari = Math.round(ce.imposte / 2); // semplificazione: meta come acconto residuo
+    // Debiti tributari al 31/12:
+    // 1. Saldo imposte: imposte correnti − acconti versati (≈ imposte anno precedente, metodo storico)
+    //    Anno 1: nessun dato storico → imposte/2 come approssimazione
+    // 2. IVA ultimo mese: liquidazione dicembre da versare entro il 16 gennaio
+    var ivaUltimoMese = ce.iva ? Math.round(ce.iva.da_versare / 12) : 0;
+    var saldoImposte = impostePrecedenti > 0
+      ? Math.max(0, Math.round(ce.imposte - impostePrecedenti))
+      : Math.round(ce.imposte / 2);
+    sp.debiti_tributari = saldoImposte + ivaUltimoMese;
+    // Salva componenti per trace
+    sp._deb_trib_imposte = saldoImposte;
+    sp._deb_trib_iva = ivaUltimoMese;
 
     // TFR: accumula quota annua
     sp.tfr = spPrev.tfr + ce.personale.tfr;
 
     // Altri debiti: default; sotto-componenti sovrascritte da smobilizzo nel loop principale
-    sp.debiti_previdenziali = spPrev.debiti_previdenziali;
+    // Debiti previdenziali: contributi INPS di dicembre da versare il 16 gennaio
+    var contribMensili = Math.round(ce.personale.oneri / 12);
+    sp.debiti_previdenziali = contribMensili;
     sp.altri_debiti_residui = spPrev.altri_debiti_residui;
     sp.fin_soci = spPrev.fin_soci;
     sp.altri_debiti = sp.debiti_previdenziali + sp.altri_debiti_residui + sp.fin_soci;
