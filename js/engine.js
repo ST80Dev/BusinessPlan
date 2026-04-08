@@ -440,18 +440,24 @@ const Engine = (() => {
       ce.oneri_finanziari = finanz.interessi_totale;
       ce.variazione_rimanenze = 0; // calcolato dopo SP (art. 2425 c.c.)
 
-      // Subtotali costi: costo del venduto (MP + pct_ricavi) vs costi fissi
-      var costoVenduto = 0, costiFissiTot = 0;
+      // Subtotali costi: costo del venduto vs altri variabili vs fissi
+      // Costo del venduto: B.6 (materie prime) + driver con flag costo_venduto
+      // Altri costi variabili: pct_ricavi senza flag costo_venduto e non B.6
+      // Costi fissi: tipo_driver = fisso
+      var costoVenduto = 0, altriCostiVar = 0, costiFissiTot = 0;
       var detC = ce.costi_dettaglio;
       for (var dc = 0; dc < detC.length; dc++) {
         var voce = detC[dc].voce_ce || '';
-        if (voce.indexOf('ce.B.6') === 0 || detC[dc].tipo_driver === 'pct_ricavi') {
+        if (voce.indexOf('ce.B.6') === 0 || detC[dc].costo_venduto) {
           costoVenduto += detC[dc].importo;
+        } else if (detC[dc].tipo_driver === 'pct_ricavi') {
+          altriCostiVar += detC[dc].importo;
         } else {
           costiFissiTot += detC[dc].importo;
         }
       }
       ce.costo_venduto = costoVenduto;
+      ce.altri_costi_variabili = altriCostiVar;
       ce.costi_fissi = costiFissiTot;
       // margine_contribuzione calcolato dopo variazione_rimanenze (che va nel costo del venduto)
 
@@ -899,7 +905,8 @@ const Engine = (() => {
 
       totale += importo;
       dettaglio.push({ id: drv.id, label: drv.label, importo: importo, iva_credito: ivaCredito,
-        iva_pct: ivaPct, tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce });
+        iva_pct: ivaPct, tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce,
+        costo_venduto: drv.costo_venduto || false });
     });
 
     return { totale: totale, iva_credito: totaleIvaCredito, dettaglio: dettaglio };
@@ -1219,8 +1226,9 @@ const Engine = (() => {
     // ── CE ──
     t['ce.ricavi_totale'] = 'Somma driver ricavi';
     t['ce.costi_totale'] = 'Somma driver costi';
-    t['ce.costo_venduto'] = 'Materie prime (B.6) + Costi variabili (pct ricavi) = ' + _fmt(ce.costo_venduto);
-    t['ce.costi_fissi'] = 'Costi con importo fisso (non pct ricavi) = ' + _fmt(ce.costi_fissi);
+    t['ce.costo_venduto'] = 'Materie prime (B.6) + Costi variabili vendita/acquisto = ' + _fmt(ce.costo_venduto);
+    t['ce.altri_costi_variabili'] = 'Altri costi variabili (pct ricavi, non vendita/acquisto) = ' + _fmt(ce.altri_costi_variabili);
+    t['ce.costi_fissi'] = 'Costi fissi di gestione = ' + _fmt(ce.costi_fissi);
     t['ce.variazione_rimanenze'] = 'Rim. finali ' + _fmt(sp.rimanenze) + ' − Rim. iniziali ' + _fmt(spPrev.rimanenze);
     t['ce.margine_contribuzione'] = 'VP ' + _fmt(ce.valore_produzione) + ' − Costo venduto ' + _fmt(ce.costo_venduto) + ' = ' + _fmt(ce.margine_contribuzione);
     t['ce.valore_produzione'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' + Var.rim. ' + _fmt(ce.variazione_rimanenze);
@@ -1441,7 +1449,8 @@ const Engine = (() => {
 
       totale += importo;
       dettaglio.push({ id: drv.id, label: drv.label, importo: importo, iva_credito: ivaCredito,
-        iva_pct: ivaPct, tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce });
+        iva_pct: ivaPct, tipo_driver: drv.tipo_driver, voce_ce: drv.voce_ce,
+        costo_venduto: drv.costo_venduto || false });
     });
 
     return { totale: totale, iva_credito: totaleIvaCredito, dettaglio: dettaglio };
