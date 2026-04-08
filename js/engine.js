@@ -440,6 +440,21 @@ const Engine = (() => {
       ce.oneri_finanziari = finanz.interessi_totale;
       ce.variazione_rimanenze = 0; // calcolato dopo SP (art. 2425 c.c.)
 
+      // Subtotali costi: costo del venduto (MP + pct_ricavi) vs costi fissi
+      var costoVenduto = 0, costiFissiTot = 0;
+      var detC = ce.costi_dettaglio;
+      for (var dc = 0; dc < detC.length; dc++) {
+        var voce = detC[dc].voce_ce || '';
+        if (voce.indexOf('ce.B.6') === 0 || detC[dc].tipo_driver === 'pct_ricavi') {
+          costoVenduto += detC[dc].importo;
+        } else {
+          costiFissiTot += detC[dc].importo;
+        }
+      }
+      ce.costo_venduto = costoVenduto;
+      ce.costi_fissi = costiFissiTot;
+      // margine_contribuzione calcolato dopo variazione_rimanenze (che va nel costo del venduto)
+
       // Valore produzione (A) e Costi produzione (B)
       ce.valore_produzione = ce.ricavi_totale;
       ce.costi_produzione = ce.costi_totale + ce.personale_totale + ce.ammortamenti;
@@ -558,6 +573,10 @@ const Engine = (() => {
         // Ricalcola CE con variazione rimanenze e costi aggiornati
         ce.valore_produzione = ce.ricavi_totale + ce.variazione_rimanenze;
         ce.costi_produzione = ce.costi_totale + ce.personale_totale + ce.ammortamenti;
+        // Aggiorna costo_venduto se utilizzo_rimanenze ha ridotto costi MP
+        if (valoreUtilizzato > 0) {
+          ce.costo_venduto = Math.max(0, ce.costo_venduto - valoreUtilizzato);
+        }
         ce.ebitda = ce.valore_produzione - ce.costi_totale - ce.personale_totale;
         ce.ebit = ce.ebitda - ce.ammortamenti;
         ce.risultato_ante_imposte = ce.ebit - ce.oneri_finanziari;
@@ -576,6 +595,10 @@ const Engine = (() => {
         sp._deb_trib_imposte = saldoImpAdj;
         sp.debiti_tributari = saldoImpAdj + sp._deb_trib_iva + (smobResidui.debiti_tributari || 0);
       }
+
+      // Margine di contribuzione = Valore produzione − Costo del venduto − Var. rimanenze
+      // (Var. rimanenze inclusa perché impatta direttamente sugli acquisti effettivi)
+      ce.margine_contribuzione = ce.valore_produzione - ce.costo_venduto;
 
       // SP: operazioni soci
       var versCapitaleAnno = 0, finSociNettoAnno = 0;
@@ -1196,10 +1219,13 @@ const Engine = (() => {
     // ── CE ──
     t['ce.ricavi_totale'] = 'Somma driver ricavi';
     t['ce.costi_totale'] = 'Somma driver costi';
+    t['ce.costo_venduto'] = 'Materie prime (B.6) + Costi variabili (pct ricavi) = ' + _fmt(ce.costo_venduto);
+    t['ce.costi_fissi'] = 'Costi con importo fisso (non pct ricavi) = ' + _fmt(ce.costi_fissi);
+    t['ce.variazione_rimanenze'] = 'Rim. finali ' + _fmt(sp.rimanenze) + ' − Rim. iniziali ' + _fmt(spPrev.rimanenze);
+    t['ce.margine_contribuzione'] = 'VP ' + _fmt(ce.valore_produzione) + ' − Costo venduto ' + _fmt(ce.costo_venduto) + ' = ' + _fmt(ce.margine_contribuzione);
+    t['ce.valore_produzione'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' + Var.rim. ' + _fmt(ce.variazione_rimanenze);
     t['ce.personale_totale'] = 'Stipendi + Oneri sociali + TFR';
     t['ce.ammortamenti'] = 'Immateriali ' + _fmt(ce.ammort_immateriali) + ' + Materiali ' + _fmt(ce.ammort_materiali);
-    t['ce.variazione_rimanenze'] = 'Rim. finali ' + _fmt(sp.rimanenze) + ' − Rim. iniziali ' + _fmt(spPrev.rimanenze);
-    t['ce.valore_produzione'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' + Var.rim. ' + _fmt(ce.variazione_rimanenze);
     t['ce.ebitda'] = 'VP ' + _fmt(ce.valore_produzione) + ' − Costi ' + _fmt(ce.costi_totale) + ' − Personale ' + _fmt(ce.personale_totale);
     t['ce.ebit'] = 'EBITDA ' + _fmt(ce.ebitda) + ' − Ammort. ' + _fmt(ce.ammortamenti);
     t['ce.oneri_finanziari'] = 'Interessi su finanziamenti in essere ed eventi';
