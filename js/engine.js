@@ -1088,19 +1088,21 @@ const Engine = (() => {
       ivaCumuloCredito = saldoDic < 0 ? saldoDic : 0;
     }
 
-    // ── Crediti clienti al 31/12: fatturato degli ultimi ceil(DSO/30) mesi ──
+    // ── Crediti clienti al 31/12: fatturato LORDO (imponibile + IVA) degli ultimi ceil(DSO/30) mesi ──
+    // Art. 2424 c.c.: il credito verso il cliente è l'importo totale della fattura (IVA inclusa)
     var mesiDSO = Math.max(1, Math.ceil((circ.dso || 30) / 30));
     var creditiClienti = 0;
     for (m = Math.max(0, 12 - mesiDSO); m < 12; m++) {
-      creditiClienti += ricaviMensili[m];
+      creditiClienti += ricaviMensili[m] + ivaDebitoM[m];
     }
 
-    // ── Debiti fornitori al 31/12: costi degli ultimi ceil(DPO/30) mesi ──
+    // ── Debiti fornitori al 31/12: costi LORDI (imponibile + IVA) degli ultimi ceil(DPO/30) mesi ──
     // Solo costi operativi, NON personale (che genera debiti vs dipendenti/INPS)
+    // Il debito verso il fornitore include l'IVA esposta in fattura
     var mesiDPO = Math.max(1, Math.ceil((circ.dpo || 30) / 30));
     var debitiFornitori = 0;
     for (m = Math.max(0, 12 - mesiDPO); m < 12; m++) {
-      debitiFornitori += costiMensili[m];
+      debitiFornitori += costiMensili[m] + ivaCreditoM[m];
     }
 
     return {
@@ -1170,10 +1172,10 @@ const Engine = (() => {
     t['sp.immob_finanziarie'] = 'Invariate dal periodo precedente';
     var mesiDSO = Math.max(1, Math.ceil((circ.dso || 30) / 30));
     var smobCred = smobResidui.crediti_clienti || 0;
-    t['sp.crediti_clienti'] = 'Fatt. ultimi ' + mesiDSO + ' mesi (DSO ' + (circ.dso || 30) + 'gg) = ' + _fmt(mensile.crediti_clienti || 0) + (smobCred > 0 ? ' + smobilizzo pregressi ' + _fmt(smobCred) : '');
+    t['sp.crediti_clienti'] = 'Fatt. lordo (IVA incl.) ultimi ' + mesiDSO + ' mesi (DSO ' + (circ.dso || 30) + 'gg) = ' + _fmt(mensile.crediti_clienti || 0) + (smobCred > 0 ? ' + smobilizzo pregressi ' + _fmt(smobCred) : '');
     var mesiDPO = Math.max(1, Math.ceil((circ.dpo || 30) / 30));
     var smobDeb = smobResidui.debiti_fornitori || 0;
-    t['sp.debiti_fornitori'] = 'Costi ultimi ' + mesiDPO + ' mesi (DPO ' + (circ.dpo || 30) + 'gg) = ' + _fmt(mensile.debiti_fornitori || 0) + (smobDeb > 0 ? ' + smobilizzo pregressi ' + _fmt(smobDeb) : '');
+    t['sp.debiti_fornitori'] = 'Costi lordi (IVA incl.) ultimi ' + mesiDPO + ' mesi (DPO ' + (circ.dpo || 30) + 'gg) = ' + _fmt(mensile.debiti_fornitori || 0) + (smobDeb > 0 ? ' + smobilizzo pregressi ' + _fmt(smobDeb) : '');
     t['sp.rimanenze'] = 'max(Costi ' + _fmt(ce.costi_totale) + ' × DIO ' + (circ.dio || 0) + 'gg / 360 = ' + _fmt(Math.round(ce.costi_totale * (circ.dio || 0) / 360)) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
     t['sp.altri_crediti'] = 'Smobilizzo residuo (mesi incasso configurati)';
     t['sp.debiti_finanziari'] = 'Residuo finanziamenti in essere + nuovi eventi';
