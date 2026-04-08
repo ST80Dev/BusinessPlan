@@ -1828,7 +1828,7 @@ const UI = (() => {
 
       for (var pi = 0; pi < anniPrev.length; pi++) {
         var annoCalc = anniPrev[pi];
-        var calc = Engine.calcolaPersonaleAnno(pers, annoCalc, annoBase);
+        var calc = Engine.calcolaPersonaleAnno(pers, annoCalc, annoBase, progetto.meta);
         html += '<tr class="row-conto">';
         html += '<td>' + annoCalc + '</td>';
         html += '<td class="cell-amount"><span class="amount-computed">' + calc.headcount_medio + '</span></td>';
