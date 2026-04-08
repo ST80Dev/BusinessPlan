@@ -229,15 +229,17 @@ const Projects = (() => {
   /** Voci costo tipiche con dettaglio sotto le voci UE */
   const COSTI_TIPICI = [
     // B.6 Materie prime
-    { parent: 'ce.B.6',  label: 'Materie prime',                tipo: 'pct_ricavi' },
-    { parent: 'ce.B.6',  label: 'Materiali di consumo',         tipo: 'pct_ricavi' },
-    // B.7 Servizi
+    { parent: 'ce.B.6',  label: 'Materie prime',                tipo: 'pct_ricavi', costo_venduto: true },
+    { parent: 'ce.B.6',  label: 'Materiali di consumo',         tipo: 'pct_ricavi', costo_venduto: true },
+    // B.7 Servizi — costi variabili su vendite/acquisti (costo del venduto)
+    { parent: 'ce.B.7',  label: 'Trasporti su acquisti',        tipo: 'pct_ricavi', costo_venduto: true },
+    { parent: 'ce.B.7',  label: 'Trasporti su vendite',         tipo: 'pct_ricavi', costo_venduto: true },
+    // B.7 Servizi — costi di gestione
     { parent: 'ce.B.7',  label: 'Utenze (acqua, luce, gas)',    tipo: 'fisso' },
     { parent: 'ce.B.7',  label: 'Pubblicità e marketing',       tipo: 'fisso' },
     { parent: 'ce.B.7',  label: 'Consulenze professionali',     tipo: 'fisso' },
     { parent: 'ce.B.7',  label: 'Assicurazioni',                tipo: 'fisso' },
     { parent: 'ce.B.7',  label: 'Manutenzioni e riparazioni',   tipo: 'fisso' },
-    { parent: 'ce.B.7',  label: 'Trasporti e spedizioni',       tipo: 'pct_ricavi' },
     { parent: 'ce.B.7',  label: 'Compensi amministratori',      tipo: 'fisso' },
     // B.8 Godimento beni di terzi
     { parent: 'ce.B.8',  label: 'Affitti e locazioni',          tipo: 'fisso' },
@@ -266,7 +268,7 @@ const Projects = (() => {
       });
       // Costi tipici con dettaglio
       COSTI_TIPICI.forEach(function(c) {
-        var drv = creaDriverCosto(c.parent, c.label, c.tipo);
+        var drv = creaDriverCosto(c.parent, c.label, c.tipo, { costo_venduto: c.costo_venduto });
         progetto.driver.costi.push(drv);
       });
     } else {
@@ -383,8 +385,9 @@ const Projects = (() => {
    * @param {string} tipoDriver - 'pct_ricavi' | 'fisso' | 'personale'
    * @returns {Object}
    */
-  function creaDriverCosto(voceCe, label, tipoDriver) {
+  function creaDriverCosto(voceCe, label, tipoDriver, opts) {
     const isPersonale = tipoDriver === 'personale';
+    opts = opts || {};
     // IVA default: 22% per costi con IVA, 0% per personale/ammortamenti/accantonamenti
     var ivaDefault = 0.22;
     if (isPersonale) ivaDefault = 0;
@@ -400,7 +403,8 @@ const Projects = (() => {
       base_tipo:             'annuale',   // 'annuale' | 'mensile'
       soggetto_inflazione:   !isPersonale && tipoDriver === 'fisso',
       usa_var_personale:     isPersonale,
-      iva_pct:               ivaDefault
+      iva_pct:               ivaDefault,
+      costo_venduto:         opts.costo_venduto || false
     };
   }
 

@@ -3344,7 +3344,7 @@ const UI = (() => {
         for (var d = 0; d < det.length; d++) {
           var item = det[d];
           if (!map[item.id]) {
-            map[item.id] = { id: item.id, label: item.label, tipo_driver: item.tipo_driver, voce_ce: item.voce_ce, values: [] };
+            map[item.id] = { id: item.id, label: item.label, tipo_driver: item.tipo_driver, voce_ce: item.voce_ce, costo_venduto: item.costo_venduto || false, values: [] };
             order.push(item.id);
           }
           map[item.id].values[a] = item.importo || 0;
@@ -3368,24 +3368,30 @@ const UI = (() => {
       html += detRow(ricaviDet[ri].label, ricaviDet[ri].values, 'ce-det-ricavi', 48);
     }
 
-    // ── COSTO DEL VENDUTO (MP + Var. rimanenze + Costi variabili pct_ricavi) ──
+    // ── COSTO DEL VENDUTO (MP + Var. rimanenze + Costi variabili vendita/acquisto) ──
     var costiDet = collectDetail('costi_dettaglio');
-    // Classifica: costo del venduto vs costi fissi
-    var costiMP = [], costiVarVendita = [], costiFissi = [];
+    // Classifica in 3 gruppi:
+    // 1. Costo del venduto: B.6 (materie prime) + driver con flag costo_venduto
+    // 2. Altri costi variabili: pct_ricavi senza flag costo_venduto e non B.6
+    // 3. Costi fissi: tipo_driver != pct_ricavi
+    var costiMP = [], costiVarCDV = [], altriCostiVar = [], costiFissi = [];
     for (var ci = 0; ci < costiDet.length; ci++) {
       var cd = costiDet[ci];
       if (!hasNonZero(cd.values)) continue;
       var voce = cd.voce_ce || '';
       if (voce.indexOf('ce.B.6') === 0) {
         costiMP.push(cd);
+      } else if (cd.costo_venduto) {
+        costiVarCDV.push(cd);
       } else if (cd.tipo_driver === 'pct_ricavi') {
-        costiVarVendita.push(cd);
+        altriCostiVar.push(cd);
       } else {
         costiFissi.push(cd);
       }
     }
     costiMP.sort(function(a, b) { return a.label.localeCompare(b.label); });
-    costiVarVendita.sort(function(a, b) { return a.label.localeCompare(b.label); });
+    costiVarCDV.sort(function(a, b) { return a.label.localeCompare(b.label); });
+    altriCostiVar.sort(function(a, b) { return a.label.localeCompare(b.label); });
     costiFissi.sort(function(a, b) { return a.label.localeCompare(b.label); });
 
     html += ceRow('costo_venduto', 'Costo del venduto', { indent: 1, toggle: 'ce-det-cdv' });
@@ -3400,14 +3406,21 @@ const UI = (() => {
     if (hasVarRim) {
       html += ceRow('variazione_rimanenze', 'A.2 Var. rimanenze', { indent: 1 });
     }
-    if (costiVarVendita.length > 0) {
-      html += subHeader('Costi variabili', 'ce-det-cdv');
-      for (var cv = 0; cv < costiVarVendita.length; cv++) html += detRow(costiVarVendita[cv].label, costiVarVendita[cv].values, 'ce-det-cdv', 52);
-      if (costiVarVendita.length > 1) html += subTotalRow('Tot. Costi variabili', costiVarVendita, 'ce-det-cdv');
+    if (costiVarCDV.length > 0) {
+      html += subHeader('Costi variabili vendita/acquisto', 'ce-det-cdv');
+      for (var cv = 0; cv < costiVarCDV.length; cv++) html += detRow(costiVarCDV[cv].label, costiVarCDV[cv].values, 'ce-det-cdv', 52);
+      if (costiVarCDV.length > 1) html += subTotalRow('Tot. Costi var. vendita/acquisto', costiVarCDV, 'ce-det-cdv');
     }
 
     // ═══ MARGINE DI CONTRIBUZIONE ═══
     html += ceRow('margine_contribuzione', 'Margine di contribuzione', { bold: true });
+
+    // ── ALTRI COSTI VARIABILI (pct_ricavi, non vendita/acquisto) ──
+    if (altriCostiVar.length > 0) {
+      html += ceRow('altri_costi_variabili', 'Altri costi variabili', { indent: 1, toggle: 'ce-det-altrivar' });
+      for (var acv = 0; acv < altriCostiVar.length; acv++) html += detRow(altriCostiVar[acv].label, altriCostiVar[acv].values, 'ce-det-altrivar', 52);
+      if (altriCostiVar.length > 1) html += subTotalRow('Tot. Altri costi variabili', altriCostiVar, 'ce-det-altrivar');
+    }
 
     // ── COSTI FISSI DI GESTIONE ──
     if (costiFissi.length > 0) {
@@ -3623,6 +3636,7 @@ const UI = (() => {
       { label: 'Fatturato e altri ricavi', values: function(a) { return g(a,'ce','valore_produzione'); } },
       { label: 'Costo del venduto', indent: true, values: function(a) { return g(a,'ce','costo_venduto'); } },
       { label: 'Margine di contribuzione', bold: true, values: function(a) { return g(a,'ce','margine_contribuzione'); } },
+      { label: 'Altri costi variabili', indent: true, values: function(a) { return g(a,'ce','altri_costi_variabili'); } },
       { label: 'Costi fissi', indent: true, values: function(a) { return g(a,'ce','costi_fissi'); } },
       { label: 'Costo del personale', indent: true, values: function(a) { return g(a,'ce','personale_totale'); } },
       { label: 'EBITDA', bold: true, values: function(a) { return g(a,'ce','ebitda'); } },
@@ -4033,11 +4047,13 @@ const UI = (() => {
     // ── CE ──
     'ce.valore_produzione':       { desc: 'Ricavi + Var. rimanenze',
       c: [{k:'ricavi_totale',l:'Ricavi',s:'+'},{k:'variazione_rimanenze',l:'Var. rimanenze',s:'+'}] },
-    'ce.costo_venduto':           { desc: 'Materie prime (B.6) + Costi variabili (pct ricavi)',
+    'ce.costo_venduto':           { desc: 'Materie prime (B.6) + Costi variabili vendita/acquisto',
       c: [{k:'costo_venduto',l:'Costo del venduto',s:'+'}] },
     'ce.margine_contribuzione':   { desc: 'Valore produzione - Costo del venduto',
       c: [{k:'valore_produzione',l:'Valore produzione',s:'+'},{k:'costo_venduto',l:'Costo venduto',s:'-'}] },
-    'ce.costi_fissi':             { desc: 'Costi con importo fisso (non variabili)',
+    'ce.altri_costi_variabili':   { desc: 'Costi variabili non legati a vendita/acquisto',
+      c: [{k:'altri_costi_variabili',l:'Altri costi variabili',s:'+'}] },
+    'ce.costi_fissi':             { desc: 'Costi fissi di gestione',
       c: [{k:'costi_fissi',l:'Costi fissi',s:'+'}] },
     'ce.costi_produzione':        { desc: 'Costi oper. + Personale + Ammortamenti',
       c: [{k:'costi_totale',l:'Costi operativi',s:'+'},{k:'personale_totale',l:'Personale',s:'+'},{k:'ammortamenti',l:'Ammortamenti',s:'+'}] },
