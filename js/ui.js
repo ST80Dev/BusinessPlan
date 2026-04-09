@@ -1607,7 +1607,7 @@ const UI = (() => {
       }
     });
 
-    html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:90px"><col style="width:110px"><col style="width:90px"><col style="width:60px"><col style="width:60px"><col style="width:40px"></colgroup>';
+    html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:90px"><col style="width:110px"><col style="width:90px"><col style="width:60px"><col style="width:45px"><col style="width:60px"><col style="width:40px"></colgroup>';
 
     for (var ci = 0; ci < categorie.length; ci++) {
       var cat = categorie[ci];
@@ -1616,9 +1616,9 @@ const UI = (() => {
       if (cat.id === '_altro' && items.length === 0) continue;
 
       // Header categoria
-      html += '<thead><tr class="row-sottomastro"><td colspan="7" style="padding:8px 12px;font-weight:700">' + cat.label + '</td></tr>';
+      html += '<thead><tr class="row-sottomastro"><td colspan="8" style="padding:8px 12px;font-weight:700">' + cat.label + '</td></tr>';
       if (items.length > 0) {
-        html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td class="cell-amount">IVA</td><td></td></tr>';
+        html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td class="cell-amount" title="Costo del venduto">CDV</td><td class="cell-amount">IVA</td><td></td></tr>';
       }
       html += '</thead><tbody>';
 
@@ -1653,6 +1653,20 @@ const UI = (() => {
           html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + flagColor + '" onclick="UI.toggleInflazione(\'' + did + '\')">' + flagIcon + '</div></td>';
         }
 
+        // CDV toggle (Costo del venduto)
+        var isB6 = cc.voce_ce && cc.voce_ce.indexOf('ce.B.6') === 0;
+        if (isB6) {
+          // B.6 is always CDV, show non-toggleable indicator
+          html += '<td class="cell-amount"><span style="color:var(--color-success);font-size:12px" title="B.6 sempre nel Costo del venduto">✓</span></td>';
+        } else if (cc.tipo_driver === 'pct_ricavi') {
+          var cdvIcon = cc.costo_venduto ? '✓' : '✕';
+          var cdvColor = cc.costo_venduto ? 'var(--color-success)' : 'var(--color-text-muted)';
+          html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + cdvColor + '" onclick="UI.toggleCostoVenduto(\'' + did + '\')">' + cdvIcon + '</div></td>';
+        } else {
+          // Fisso costs are never CDV
+          html += '<td class="cell-amount"><span class="text-muted" style="font-size:11px">—</span></td>';
+        }
+
         // IVA % (toggle button)
         var ivaPct = cc.iva_pct !== undefined ? cc.iva_pct : 0.22;
         var ivaLabel = Math.round(ivaPct * 100) + '%';
@@ -1662,7 +1676,7 @@ const UI = (() => {
         html += '</tr>';
       }
       // Pulsante "Aggiungi" in fondo alla sezione
-      html += '<tr><td colspan="7" style="padding:4px 12px"><div class="add-conto-btn" onclick="UI.aggiungiCosto(\'' + cat.id + '\')" style="display:inline-flex">+ Aggiungi</div></td></tr>';
+      html += '<tr><td colspan="8" style="padding:4px 12px"><div class="add-conto-btn" onclick="UI.aggiungiCosto(\'' + cat.id + '\')" style="display:inline-flex">+ Aggiungi</div></td></tr>';
       html += '</tbody>';
     }
     html += '</table>';
@@ -1921,6 +1935,16 @@ const UI = (() => {
     if (!progetto || idx < 0) return;
     var c = progetto.driver.costi[idx];
     c.soggetto_inflazione = !c.soggetto_inflazione;
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function toggleCostoVenduto(idOrIdx) {
+    var idx = _findDriverIdx('costi', idOrIdx);
+    var progetto = Projects.getProgetto();
+    if (!progetto || idx < 0) return;
+    var c = progetto.driver.costi[idx];
+    c.costo_venduto = !c.costo_venduto;
     Projects.segnaModificato();
     _renderDriver();
   }
@@ -4439,6 +4463,7 @@ const UI = (() => {
     importaCostiDaCE,
     ciclaTipoDriver,
     toggleInflazione,
+    toggleCostoVenduto,
     rimuoviDriver,
     editProfiloStagionale,
     _resetProfiloUniforme,
