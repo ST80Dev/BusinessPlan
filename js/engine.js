@@ -594,10 +594,10 @@ const Engine = (() => {
         // Aggiorna SP: patrimonio netto e debiti tributari con il nuovo utile/imposte
         sp.utile_esercizio = ce.utile_netto;
         sp.patrimonio_netto = sp.capitale_sociale + sp.riserve + sp.utili_portati_nuovo + sp.utile_esercizio;
-        // Ricalcola debiti tributari con imposte aggiornate
-        var saldoImpAdj = impostePrecedenti > 0
-          ? Math.max(0, Math.round(ce.imposte - impostePrecedenti))
-          : Math.round(ce.imposte / 2);
+        // Ricalcola debiti tributari con imposte aggiornate (OIC 25):
+        // saldo = imposte correnti − acconti versati (acconti = imposte anno
+        // precedente; anno 1: impostePrecedenti = 0 → saldo = imposte intere).
+        var saldoImpAdj = Math.max(0, Math.round(ce.imposte - impostePrecedenti));
         sp._deb_trib_imposte = saldoImpAdj;
         sp.debiti_tributari = saldoImpAdj + sp._deb_trib_iva + (smobResidui.debiti_tributari || 0);
       }
@@ -1318,14 +1318,14 @@ const Engine = (() => {
     // Debiti finanziari: precedente - rimborso capitale
     sp.debiti_finanziari = Math.max(0, spPrev.debiti_finanziari - finanz.capitale_rimborsato);
 
-    // Debiti tributari al 31/12:
-    // 1. Saldo imposte: imposte correnti − acconti versati (≈ imposte anno precedente, metodo storico)
-    //    Anno 1: nessun dato storico → imposte/2 come approssimazione
+    // Debiti tributari al 31/12 (art. 2424 c.c. D.12; OIC 25 §§25-56):
+    // 1. Saldo imposte: imposte correnti di competenza − acconti effettivamente versati
+    //    nell'anno. Acconti calcolati con metodo storico (L. 97/1977, D.L. 69/1989):
+    //    = imposte del periodo precedente. Anno 1: base storica assente → acconti = 0
+    //    → debito = intero importo delle imposte correnti.
     // 2. IVA ultimo mese: liquidazione dicembre da versare entro il 16 gennaio
     var ivaUltimoMese = ce.iva ? Math.round(ce.iva.da_versare / 12) : 0;
-    var saldoImposte = impostePrecedenti > 0
-      ? Math.max(0, Math.round(ce.imposte - impostePrecedenti))
-      : Math.round(ce.imposte / 2);
+    var saldoImposte = Math.max(0, Math.round(ce.imposte - impostePrecedenti));
     sp.debiti_tributari = saldoImposte + ivaUltimoMese;
     // Salva componenti per trace
     sp._deb_trib_imposte = saldoImposte;
