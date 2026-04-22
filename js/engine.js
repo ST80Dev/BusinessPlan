@@ -666,7 +666,7 @@ const Engine = (() => {
       cf.rimborso_finanziamenti = -finanz.capitale_rimborsato;
       cf.nuovi_finanziamenti = nuoviFinErogati;
       cf.versamenti_soci = versCapitaleAnno + Math.max(0, finSociNettoAnno);
-      cf.rimborsi_soci = Math.abs(Math.min(0, finSociNettoAnno));
+      cf.rimborsi_soci = Math.min(0, finSociNettoAnno);
       cf.dividendi = 0;
       cf.flusso_iva = 0;
 
@@ -1288,7 +1288,12 @@ const Engine = (() => {
     t['cash_flow.var_tfr'] = 'TFR ' + _fmt(sp.tfr) + ' − Prec. ' + _fmt(spPrev.tfr);
     t['cash_flow.flusso_operativo'] = 'Utile + Ammort. + Var. capitale circolante';
     t['cash_flow.flusso_investimenti'] = '−Investimenti dell\'anno';
-    t['cash_flow.flusso_finanziario'] = 'Flusso netto − Fl.operativo − Fl.investimenti (residuo)';
+    t['cash_flow.nuovi_finanziamenti'] = 'Nuovi finanziamenti erogati nell\'anno';
+    t['cash_flow.rimborso_finanziamenti'] = '−Quote capitale rimborsate sui finanziamenti';
+    t['cash_flow.versamenti_soci'] = 'Versamenti capitale + Finanziamenti soci netti positivi';
+    t['cash_flow.rimborsi_soci'] = 'Rimborsi ai soci (finanziamenti soci netti negativi)';
+    t['cash_flow.dividendi'] = 'Dividendi distribuiti ai soci';
+    t['cash_flow.flusso_finanziario'] = 'Nuovi fin. + Rimborsi fin. + Versamenti soci + Rimborsi soci + Dividendi';
     t['cash_flow.flusso_netto'] = 'Cassa finale ' + _fmt(sp.cassa) + ' − Cassa iniziale ' + _fmt(spPrev.cassa);
     return t;
   }

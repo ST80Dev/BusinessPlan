@@ -3609,19 +3609,23 @@ const UI = (() => {
     html += '</tr></thead><tbody>';
 
     var voci = [
-      { key: 'utile_netto',          label: 'Utile netto',                     indent: 1 },
-      { key: 'ammortamenti',         label: '+ Ammortamenti',                  indent: 1 },
-      { key: 'var_crediti',          label: '+/- Var. crediti clienti',        indent: 1 },
-      { key: 'var_rimanenze',        label: '+/- Var. rimanenze',             indent: 1 },
-      { key: 'var_debiti_fornitori', label: '+/- Var. debiti fornitori',      indent: 1 },
-      { key: 'var_debiti_tributari', label: '+/- Var. debiti tributari',      indent: 1 },
-      { key: 'var_tfr',             label: '+/- Var. TFR',                    indent: 1 },
-      { key: 'flusso_operativo',    label: 'Flusso area operativa',           bold: true },
-      { key: 'flusso_investimenti', label: 'Flusso area investimenti',        bold: true },
-      { key: 'rimborso_finanziamenti', label: '- Rimborso finanziamenti',     indent: 1 },
-      { key: 'flusso_finanziario',  label: 'Flusso area finanziaria',         bold: true },
-      { key: 'flusso_iva',          label: 'Flusso IVA',                      indent: 1 },
-      { key: 'flusso_netto',        label: 'FLUSSO DI CASSA NETTO',          bold: true, highlight: true }
+      { key: 'utile_netto',          label: 'Utile netto',                            bold: true },
+      { key: 'ammortamenti',         label: '+ Ammortamenti',                         indent: 1 },
+      { key: 'var_crediti',          label: '+/- Var. crediti clienti',               indent: 1 },
+      { key: 'var_rimanenze',        label: '+/- Var. rimanenze',                     indent: 1 },
+      { key: 'var_debiti_fornitori', label: '+/- Var. debiti fornitori',              indent: 1 },
+      { key: 'var_debiti_tributari', label: '+/- Var. debiti tributari',              indent: 1 },
+      { key: 'var_tfr',              label: '+/- Var. TFR',                           indent: 1 },
+      { key: 'flusso_operativo',     label: 'Flusso area operativa',                  bold: true },
+      { key: 'flusso_investimenti',  label: 'Flusso area investimenti',               bold: true },
+      { key: 'nuovi_finanziamenti',    label: '+ Nuovi finanziamenti',                indent: 1 },
+      { key: 'rimborso_finanziamenti', label: '- Rimborso finanziamenti',             indent: 1 },
+      { key: 'versamenti_soci',        label: '+ Versamenti soci / Aumento capitale', indent: 1 },
+      { key: 'rimborsi_soci',          label: '- Rimborsi soci',                      indent: 1 },
+      { key: 'dividendi',              label: '- Dividendi',                          indent: 1 },
+      { key: 'flusso_finanziario',   label: 'Flusso area finanziaria',                bold: true },
+      { key: 'flusso_iva',           label: 'Flusso IVA',                             indent: 1 },
+      { key: 'flusso_netto',         label: 'FLUSSO DI CASSA NETTO',                  bold: true, highlight: true }
     ];
 
     voci.forEach(function(v) { html += _prospettoRow(v, anniPrev, proiezioni, 'cash_flow'); });
