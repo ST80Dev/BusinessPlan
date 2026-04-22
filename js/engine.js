@@ -204,8 +204,23 @@ const Engine = (() => {
     // Stato SP portato avanti anno per anno
     var spPrev = _inizializzaSP(p, annoBase);
 
-    // Imposte anno precedente per calcolo acconti (metodo storico)
-    var impostePrecedenti = 0; // anno 1: nessun acconto conosciuto
+    // Imposte anno precedente per calcolo acconti (metodo storico).
+    // Gli acconti anno 1 sono pari al 100% delle imposte anno precedente.
+    // Priorità di seeding:
+    //   1. CE storico (sp_ce) → valore diretto di ce.IMP
+    //   2. Solo SP storico (sp_only) → stima per gross-up dall'utile di
+    //      esercizio anno -1 con le aliquote correnti: imp ≈ U × a/(1−a).
+    //   3. Costituenda o nessun dato → 0 (nessun acconto dovuto).
+    var impostePrecedenti = 0;
+    var storicoAnnoBase = p.storico && p.storico[String(annoBase)];
+    if (storicoAnnoBase && storicoAnnoBase.ce && storicoAnnoBase.ce['ce.IMP']) {
+      impostePrecedenti = storicoAnnoBase.ce['ce.IMP'] || 0;
+    } else if (spPrev.utile_esercizio > 0) {
+      var aliqApprox = (fisc.aliquota_ires || 0.24) + (fisc.aliquota_irap || 0.039);
+      if (aliqApprox > 0 && aliqApprox < 1) {
+        impostePrecedenti = Math.round(spPrev.utile_esercizio * aliqApprox / (1 - aliqApprox));
+      }
+    }
 
     // IVA credito riportato da anno precedente (negativo = credito, 0 = nessun riporto)
     var ivaCreditoRiportoAnno = 0;
@@ -227,6 +242,11 @@ const Engine = (() => {
     for (var i = 0; i < anniPrev.length; i++) {
       var anno = anniPrev[i];
       var annoStr = String(anno);
+
+      // Snapshot di impostePrecedenti all'inizio dell'anno: rappresenta gli
+      // acconti che verranno versati durante l'anno corrente (pari al 100%
+      // della competenza anno precedente secondo il modello semplificato).
+      var impostePrecedentiInizioAnno = impostePrecedenti;
 
       // ── Elabora eventi per questo anno ──
       var nuoviFinAnno = [];      // nuovi finanziamenti che partono quest'anno
@@ -637,19 +657,31 @@ const Engine = (() => {
       var cf = {};
       cf.flusso_netto = sp.cassa - spPrev.cassa;
 
-      // Area operativa (metodo indiretto)
+      // Area operativa (metodo indiretto, forma esplicita per le imposte)
       cf.utile_netto = ce.utile_netto;
       cf.ammortamenti = ce.ammortamenti;
       cf.var_crediti = -(sp.crediti_clienti - spPrev.crediti_clienti);
       cf.var_rimanenze = -(sp.rimanenze - spPrev.rimanenze);
       cf.var_debiti_fornitori = sp.debiti_fornitori - spPrev.debiti_fornitori;
-      cf.var_debiti_tributari = sp.debiti_tributari - spPrev.debiti_tributari;
       cf.var_tfr = sp.tfr - spPrev.tfr;
       cf.var_crediti_tributari_iva = -(sp.crediti_tributari_iva - spPrev.crediti_tributari_iva);
       cf.var_altri = (sp.altri_debiti - spPrev.altri_debiti) - (sp.altri_crediti - spPrev.altri_crediti) + cf.var_crediti_tributari_iva;
-      cf.flusso_operativo = cf.utile_netto + cf.ammortamenti +
+
+      // Imposte sul reddito: forma esplicita (OIC 10 "direct tax form")
+      //  + imposte di competenza (rettifica: ripristina l'utile ante-imposte)
+      //  − imposte pagate nell'anno (saldo anno prec. + acconti anno corrente)
+      // L'identità contabile Δ(_deb_trib_imposte) = competenza − pagate è
+      // preservata modulo il clamp max(0,…) applicato al saldo di chiusura.
+      cf.imposte_competenza = ce.imposte;
+      cf.imposte_pagate = -((spPrev._deb_trib_imposte || 0) + impostePrecedentiInizioAnno);
+      // Variazione residua dei debiti tributari (IVA a fine anno, smobilizzo
+      // storico e differenze da clamp): garantisce la quadratura con Δ cassa.
+      var varDebitiTribTot = sp.debiti_tributari - spPrev.debiti_tributari;
+      cf.var_debiti_iva_altri = varDebitiTribTot - (cf.imposte_competenza + cf.imposte_pagate);
+
+      cf.flusso_operativo = cf.utile_netto + cf.imposte_competenza + cf.ammortamenti +
         cf.var_crediti + cf.var_rimanenze + cf.var_debiti_fornitori +
-        cf.var_debiti_tributari + cf.var_tfr + cf.var_altri;
+        cf.imposte_pagate + cf.var_debiti_iva_altri + cf.var_tfr + cf.var_altri;
 
       // Area investimenti
       cf.investimenti = investimentiCassaAnno;
@@ -712,6 +744,8 @@ const Engine = (() => {
       debiti_finanziari: 0,
       debiti_fornitori: 0,
       debiti_tributari: 0,
+      _deb_trib_imposte: 0,
+      _deb_trib_iva: 0,
       debiti_previdenziali: 0,
       fin_soci: 0,
       altri_debiti: 0,
@@ -783,6 +817,11 @@ const Engine = (() => {
       sp.debiti_finanziari = (pas['sp.D_pass.4'] || 0) + (pas['sp.D_pass.3'] || 0);
       sp.debiti_fornitori = pas['sp.D_pass.7'] || 0;
       sp.debiti_tributari = pas['sp.D_pass.12'] || 0;
+      // Approssimazione: in assenza di split esplicito, l'intero debito
+      // tributario pregresso è considerato saldo IRES/IRAP. L'eventuale
+      // componente IVA verrà assorbita dalla variazione residua in CF.
+      sp._deb_trib_imposte = sp.debiti_tributari;
+      sp._deb_trib_iva = 0;
       sp.debiti_previdenziali = pas['sp.D_pass.13'] || 0;
       sp.altri_debiti_residui = (pas['sp.D_pass.14'] || 0) + (pas['sp.B_pass.1'] || 0) +
         (pas['sp.B_pass.4'] || 0) + (pas['sp.E_pass'] || 0);
@@ -1284,9 +1323,14 @@ const Engine = (() => {
     t['cash_flow.var_crediti'] = '−(Crediti ' + _fmt(sp.crediti_clienti) + ' − Prec. ' + _fmt(spPrev.crediti_clienti) + ')';
     t['cash_flow.var_rimanenze'] = '−(Rim. ' + _fmt(sp.rimanenze) + ' − Prec. ' + _fmt(spPrev.rimanenze) + ')';
     t['cash_flow.var_debiti_fornitori'] = 'Deb.forn. ' + _fmt(sp.debiti_fornitori) + ' − Prec. ' + _fmt(spPrev.debiti_fornitori);
-    t['cash_flow.var_debiti_tributari'] = 'Deb.trib. ' + _fmt(sp.debiti_tributari) + ' − Prec. ' + _fmt(spPrev.debiti_tributari);
     t['cash_flow.var_tfr'] = 'TFR ' + _fmt(sp.tfr) + ' − Prec. ' + _fmt(spPrev.tfr);
-    t['cash_flow.flusso_operativo'] = 'Utile + Ammort. + Var. capitale circolante';
+    // Imposte (forma esplicita): competenza + pagate = Δ(_deb_trib_imposte)
+    var saldoPrec = spPrev._deb_trib_imposte || 0;
+    var acconti = Math.max(0, -(cf.imposte_pagate || 0) - saldoPrec);
+    t['cash_flow.imposte_competenza'] = '+Imposte di competenza (rettifica utile ante-imposte): IRES ' + _fmt(ce.ires) + ' + IRAP ' + _fmt(ce.irap);
+    t['cash_flow.imposte_pagate'] = '−(Saldo anno prec. ' + _fmt(saldoPrec) + ' + Acconti anno corrente ' + _fmt(acconti) + ')';
+    t['cash_flow.var_debiti_iva_altri'] = 'Δ debiti tributari ' + _fmt(sp.debiti_tributari - spPrev.debiti_tributari) + ' − (competenza − pagate): IVA fine anno, smobilizzo pregressi, arrotondamenti';
+    t['cash_flow.flusso_operativo'] = 'Utile + Imposte competenza + Ammort. + Var. CCN − Imposte pagate';
     t['cash_flow.flusso_investimenti'] = '−Investimenti dell\'anno';
     t['cash_flow.nuovi_finanziamenti'] = 'Nuovi finanziamenti erogati nell\'anno';
     t['cash_flow.rimborso_finanziamenti'] = '−Quote capitale rimborsate sui finanziamenti';

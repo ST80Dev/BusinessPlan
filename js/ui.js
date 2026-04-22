@@ -3609,23 +3609,25 @@ const UI = (() => {
     html += '</tr></thead><tbody>';
 
     var voci = [
-      { key: 'utile_netto',          label: 'Utile netto',                            bold: true },
-      { key: 'ammortamenti',         label: '+ Ammortamenti',                         indent: 1 },
-      { key: 'var_crediti',          label: '+/- Var. crediti clienti',               indent: 1 },
-      { key: 'var_rimanenze',        label: '+/- Var. rimanenze',                     indent: 1 },
-      { key: 'var_debiti_fornitori', label: '+/- Var. debiti fornitori',              indent: 1 },
-      { key: 'var_debiti_tributari', label: '+/- Var. debiti tributari',              indent: 1 },
-      { key: 'var_tfr',              label: '+/- Var. TFR',                           indent: 1 },
-      { key: 'flusso_operativo',     label: 'Flusso area operativa',                  bold: true },
-      { key: 'flusso_investimenti',  label: 'Flusso area investimenti',               bold: true },
-      { key: 'nuovi_finanziamenti',    label: '+ Nuovi finanziamenti',                indent: 1 },
-      { key: 'rimborso_finanziamenti', label: '- Rimborso finanziamenti',             indent: 1 },
-      { key: 'versamenti_soci',        label: '+ Versamenti soci / Aumento capitale', indent: 1 },
-      { key: 'rimborsi_soci',          label: '- Rimborsi soci',                      indent: 1 },
-      { key: 'dividendi',              label: '- Dividendi',                          indent: 1 },
-      { key: 'flusso_finanziario',   label: 'Flusso area finanziaria',                bold: true },
-      { key: 'flusso_iva',           label: 'Flusso IVA',                             indent: 1 },
-      { key: 'flusso_netto',         label: 'FLUSSO DI CASSA NETTO',                  bold: true, highlight: true }
+      { key: 'utile_netto',            label: 'Utile netto',                            bold: true },
+      { key: 'imposte_competenza',     label: '+ Imposte di competenza (rettifica)',    indent: 1 },
+      { key: 'ammortamenti',           label: '+ Ammortamenti',                         indent: 1 },
+      { key: 'var_crediti',            label: '+/- Var. crediti clienti',               indent: 1 },
+      { key: 'var_rimanenze',          label: '+/- Var. rimanenze',                     indent: 1 },
+      { key: 'var_debiti_fornitori',   label: '+/- Var. debiti fornitori',              indent: 1 },
+      { key: 'var_debiti_iva_altri',   label: '+/- Var. debiti IVA e altri',            indent: 1 },
+      { key: 'var_tfr',                label: '+/- Var. TFR',                           indent: 1 },
+      { key: 'imposte_pagate',         label: '- Imposte pagate (saldo + acconti)',     indent: 1 },
+      { key: 'flusso_operativo',       label: 'Flusso area operativa',                  bold: true },
+      { key: 'flusso_investimenti',    label: 'Flusso area investimenti',               bold: true },
+      { key: 'nuovi_finanziamenti',    label: '+ Nuovi finanziamenti',                  indent: 1 },
+      { key: 'rimborso_finanziamenti', label: '- Rimborso finanziamenti',               indent: 1 },
+      { key: 'versamenti_soci',        label: '+ Versamenti soci / Aumento capitale',   indent: 1 },
+      { key: 'rimborsi_soci',          label: '- Rimborsi soci',                        indent: 1 },
+      { key: 'dividendi',              label: '- Dividendi',                            indent: 1 },
+      { key: 'flusso_finanziario',     label: 'Flusso area finanziaria',                bold: true },
+      { key: 'flusso_iva',             label: 'Flusso IVA',                             indent: 1 },
+      { key: 'flusso_netto',           label: 'FLUSSO DI CASSA NETTO',                  bold: true, highlight: true }
     ];
 
     voci.forEach(function(v) { html += _prospettoRow(v, anniPrev, proiezioni, 'cash_flow'); });
@@ -4135,8 +4137,8 @@ const UI = (() => {
     'sp.totale_passivo':          { desc: 'PN + Debiti fin. + Deb. forn. + Deb. trib. + Deb. prev. + Fin. soci + Altre pass. + TFR + Scoperti c/c',
       c: [{k:'patrimonio_netto',l:'Patrimonio netto',s:'+'},{k:'debiti_finanziari',l:'Debiti finanziari',s:'+'},{k:'debiti_fornitori',l:'Debiti fornitori',s:'+'},{k:'debiti_tributari',l:'Debiti tributari',s:'+'},{k:'debiti_previdenziali',l:'Debiti previdenziali',s:'+'},{k:'fin_soci',l:'Fin. soci',s:'+'},{k:'altri_debiti_residui',l:'Altre passività',s:'+'},{k:'tfr',l:'TFR',s:'+'},{k:'cassa_passivo',l:'Scoperti c/c',s:'+'}] },
     // ── CF ──
-    'cash_flow.flusso_operativo': { desc: 'Utile + Ammort. + Var. circolante',
-      c: [{k:'utile_netto',l:'Utile netto',s:'+'},{k:'ammortamenti',l:'Ammortamenti',s:'+'},{k:'var_crediti',l:'Var. crediti',s:'+'},{k:'var_rimanenze',l:'Var. rimanenze',s:'+'},{k:'var_debiti_fornitori',l:'Var. deb. fornitori',s:'+'},{k:'var_debiti_tributari',l:'Var. deb. tributari',s:'+'},{k:'var_tfr',l:'Var. TFR',s:'+'},{k:'var_altri',l:'Var. altri',s:'+'}] },
+    'cash_flow.flusso_operativo': { desc: 'Utile + Imposte competenza + Ammort. + Var. circolante − Imposte pagate',
+      c: [{k:'utile_netto',l:'Utile netto',s:'+'},{k:'imposte_competenza',l:'Imposte competenza',s:'+'},{k:'ammortamenti',l:'Ammortamenti',s:'+'},{k:'var_crediti',l:'Var. crediti',s:'+'},{k:'var_rimanenze',l:'Var. rimanenze',s:'+'},{k:'var_debiti_fornitori',l:'Var. deb. fornitori',s:'+'},{k:'var_debiti_iva_altri',l:'Var. deb. IVA e altri',s:'+'},{k:'var_tfr',l:'Var. TFR',s:'+'},{k:'imposte_pagate',l:'Imposte pagate',s:'+'},{k:'var_altri',l:'Var. altri',s:'+'}] },
     'cash_flow.flusso_netto':     { desc: 'Fl. operativo + Fl. investimenti + Fl. finanziario',
       c: [{k:'flusso_operativo',l:'Flusso operativo',s:'+'},{k:'flusso_investimenti',l:'Flusso investimenti',s:'+'},{k:'flusso_finanziario',l:'Flusso finanziario',s:'+'}] }
   };
