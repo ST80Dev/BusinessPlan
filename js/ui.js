@@ -3384,11 +3384,11 @@ const UI = (() => {
     // Helper: riga dettaglio (nascosta, con stile secondario)
     function detRow(label, values, groupId, indentPx) {
       var r = '<tr class="row-conto ce-detail-row ' + groupId + '" style="display:none">';
-      r += '<td style="padding-left:' + indentPx + 'px;font-size:12px;color:var(--color-text-secondary)">' + _escapeHtml(label) + '</td>';
+      r += '<td style="padding-left:' + indentPx + 'px;font-size:13px;color:var(--color-text-primary)">' + _escapeHtml(label) + '</td>';
       for (var a = 0; a < nAnni; a++) {
         var val = values[a] || 0;
         var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
-        r += '<td class="cell-amount"><span class="amount-computed' + valCls + '" style="font-size:12px;color:var(--color-text-secondary)">' + _formatImporto(val) + '</span></td>';
+        r += '<td class="cell-amount"><span class="amount-computed' + valCls + '" style="font-size:13px;color:var(--color-text-primary)">' + _formatImporto(val) + '</span></td>';
       }
       r += '</tr>\n';
       return r;
@@ -3396,17 +3396,17 @@ const UI = (() => {
 
     // Helper: riga intestazione sottogruppo (nascosta)
     function subHeader(label, groupId) {
-      return '<tr class="ce-detail-row ' + groupId + '" style="display:none"><td colspan="' + (nAnni + 1) + '" style="padding-left:36px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--color-text-muted);padding-top:6px">' + label + '</td></tr>\n';
+      return '<tr class="ce-detail-row ' + groupId + '" style="display:none"><td colspan="' + (nAnni + 1) + '" style="padding-left:36px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--color-text-secondary);padding-top:6px">' + label + '</td></tr>\n';
     }
 
     // Helper: riga subtotale sottogruppo (nascosta, con somma per anno)
     function subTotalRow(label, items, groupId) {
-      var r = '<tr class="ce-detail-row ' + groupId + '" style="display:none"><td style="padding-left:52px;font-size:12px;font-weight:600;color:var(--color-text-secondary)">' + _escapeHtml(label) + '</td>';
+      var r = '<tr class="ce-detail-row ' + groupId + '" style="display:none"><td style="padding-left:52px;font-size:13px;font-weight:600;color:var(--color-text-primary)">' + _escapeHtml(label) + '</td>';
       for (var a = 0; a < nAnni; a++) {
         var sum = 0;
         for (var k = 0; k < items.length; k++) sum += (items[k].values[a] || 0);
         var valCls = sum < 0 ? ' negative' : (sum === 0 ? ' zero' : '');
-        r += '<td class="cell-amount"><span class="amount-computed' + valCls + '" style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">' + _formatImporto(sum) + '</span></td>';
+        r += '<td class="cell-amount"><span class="amount-computed' + valCls + '" style="font-size:13px;font-weight:600;color:var(--color-text-primary)">' + _formatImporto(sum) + '</span></td>';
       }
       r += '</tr>\n';
       return r;

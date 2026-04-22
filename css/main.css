@@ -1025,9 +1025,9 @@ html, body {
   font-weight: 600;
 }
 
-/* Voci di dettaglio (espandibile) mantengono lo stile secondario piu piccolo */
+/* Voci di dettaglio (espandibile): leggermente piu compatte delle voci principali */
 .row-conto.ce-detail-row > td:first-child {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
 }
 
