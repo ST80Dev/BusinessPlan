@@ -3565,9 +3565,9 @@ const UI = (() => {
 
     html += ceRow('costo_venduto', 'Costo del venduto', { indent: 1, toggle: 'ce-det-cdv' });
     if (costiMP.length > 0) {
-      html += subHeader('Materie prime', 'ce-det-cdv');
+      html += subHeader('Materie prime, sussidiarie, di consumo e di merci', 'ce-det-cdv');
       for (var mp = 0; mp < costiMP.length; mp++) html += detRow(costiMP[mp].label, costiMP[mp].values, 'ce-det-cdv', 52);
-      if (costiMP.length > 1) html += subTotalRow('Tot. Materie prime', costiMP, 'ce-det-cdv');
+      if (costiMP.length > 1) html += subTotalRow('Tot. Materie prime, sussidiarie, di consumo e di merci', costiMP, 'ce-det-cdv');
     }
     // Riga informativa "di cui accumulo/utilizzo rimanenze" quando il tasso
     // utilizzo acquisti è ≠ 100% (driver Magazzino). Non altera i totali
