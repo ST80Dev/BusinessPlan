@@ -546,8 +546,8 @@ const Engine = (() => {
         var lineaScost = {
           id: '_scostamento_magazzino',
           label: scostRes.scost_eff > 0
-            ? 'Scostamento magazzino (accumulo scorte)'
-            : 'Scostamento magazzino (utilizzo scorte)',
+            ? 'Aumento rimanenze (acquisti eccedenti il consumo)'
+            : 'Utilizzo rimanenze (consumo da scorte esistenti)',
           importo: scostRes.scost_eff,
           iva_credito: Math.round(scostRes.scost_eff * ivaMediaB6),
           iva_pct: ivaMediaB6,
