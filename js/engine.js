@@ -573,6 +573,14 @@ const Engine = (() => {
       sp.immob_materiali_nette += invMatAnno - ammortEvtMatNew;
       sp.immobilizzazioni_nette += (invImmatAnno - ammortEvtImmatNew) + (invMatAnno - ammortEvtMatNew);
 
+      // Dettaglio costo/fondo: somma investimenti lordi e ammortamento pro-rata nuovi
+      sp.immob_immateriali_costo += invImmatAnno;
+      sp.immob_materiali_costo += invMatAnno;
+      sp.immob_immateriali_fondo += ammortEvtImmatNew;
+      sp.immob_materiali_fondo += ammortEvtMatNew;
+      sp.quota_amm_immat_anno += ammortEvtImmatNew;
+      sp.quota_amm_mat_anno += ammortEvtMatNew;
+
       // SP: debiti finanziari calcolati direttamente (residuo essere + residuo eventi)
       sp.debiti_finanziari = finanz.residuo_totale + nuoviFinDebito;
 
@@ -743,6 +751,12 @@ const Engine = (() => {
       immob_immateriali_nette: 0,
       immob_materiali_nette: 0,
       immob_finanziarie: 0,
+      immob_immateriali_costo: 0,
+      immob_immateriali_fondo: 0,
+      immob_materiali_costo: 0,
+      immob_materiali_fondo: 0,
+      quota_amm_immat_anno: 0,
+      quota_amm_mat_anno: 0,
       attivo_circolante: 0,
       crediti_clienti: 0,
       rimanenze: 0,
@@ -788,6 +802,9 @@ const Engine = (() => {
       sp.immob_immateriali_nette = (sp.immob_immateriali_nette || 0) +
         (av['spc.SPESE.1'] || 0) + (av['spc.SPESE.2'] || 0);
       sp.immobilizzazioni_nette += (av['spc.SPESE.1'] || 0) + (av['spc.SPESE.2'] || 0);
+      // In costituenda non c'è fondo pregresso: costo = netto
+      sp.immob_immateriali_costo = sp.immob_immateriali_nette;
+      sp.immob_materiali_costo = sp.immob_materiali_nette;
       sp.totale_attivo = sp.immobilizzazioni_nette + sp.cassa_attivo + sp.crediti_soci;
       sp.totale_passivo = sp.patrimonio_netto + sp.debiti_finanziari + sp.cassa_passivo;
     } else if (storico.sp) {
@@ -796,13 +813,30 @@ const Engine = (() => {
 
       // Immobilizzazioni: usa dettaglio lordo/fondo se disponibile
       var totImmobI = 0, totImmobII = 0, totImmobIII = 0;
+      var costoI = 0, fondoI = 0, costoII = 0, fondoII = 0;
       ['sp.BI.1','sp.BI.2','sp.BI.3','sp.BI.4','sp.BI.5','sp.BI.6','sp.BI.7'].forEach(function(id) {
         var im = immob[id];
-        totImmobI += im ? ((im.costo_storico || 0) - (im.fondo_ammortamento || 0)) : (att[id] || 0);
+        if (im) {
+          costoI += im.costo_storico || 0;
+          fondoI += im.fondo_ammortamento || 0;
+          totImmobI += (im.costo_storico || 0) - (im.fondo_ammortamento || 0);
+        } else {
+          var v = att[id] || 0;
+          costoI += v;
+          totImmobI += v;
+        }
       });
       ['sp.BII.1','sp.BII.2','sp.BII.3','sp.BII.4','sp.BII.5'].forEach(function(id) {
         var im = immob[id];
-        totImmobII += im ? ((im.costo_storico || 0) - (im.fondo_ammortamento || 0)) : (att[id] || 0);
+        if (im) {
+          costoII += im.costo_storico || 0;
+          fondoII += im.fondo_ammortamento || 0;
+          totImmobII += (im.costo_storico || 0) - (im.fondo_ammortamento || 0);
+        } else {
+          var v2 = att[id] || 0;
+          costoII += v2;
+          totImmobII += v2;
+        }
       });
       ['sp.BIII.1','sp.BIII.2','sp.BIII.3','sp.BIII.4'].forEach(function(id) {
         totImmobIII += att[id] || 0;
@@ -812,6 +846,10 @@ const Engine = (() => {
       sp.immob_materiali_nette = totImmobII;
       sp.immob_finanziarie = totImmobIII;
       sp.immobilizzazioni_nette = totImmobI + totImmobII + totImmobIII;
+      sp.immob_immateriali_costo = costoI;
+      sp.immob_immateriali_fondo = fondoI;
+      sp.immob_materiali_costo = costoII;
+      sp.immob_materiali_fondo = fondoII;
 
       sp.crediti_clienti = att['sp.CII.1'] || 0;
       sp.rimanenze = (att['sp.CI.1'] || 0) + (att['sp.CI.2'] || 0) + (att['sp.CI.3'] || 0) + (att['sp.CI.4'] || 0) + (att['sp.CI.5'] || 0);
@@ -1404,6 +1442,15 @@ const Engine = (() => {
     sp.immob_finanziarie = spPrev.immob_finanziarie;
     sp.immobilizzazioni_nette = sp.immob_immateriali_nette + sp.immob_materiali_nette + sp.immob_finanziarie;
 
+    // Dettaglio costo lordo / fondo ammortamento (gli incrementi da investimenti
+    // dell'anno vengono aggiunti nel loop principale, dopo questa funzione).
+    sp.immob_immateriali_costo = spPrev.immob_immateriali_costo || 0;
+    sp.immob_immateriali_fondo = (spPrev.immob_immateriali_fondo || 0) + ammort.immateriali;
+    sp.immob_materiali_costo = spPrev.immob_materiali_costo || 0;
+    sp.immob_materiali_fondo = (spPrev.immob_materiali_fondo || 0) + ammort.materiali;
+    sp.quota_amm_immat_anno = ammort.immateriali;
+    sp.quota_amm_mat_anno = ammort.materiali;
+
     // Circolante: crediti/debiti commerciali e rimanenze sono calcolati dal
     // motore mensile (_calcolaMensile) nel loop principale, che tiene conto di
     // stagionalità, distribuzione dei costi e lordi IVA (art. 2424 c.c. C.II.1,
@@ -1432,8 +1479,10 @@ const Engine = (() => {
     sp._deb_trib_iva = 0; // sovrascritto dal motore mensile nel loop principale
     sp.debiti_tributari = saldoImposte;
 
-    // TFR: accumula quota annua
-    sp.tfr = spPrev.tfr + ce.personale.tfr;
+    // TFR: accumula quota annua (teniamo apertura e quota per il dettaglio)
+    sp.tfr_apertura = spPrev.tfr || 0;
+    sp.tfr_quota = ce.personale.tfr;
+    sp.tfr = sp.tfr_apertura + sp.tfr_quota;
 
     // Altri debiti: default; sotto-componenti sovrascritte da smobilizzo nel loop principale
     // Debiti previdenziali: contributi INPS di dicembre da versare il 16 gennaio

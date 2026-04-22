@@ -3342,6 +3342,7 @@ const UI = (() => {
 
     content.innerHTML = html;
     _initCEToggle();
+    _initSPToggle();
   }
 
   function switchProspTab(tabId) {
@@ -3606,7 +3607,7 @@ const UI = (() => {
     var nAnni = anniPrev.length;
     var colW = Math.max(100, Math.floor(600 / nAnni));
     var html = '<div class="prosp-scroll">';
-    html += '<table class="schema-table schema-table-sticky"><colgroup><col style="width:auto">';
+    html += '<table class="schema-table schema-table-sticky" id="table-prosp-sp"><colgroup><col style="width:auto">';
     for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
     html += '</colgroup>';
 
@@ -3614,9 +3615,36 @@ const UI = (() => {
     for (var h = 0; h < nAnni; h++) html += '<td class="cell-amount">' + anniPrev[h] + '</td>';
     html += '</tr></thead><tbody>';
 
+    // Helper: estrae la serie annuale di un campo da proiezioni[anno].sp
+    function spSeries(key) {
+      var out = [];
+      for (var a = 0; a < nAnni; a++) {
+        var sp = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].sp;
+        out.push(sp ? (sp[key] || 0) : 0);
+      }
+      return out;
+    }
+    function anyNonZero(arr) {
+      for (var i = 0; i < arr.length; i++) if (arr[i]) return true;
+      return false;
+    }
+
+    var costoImmat = spSeries('immob_immateriali_costo');
+    var fondoImmat = spSeries('immob_immateriali_fondo');
+    var quotaImmat = spSeries('quota_amm_immat_anno');
+    var costoMat = spSeries('immob_materiali_costo');
+    var fondoMat = spSeries('immob_materiali_fondo');
+    var quotaMat = spSeries('quota_amm_mat_anno');
+    var tfrApertura = spSeries('tfr_apertura');
+    var tfrQuota = spSeries('tfr_quota');
+
+    var hasImmatDet = anyNonZero(costoImmat) || anyNonZero(fondoImmat);
+    var hasMatDet = anyNonZero(costoMat) || anyNonZero(fondoMat);
+    var hasTfrDet = anyNonZero(tfrApertura) || anyNonZero(tfrQuota);
+
     var vociAtt = [
-      { key: 'immob_immateriali_nette', label: 'B.I Immobilizzazioni immateriali', indent: 1 },
-      { key: 'immob_materiali_nette',   label: 'B.II Immobilizzazioni materiali',  indent: 1 },
+      { key: 'immob_immateriali_nette', label: 'B.I Immobilizzazioni immateriali', indent: 1, toggle: hasImmatDet ? 'sp-det-immat' : null },
+      { key: 'immob_materiali_nette',   label: 'B.II Immobilizzazioni materiali',  indent: 1, toggle: hasMatDet ? 'sp-det-mat' : null },
       { key: 'immob_finanziarie',       label: 'B.III Immobilizzazioni finanziarie', indent: 1 },
       { key: 'immobilizzazioni_nette',  label: 'B. Totale immobilizzazioni',       bold: true },
       { key: 'rimanenze',              label: 'C.I Rimanenze',                     indent: 1 },
@@ -3634,7 +3662,7 @@ const UI = (() => {
       { key: 'riserve',             label: 'A.II-VI Riserve',                    indent: 1 },
       { key: 'utili_portati_nuovo', label: 'A.VIII Utili (perdite) a nuovo',     indent: 1 },
       { key: 'utile_esercizio',     label: 'A.IX Utile (perdita) esercizio',     indent: 1 },
-      { key: 'tfr',                 label: 'C. TFR',                             indent: 1 },
+      { key: 'tfr',                 label: 'C. TFR',                             indent: 1, toggle: hasTfrDet ? 'sp-det-tfr' : null },
       { key: 'debiti_finanziari',   label: 'D.4 Debiti finanziari',              indent: 1 },
       { key: 'debiti_fornitori',    label: 'D.7 Debiti fornitori',               indent: 1 },
       { key: 'debiti_tributari',    label: 'D.12 Debiti tributari',              indent: 1 },
@@ -3647,14 +3675,49 @@ const UI = (() => {
 
     // Sezione Attivo
     html += '<tr class="row-sottomastro"><td colspan="' + (nAnni + 1) + '" style="font-weight:700">ATTIVO</td></tr>';
-    vociAtt.forEach(function(v) { html += _prospettoRow(v, anniPrev, proiezioni, 'sp'); });
+    vociAtt.forEach(function(v) {
+      html += _prospettoRow(v, anniPrev, proiezioni, 'sp');
+      if (v.key === 'immob_immateriali_nette' && hasImmatDet) {
+        html += _prospettoDetRow('Costo storico (lordo)', costoImmat, 'sp-det-immat', 48);
+        html += _prospettoDetRow('Fondo ammortamento', fondoImmat, 'sp-det-immat', 48);
+        html += _prospettoDetRow('di cui ammortamento dell\'anno', quotaImmat, 'sp-det-immat', 60);
+      }
+      if (v.key === 'immob_materiali_nette' && hasMatDet) {
+        html += _prospettoDetRow('Costo storico (lordo)', costoMat, 'sp-det-mat', 48);
+        html += _prospettoDetRow('Fondo ammortamento', fondoMat, 'sp-det-mat', 48);
+        html += _prospettoDetRow('di cui ammortamento dell\'anno', quotaMat, 'sp-det-mat', 60);
+      }
+    });
 
     // Sezione Passivo
     html += '<tr class="row-sottomastro"><td colspan="' + (nAnni + 1) + '" style="font-weight:700">PASSIVO E PATRIMONIO NETTO</td></tr>';
-    vociPass.forEach(function(v) { html += _prospettoRow(v, anniPrev, proiezioni, 'sp'); });
+    vociPass.forEach(function(v) {
+      html += _prospettoRow(v, anniPrev, proiezioni, 'sp');
+      if (v.key === 'tfr' && hasTfrDet) {
+        html += _prospettoDetRow('Saldo apertura', tfrApertura, 'sp-det-tfr', 48);
+        html += _prospettoDetRow('Quota maturata nell\'anno', tfrQuota, 'sp-det-tfr', 48);
+      }
+    });
 
     html += '</tbody></table></div>';
     return html;
+  }
+
+  /** Gestisce click su toggle dettaglio SP (event delegation) */
+  function _initSPToggle() {
+    var table = document.getElementById('table-prosp-sp');
+    if (!table) return;
+    table.addEventListener('click', function(e) {
+      var td = e.target.closest('.sp-toggle');
+      if (!td) return;
+      var target = td.dataset.target;
+      if (!target) return;
+      var rows = document.querySelectorAll('.' + target);
+      var arrow = td.querySelector('.sp-toggle-arrow');
+      var open = rows.length > 0 && rows[0].style.display !== 'none';
+      rows.forEach(function(r) { r.style.display = open ? 'none' : ''; });
+      if (arrow) arrow.innerHTML = open ? '&#9654;' : '&#9660;';
+    });
   }
 
   /* ── Rendiconto Finanziario ──────────────────────────────── */
@@ -4223,11 +4286,19 @@ const UI = (() => {
 
   function _prospettoRow(v, anniPrev, proiezioni, sezione) {
     var cls = v.highlight ? 'row-totale' : (v.bold ? 'row-totale' : 'row-conto');
-    var pad = v.indent ? 'padding-left:24px' : '';
+    var padStyle = v.indent ? 'padding-left:24px' : '';
     var fKey = sezione + '.' + v.key;
     var firstTrace = proiezioni[String(anniPrev[0])] && proiezioni[String(anniPrev[0])]._trace;
     var tipAttr = _tipLabel(firstTrace && firstTrace[fKey], fKey);
-    var html = '<tr class="' + cls + '"><td style="' + pad + '"' + tipAttr + '>' + v.label + '</td>';
+    var tdAttrs, labelPrefix;
+    if (v.toggle) {
+      tdAttrs = ' class="sp-toggle" data-target="' + v.toggle + '" style="cursor:pointer;' + padStyle + '"' + tipAttr;
+      labelPrefix = '<span class="sp-toggle-arrow" data-target="' + v.toggle + '">&#9654;</span> ';
+    } else {
+      tdAttrs = ' style="' + padStyle + '"' + tipAttr;
+      labelPrefix = '';
+    }
+    var html = '<tr class="' + cls + '"><td' + tdAttrs + '>' + labelPrefix + v.label + '</td>';
     for (var a = 0; a < anniPrev.length; a++) {
       var annoData = proiezioni[String(anniPrev[a])];
       var data = annoData && annoData[sezione];
@@ -4240,6 +4311,19 @@ const UI = (() => {
     }
     html += '</tr>';
     return html;
+  }
+
+  /** Riga di dettaglio nel prospetto SP (nascosta di default). */
+  function _prospettoDetRow(label, values, groupId, indentPx) {
+    var r = '<tr class="row-conto sp-detail-row ' + groupId + '" style="display:none">';
+    r += '<td style="padding-left:' + indentPx + 'px;font-size:13px;color:var(--color-text-primary)">' + _escapeHtml(label) + '</td>';
+    for (var a = 0; a < values.length; a++) {
+      var val = values[a] || 0;
+      var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
+      r += '<td class="cell-amount"><span class="amount-computed' + valCls + '" style="font-size:13px;color:var(--color-text-primary)">' + _formatImporto(val) + '</span></td>';
+    }
+    r += '</tr>\n';
+    return r;
   }
 
   /* ── Immobilizzazioni dettaglio (lordo/fondo/netto) ────────── */

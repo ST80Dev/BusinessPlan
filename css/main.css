@@ -1079,16 +1079,16 @@ html, body {
 
 /* ── CE prospetto: toggle dettaglio ─────────────────── */
 
-.ce-toggle { cursor: pointer; user-select: none; }
-.ce-toggle:hover { background: var(--color-surface-alt); }
-.ce-toggle-arrow {
+.ce-toggle, .sp-toggle { cursor: pointer; user-select: none; }
+.ce-toggle:hover, .sp-toggle:hover { background: var(--color-surface-alt); }
+.ce-toggle-arrow, .sp-toggle-arrow {
   display: inline-block;
   width: 14px;
   font-size: 10px;
   color: var(--color-text-muted);
   transition: transform 0.15s;
 }
-.ce-detail-row td { border-bottom: 1px dashed var(--color-border); }
+.ce-detail-row td, .sp-detail-row td { border-bottom: 1px dashed var(--color-border); }
 
 /* ── SP a sezioni contrapposte (bilancio) ──────────── */
 
