@@ -3347,8 +3347,8 @@ const UI = (() => {
   function _renderProspettoCE(anniPrev, proiezioni, progetto) {
     var nAnni = anniPrev.length;
     var colW = Math.max(100, Math.floor(600 / nAnni));
-    var html = '<div style="overflow-x:auto">';
-    html += '<table class="schema-table" id="table-prosp-ce"><colgroup><col style="width:auto">';
+    var html = '<div class="prosp-scroll">';
+    html += '<table class="schema-table schema-table-sticky" id="table-prosp-ce"><colgroup><col style="width:auto">';
     for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
     html += '</colgroup>';
 
@@ -3587,8 +3587,8 @@ const UI = (() => {
   function _renderProspettoSP(anniPrev, proiezioni, progetto) {
     var nAnni = anniPrev.length;
     var colW = Math.max(100, Math.floor(600 / nAnni));
-    var html = '<div style="overflow-x:auto">';
-    html += '<table class="schema-table"><colgroup><col style="width:auto">';
+    var html = '<div class="prosp-scroll">';
+    html += '<table class="schema-table schema-table-sticky"><colgroup><col style="width:auto">';
     for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
     html += '</colgroup>';
 
@@ -3644,8 +3644,8 @@ const UI = (() => {
   function _renderProspettoCF(anniPrev, proiezioni, progetto) {
     var nAnni = anniPrev.length;
     var colW = Math.max(100, Math.floor(600 / nAnni));
-    var html = '<div style="overflow-x:auto">';
-    html += '<table class="schema-table"><colgroup><col style="width:auto">';
+    var html = '<div class="prosp-scroll">';
+    html += '<table class="schema-table schema-table-sticky"><colgroup><col style="width:auto">';
     for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
     html += '</colgroup>';
 
@@ -3700,11 +3700,11 @@ const UI = (() => {
 
     // Helper per creare una sezione del cruscotto
     function sezione(titolo, righe) {
-      var s = '<table class="schema-table" style="margin-bottom:20px"><colgroup><col style="width:auto">';
+      var s = '<table class="schema-table cruscotto-table" style="margin-bottom:20px"><colgroup><col style="width:auto">';
       for (var c = 0; c < nAnni; c++) s += '<col style="width:' + colW + 'px">';
       s += '</colgroup>';
-      s += '<thead><tr class="row-mastro" style="background:var(--color-sidebar-bg);color:white"><td style="font-weight:700;text-transform:uppercase;letter-spacing:0.05em">' + titolo + '</td>';
-      for (var h = 0; h < nAnni; h++) s += '<td class="cell-amount" style="color:white;font-weight:700">' + anniPrev[h] + '</td>';
+      s += '<thead><tr class="row-mastro row-cruscotto-header"><td class="cruscotto-header-cell cruscotto-header-title">' + titolo + '</td>';
+      for (var h = 0; h < nAnni; h++) s += '<td class="cell-amount cruscotto-header-cell">' + anniPrev[h] + '</td>';
       s += '</tr></thead><tbody>';
       righe.forEach(function(r) {
         var cls = r.bold ? 'row-totale' : 'row-conto';
@@ -3782,7 +3782,7 @@ const UI = (() => {
     ]);
 
     // PATRIMONIALE SINTETICO
-    html += sezione('Patrimoniale', [
+    html += sezione('Stato Patrimoniale', [
       { label: 'Cassa e banca', values: function(a) { return g(a,'sp','cassa'); } },
       { label: 'Crediti clienti', values: function(a) { return g(a,'sp','crediti_clienti'); } },
       { label: 'Rimanenze', values: function(a) { return g(a,'sp','rimanenze'); } },

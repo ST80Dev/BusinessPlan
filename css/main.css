@@ -1021,6 +1021,37 @@ html, body {
   border-top: 1px solid var(--color-border);
 }
 
+/* ── Prospetti: wrapper scrollabile con header sticky ─────── */
+.prosp-scroll {
+  overflow: auto;
+  max-height: calc(100vh - var(--header-height) - var(--footer-height) - 140px);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.schema-table-sticky thead .row-mastro > td {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--color-mastro-bg);
+  box-shadow: inset 0 -2px 0 var(--color-border);
+}
+
+/* ── Cruscotto: intestazioni di sezione più evidenti ─────── */
+.cruscotto-table .row-cruscotto-header > td.cruscotto-header-cell {
+  background: var(--color-accent);
+  color: #FFFFFF;
+  font-weight: 700;
+  border-top: 2px solid var(--color-accent-hover);
+  border-bottom: 2px solid var(--color-accent-hover);
+}
+.cruscotto-table .row-cruscotto-header > td.cruscotto-header-title {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 13px;
+}
+
 /* ── CE prospetto: toggle dettaglio ─────────────────── */
 
 .ce-toggle { cursor: pointer; user-select: none; }
