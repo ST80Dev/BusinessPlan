@@ -1384,11 +1384,20 @@ const UI = (() => {
     var ricavi = progetto.driver.ricavi;
     var anniPrev = progetto.meta.anni_previsione || [];
     var nAnni = anniPrev.length;
+    var fisc = progetto.driver.fiscale || {};
+    var ivaRicaviPct = fisc.iva_ricavi == null ? 0.22 : fisc.iva_ricavi;
     var html = '';
 
-    // Stagionalità globale
+    // Parametri globali dei ricavi: aliquota IVA media + stagionalità
+    html += '<div style="display:flex;align-items:center;gap:24px;margin-bottom:16px;flex-wrap:wrap">';
+
+    html += '<div style="display:flex;align-items:center;gap:8px">';
+    html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Aliquota IVA media ricavi:</span>';
+    html += '<div class="form-field" contenteditable="true" style="width:80px;text-align:right;font-family:var(--font-mono)" data-placeholder="0%" onblur="UI._handleFiscaleField(this,\'iva_ricavi\')" onkeydown="UI._handleAmountKey(event)" title="IVA applicata ai ricavi per calcolo debito IVA">' + _formatPct(ivaRicaviPct) + '</div>';
+    html += '</div>';
+
     var stagAttiva = progetto.driver.stagionalita_attiva || false;
-    html += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">';
+    html += '<div style="display:flex;align-items:center;gap:8px">';
     html += '<span style="font-size:13px;font-weight:600;color:var(--color-text-secondary)">Stagionalità:</span>';
     html += '<div class="toggle-group" style="width:120px">';
     html += '<div class="toggle-item' + (stagAttiva ? ' active' : '') + '" onclick="UI.toggleStagionalita(true)">Sì</div>';
@@ -1397,6 +1406,8 @@ const UI = (() => {
     if (stagAttiva) {
       html += '<div class="btn btn-ghost btn-sm" onclick="UI.editProfiloStagionale()">Configura profilo mensile</div>';
     }
+    html += '</div>';
+
     html += '</div>';
 
     // Toolbar
@@ -2244,14 +2255,10 @@ const UI = (() => {
     html += '</div>';
     html += '</div>';
 
-    // IVA (colonna destra)
+    // IVA (colonna destra, aliquota media ricavi spostata nella tab Ricavi)
     html += '<div>';
     html += H3 + 'IVA</h3>';
     html += '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">';
-
-    html += '<div class="form-group"><span class="form-label">Aliquota IVA media ricavi %</span>';
-    html += '<div class="form-field" contenteditable="true" style="width:100px;text-align:right;font-family:var(--font-mono)" onblur="UI._handleFiscaleField(this,\'iva_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(fisc.iva_ricavi || 0.22) + '</div>';
-    html += '<div class="form-hint">IVA applicata ai ricavi per calcolo debito IVA</div></div>';
 
     html += '<div class="form-group"><span class="form-label">Liquidazione IVA</span>';
     var liqIva = fisc.liquidazione_iva || 'mensile';
