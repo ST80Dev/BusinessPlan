@@ -3369,7 +3369,13 @@ const UI = (() => {
         var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
         var tipOpen = _tipValue(trace && trace[fKey]);
         var tipClose = tipOpen ? '</span>' : '';
-        r += '<td class="cell-amount">' + tipOpen + '<span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span>' + tipClose + '</td>';
+        var pctHtml = '';
+        if (opts.pct) {
+          var ricavi = ce ? (ce.valore_produzione || 0) : 0;
+          var pctVal = ricavi !== 0 ? val / ricavi : 0;
+          pctHtml = '<div class="amount-pct">' + _formatPctValue(pctVal) + '</div>';
+        }
+        r += '<td class="cell-amount">' + tipOpen + '<span class="amount-computed' + valCls + '">' + _formatImporto(val) + '</span>' + tipClose + pctHtml + '</td>';
       }
       r += '</tr>\n';
       return r;
@@ -3382,7 +3388,7 @@ const UI = (() => {
       for (var a = 0; a < nAnni; a++) {
         var val = values[a] || 0;
         var valCls = val < 0 ? ' negative' : (val === 0 ? ' zero' : '');
-        r += '<td class="cell-amount"><span style="font-size:12px;color:var(--color-text-secondary)" class="' + valCls + '">' + _formatImporto(val) + '</span></td>';
+        r += '<td class="cell-amount"><span class="amount-computed' + valCls + '" style="font-size:12px;color:var(--color-text-secondary)">' + _formatImporto(val) + '</span></td>';
       }
       r += '</tr>\n';
       return r;
@@ -3400,7 +3406,7 @@ const UI = (() => {
         var sum = 0;
         for (var k = 0; k < items.length; k++) sum += (items[k].values[a] || 0);
         var valCls = sum < 0 ? ' negative' : (sum === 0 ? ' zero' : '');
-        r += '<td class="cell-amount"><span style="font-size:12px;font-weight:600;color:var(--color-text-secondary)" class="' + valCls + '">' + _formatImporto(sum) + '</span></td>';
+        r += '<td class="cell-amount"><span class="amount-computed' + valCls + '" style="font-size:12px;font-weight:600;color:var(--color-text-secondary)">' + _formatImporto(sum) + '</span></td>';
       }
       r += '</tr>\n';
       return r;
@@ -3495,7 +3501,7 @@ const UI = (() => {
     }
 
     // ═══ MARGINE DI CONTRIBUZIONE ═══
-    html += ceRow('margine_contribuzione', 'Margine di contribuzione', { bold: true });
+    html += ceRow('margine_contribuzione', 'Margine di contribuzione', { bold: true, pct: true });
 
     // ── ALTRI COSTI VARIABILI (pct_ricavi, non vendita/acquisto) ──
     if (altriCostiVar.length > 0) {
@@ -3528,7 +3534,7 @@ const UI = (() => {
     }
 
     // ── EBITDA ──
-    html += ceRow('ebitda', 'EBITDA', { bold: true });
+    html += ceRow('ebitda', 'EBITDA', { bold: true, pct: true });
 
     // ── B.10 Ammortamenti (con dettaglio materiali/immateriali) ──
     html += ceRow('ammortamenti', 'B.10 Ammortamenti', { indent: 1, toggle: 'ce-det-ammort' });
@@ -3546,12 +3552,12 @@ const UI = (() => {
     }
 
     // ── Resto CE ──
-    html += ceRow('ebit', 'EBIT (A-B)', { bold: true });
+    html += ceRow('ebit', 'EBIT (A-B)', { bold: true, pct: true });
     html += ceRow('oneri_finanziari', 'C.17 Oneri finanziari', { indent: 1 });
-    html += ceRow('risultato_ante_imposte', 'Risultato ante imposte', { bold: true });
+    html += ceRow('risultato_ante_imposte', 'Risultato ante imposte', { bold: true, pct: true });
     html += ceRow('ires', 'IRES', { indent: 1 });
     html += ceRow('irap', 'IRAP', { indent: 1 });
-    html += ceRow('utile_netto', 'Utile (perdita) netto', { bold: true });
+    html += ceRow('utile_netto', 'Utile (perdita) netto', { bold: true, pct: true });
 
     html += '</tbody></table></div>';
     return html;

@@ -988,7 +988,11 @@ html, body {
   user-select: none;
 }
 
-.row-mastro > td:first-child { padding-left: 12px; }
+.row-mastro > td:first-child {
+  padding-left: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
 
 /* Riga sottomastro (livello 2) */
 .row-sottomastro > td {
@@ -1002,6 +1006,11 @@ html, body {
   user-select: none;
 }
 
+.row-sottomastro > td:first-child {
+  font-size: 13px;
+  font-weight: 700;
+}
+
 /* Riga conto foglia (livello 3) */
 .row-conto > td {
   background: var(--color-conto-bg);
@@ -1009,6 +1018,17 @@ html, body {
   font-size: 13px;
   padding: 5px 12px 5px 36px;
   border-top: 1px solid var(--color-border-light);
+}
+
+.row-conto > td:first-child {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Voci di dettaglio (espandibile) mantengono lo stile secondario piu piccolo */
+.row-conto.ce-detail-row > td:first-child {
+  font-size: 12px;
+  font-weight: 400;
 }
 
 /* Riga totale */
@@ -1019,6 +1039,11 @@ html, body {
   font-size: 13px;
   padding: 7px 12px;
   border-top: 1px solid var(--color-border);
+}
+
+.row-totale > td:first-child {
+  font-size: 14px;
+  font-weight: 700;
 }
 
 /* ── Prospetti: wrapper scrollabile con header sticky ─────── */
@@ -1169,6 +1194,18 @@ html, body {
 
 .amount-computed.negative { color: var(--color-error); }
 .amount-computed.zero     { color: var(--color-text-muted); }
+
+/* Percentuale sul fatturato mostrata sotto l'importo nelle righe totale del CE */
+.amount-pct {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  padding: 0 8px;
+  margin-top: 1px;
+  text-align: right;
+}
 
 /* Tooltip formula prospetti */
 .formula-tip {
