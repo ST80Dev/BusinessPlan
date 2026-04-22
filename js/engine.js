@@ -591,22 +591,31 @@ const Engine = (() => {
         ce.costi_totale -= valoreUtilizzato;
       }
 
-      // Variazione rimanenze nel CE (art. 2425 c.c., voce A.2/B.11)
-      // Riflette la variazione del magazzino tra inizio e fine esercizio.
+      // Variazione rimanenze nel CE (art. 2425 c.c., voce B.11)
+      // Le rimanenze di questo motore sono valorizzate al costo di acquisto
+      // (SP C.I.1 Materie prime / C.I.4 Merci), quindi la variazione è
+      // classificata in B.11 "variazioni delle rimanenze di materie prime,
+      // sussidiarie, di consumo e merci": rettifica i costi di produzione
+      // senza concorrere al Valore della produzione (A). Un aumento di
+      // magazzino riduce il costo dei materiali effettivamente consumati.
       ce.variazione_rimanenze = sp.rimanenze - spPrev.rimanenze;
       if (ce.variazione_rimanenze !== 0 || valoreUtilizzato > 0) {
         // Ricalcola CE con variazione rimanenze e costi aggiornati
-        ce.valore_produzione = ce.ricavi_totale + ce.variazione_rimanenze;
-        ce.costi_produzione = ce.costi_totale + ce.personale_totale + ce.ammortamenti;
+        ce.valore_produzione = ce.ricavi_totale;
+        ce.costi_produzione = ce.costi_totale + ce.personale_totale + ce.ammortamenti - ce.variazione_rimanenze;
         // Aggiorna costo_venduto se utilizzo_rimanenze ha ridotto costi MP
         if (valoreUtilizzato > 0) {
           ce.costo_venduto = Math.max(0, ce.costo_venduto - valoreUtilizzato);
         }
-        ce.ebitda = ce.valore_produzione - ce.costi_totale - ce.personale_totale;
+        // Costo del venduto netto della variazione rimanenze (B.11): un
+        // aumento di magazzino rappresenta acquisti non consumati e riduce
+        // il costo del venduto; un decremento (consumi > acquisti) lo aumenta.
+        ce.costo_venduto = ce.costo_venduto - ce.variazione_rimanenze;
+        ce.ebitda = ce.valore_produzione - (ce.costi_totale - ce.variazione_rimanenze) - ce.personale_totale;
         ce.ebit = ce.ebitda - ce.ammortamenti;
         ce.risultato_ante_imposte = ce.ebit - ce.oneri_finanziari;
         ce.ires = Math.max(0, Math.round(ce.risultato_ante_imposte * (fisc.aliquota_ires || 0.24)));
-        var baseIrapAdj = ce.valore_produzione - ce.costi_totale - ce.ammortamenti;
+        var baseIrapAdj = ce.valore_produzione - (ce.costi_totale - ce.variazione_rimanenze) - ce.ammortamenti;
         ce.irap = Math.max(0, Math.round(baseIrapAdj * (fisc.aliquota_irap || 0.039)));
         ce.imposte = ce.ires + ce.irap;
         ce.utile_netto = ce.risultato_ante_imposte - ce.imposte;
@@ -621,8 +630,8 @@ const Engine = (() => {
         sp.debiti_tributari = saldoImpAdj + sp._deb_trib_iva + (smobResidui.debiti_tributari || 0);
       }
 
-      // Margine di contribuzione = Valore produzione − Costo del venduto − Var. rimanenze
-      // (Var. rimanenze inclusa perché impatta direttamente sugli acquisti effettivi)
+      // Margine di contribuzione = Valore produzione − Costo del venduto
+      // (ce.costo_venduto è già al netto della variazione rimanenze B.11)
       ce.margine_contribuzione = ce.valore_produzione - ce.costo_venduto;
 
       // SP: operazioni soci
@@ -1266,20 +1275,20 @@ const Engine = (() => {
     // ── CE ──
     t['ce.ricavi_totale'] = 'Somma driver ricavi';
     t['ce.costi_totale'] = 'Somma driver costi';
-    t['ce.costo_venduto'] = 'Materie prime (B.6) + Costi variabili vendita/acquisto = ' + _fmt(ce.costo_venduto);
+    t['ce.costo_venduto'] = 'Materie prime (B.6) + Costi var. vendita/acquisto − Var. rimanenze (B.11) = ' + _fmt(ce.costo_venduto);
     t['ce.altri_costi_variabili'] = 'Altri costi variabili (pct ricavi, non vendita/acquisto) = ' + _fmt(ce.altri_costi_variabili);
     t['ce.costi_fissi'] = 'Costi fissi di gestione = ' + _fmt(ce.costi_fissi);
-    t['ce.variazione_rimanenze'] = 'Rim. finali ' + _fmt(sp.rimanenze) + ' − Rim. iniziali ' + _fmt(spPrev.rimanenze);
+    t['ce.variazione_rimanenze'] = 'B.11 — Rim. finali ' + _fmt(sp.rimanenze) + ' − Rim. iniziali ' + _fmt(spPrev.rimanenze) + ' (rettifica costi di produzione)';
     t['ce.margine_contribuzione'] = 'VP ' + _fmt(ce.valore_produzione) + ' − Costo venduto ' + _fmt(ce.costo_venduto) + ' = ' + _fmt(ce.margine_contribuzione);
-    t['ce.valore_produzione'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' + Var.rim. ' + _fmt(ce.variazione_rimanenze);
+    t['ce.valore_produzione'] = 'Ricavi ' + _fmt(ce.ricavi_totale) + ' (la var. rimanenze materie prime/merci va in B.11, non in A.2)';
     t['ce.personale_totale'] = 'Stipendi + Oneri sociali + TFR';
     t['ce.ammortamenti'] = 'Immateriali ' + _fmt(ce.ammort_immateriali) + ' + Materiali ' + _fmt(ce.ammort_materiali);
-    t['ce.ebitda'] = 'VP ' + _fmt(ce.valore_produzione) + ' − Costi ' + _fmt(ce.costi_totale) + ' − Personale ' + _fmt(ce.personale_totale);
+    t['ce.ebitda'] = 'VP ' + _fmt(ce.valore_produzione) + ' − (Costi ' + _fmt(ce.costi_totale) + ' − Var.rim. ' + _fmt(ce.variazione_rimanenze) + ') − Personale ' + _fmt(ce.personale_totale);
     t['ce.ebit'] = 'EBITDA ' + _fmt(ce.ebitda) + ' − Ammort. ' + _fmt(ce.ammortamenti);
     t['ce.oneri_finanziari'] = 'Interessi su finanziamenti in essere ed eventi';
     t['ce.risultato_ante_imposte'] = 'EBIT ' + _fmt(ce.ebit) + ' − Oneri fin. ' + _fmt(ce.oneri_finanziari);
     t['ce.ires'] = 'max(0, Ris.ante imp. ' + _fmt(ce.risultato_ante_imposte) + ' × ' + _pct(fisc.aliquota_ires || 0.24) + ')';
-    t['ce.irap'] = 'max(0, Base IRAP ' + _fmt(ce.valore_produzione - ce.costi_totale - ce.ammortamenti) + ' × ' + _pct(fisc.aliquota_irap || 0.039) + ')';
+    t['ce.irap'] = 'max(0, Base IRAP ' + _fmt(ce.valore_produzione - (ce.costi_totale - ce.variazione_rimanenze) - ce.ammortamenti) + ' × ' + _pct(fisc.aliquota_irap || 0.039) + ')';
     t['ce.imposte'] = 'IRES ' + _fmt(ce.ires) + ' + IRAP ' + _fmt(ce.irap);
     t['ce.utile_netto'] = 'Ris.ante imp. ' + _fmt(ce.risultato_ante_imposte) + ' − Imposte ' + _fmt(ce.imposte);
     // ── SP ──

@@ -3445,11 +3445,19 @@ const UI = (() => {
       for (var mp = 0; mp < costiMP.length; mp++) html += detRow(costiMP[mp].label, costiMP[mp].values, 'ce-det-cdv', 52);
       if (costiMP.length > 1) html += subTotalRow('Tot. Materie prime', costiMP, 'ce-det-cdv');
     }
-    // A.2 Variazione rimanenze: subito dopo materie prime (impatta acquisti effettivi)
-    var varRimValues = anniPrev.map(function(a) { var r = proiezioni[String(a)]; return r && r.ce ? r.ce.variazione_rimanenze || 0 : 0; });
+    // B.11 Variazione rimanenze materie prime/merci (art. 2425 c.c.):
+    // rettifica dei costi di produzione con convenzione civilistica
+    // "rimanenze iniziali − finali": un aumento di magazzino si presenta
+    // come valore negativo (riduce il costo del venduto). Il valore è già
+    // incorporato nell'aggregato "Costo del venduto" sopra; qui è mostrato
+    // come dettaglio espandibile per trasparenza.
+    var varRimValues = anniPrev.map(function(a) {
+      var r = proiezioni[String(a)];
+      return r && r.ce ? -(r.ce.variazione_rimanenze || 0) : 0;
+    });
     var hasVarRim = varRimValues.some(function(v) { return v !== 0; });
     if (hasVarRim) {
-      html += ceRow('variazione_rimanenze', 'A.2 Var. rimanenze', { indent: 1 });
+      html += detRow('B.11 Var. rimanenze materie prime/merci', varRimValues, 'ce-det-cdv', 52);
     }
     if (costiVarCDV.length > 0) {
       html += subHeader('Costi variabili vendita/acquisto', 'ce-det-cdv');
@@ -4096,9 +4104,9 @@ const UI = (() => {
   // sign: '+' o '-'. sez: sezione dati (default = stessa del prospetto)
   var _formule = {
     // ── CE ──
-    'ce.valore_produzione':       { desc: 'Ricavi + Var. rimanenze',
-      c: [{k:'ricavi_totale',l:'Ricavi',s:'+'},{k:'variazione_rimanenze',l:'Var. rimanenze',s:'+'}] },
-    'ce.costo_venduto':           { desc: 'Materie prime (B.6) + Costi variabili vendita/acquisto',
+    'ce.valore_produzione':       { desc: 'Ricavi (A) — la var. rimanenze materie prime/merci va in B.11 per art. 2425 c.c.',
+      c: [{k:'ricavi_totale',l:'Ricavi',s:'+'}] },
+    'ce.costo_venduto':           { desc: 'Materie prime (B.6) + Costi var. vendita/acquisto − Var. rimanenze (B.11)',
       c: [{k:'costo_venduto',l:'Costo del venduto',s:'+'}] },
     'ce.margine_contribuzione':   { desc: 'Valore produzione - Costo del venduto',
       c: [{k:'valore_produzione',l:'Valore produzione',s:'+'},{k:'costo_venduto',l:'Costo venduto',s:'-'}] },
@@ -4106,10 +4114,10 @@ const UI = (() => {
       c: [{k:'altri_costi_variabili',l:'Altri costi variabili',s:'+'}] },
     'ce.costi_fissi':             { desc: 'Costi fissi di gestione',
       c: [{k:'costi_fissi',l:'Costi fissi',s:'+'}] },
-    'ce.costi_produzione':        { desc: 'Costi oper. + Personale + Ammortamenti',
-      c: [{k:'costi_totale',l:'Costi operativi',s:'+'},{k:'personale_totale',l:'Personale',s:'+'},{k:'ammortamenti',l:'Ammortamenti',s:'+'}] },
-    'ce.ebitda':                  { desc: 'Valore produzione - Costi oper. - Personale',
-      c: [{k:'valore_produzione',l:'Valore produzione',s:'+'},{k:'costi_totale',l:'Costi operativi',s:'-'},{k:'personale_totale',l:'Personale',s:'-'}] },
+    'ce.costi_produzione':        { desc: 'Costi oper. + Personale + Ammortamenti − Var. rimanenze (B.11)',
+      c: [{k:'costi_totale',l:'Costi operativi',s:'+'},{k:'personale_totale',l:'Personale',s:'+'},{k:'ammortamenti',l:'Ammortamenti',s:'+'},{k:'variazione_rimanenze',l:'Var. rimanenze (B.11)',s:'-'}] },
+    'ce.ebitda':                  { desc: 'Valore produzione - Costi oper. + Var. rimanenze (B.11) - Personale',
+      c: [{k:'valore_produzione',l:'Valore produzione',s:'+'},{k:'costi_totale',l:'Costi operativi',s:'-'},{k:'variazione_rimanenze',l:'Var. rimanenze (B.11)',s:'+'},{k:'personale_totale',l:'Personale',s:'-'}] },
     'ce.ebit':                    { desc: 'EBITDA - Ammortamenti',
       c: [{k:'ebitda',l:'EBITDA',s:'+'},{k:'ammortamenti',l:'Ammortamenti',s:'-'}] },
     'ce.risultato_ante_imposte':  { desc: 'EBIT - Oneri finanziari',
