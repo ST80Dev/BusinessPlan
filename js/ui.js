@@ -2227,29 +2227,32 @@ const UI = (() => {
   function _renderDriverFiscale(progetto) {
     var fisc = progetto.driver.fiscale;
     var anniPrev = progetto.meta.anni_previsione;
+    var H3 = '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">';
     var html = '';
 
-    // Aliquote
-    html += '<div style="max-width:500px">';
-    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Aliquote</h3>';
+    // ── Riga 1: Aliquote + IVA affiancate ────────────────────
+    html += '<div style="display:grid;grid-template-columns:minmax(240px,320px) 1fr;gap:40px;align-items:start">';
 
-    html += '<div class="form-row">';
+    // Aliquote (colonna sinistra)
+    html += '<div>';
+    html += H3 + 'Aliquote</h3>';
+    html += '<div style="display:flex;gap:16px">';
     html += '<div class="form-group"><span class="form-label">IRES %</span>';
     html += '<div class="form-field" contenteditable="true" style="width:100px;text-align:right;font-family:var(--font-mono)" onblur="UI._handleFiscaleField(this,\'aliquota_ires\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(fisc.aliquota_ires) + '</div></div>';
     html += '<div class="form-group"><span class="form-label">IRAP %</span>';
     html += '<div class="form-field" contenteditable="true" style="width:100px;text-align:right;font-family:var(--font-mono)" onblur="UI._handleFiscaleField(this,\'aliquota_irap\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(fisc.aliquota_irap) + '</div></div>';
     html += '</div>';
+    html += '</div>';
 
-    // IVA
-    html += '<h3 style="font-size:14px;font-weight:700;margin:24px 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">IVA</h3>';
+    // IVA (colonna destra)
+    html += '<div>';
+    html += H3 + 'IVA</h3>';
+    html += '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">';
 
-    html += '<div class="form-row">';
     html += '<div class="form-group"><span class="form-label">Aliquota IVA media ricavi %</span>';
     html += '<div class="form-field" contenteditable="true" style="width:100px;text-align:right;font-family:var(--font-mono)" onblur="UI._handleFiscaleField(this,\'iva_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(fisc.iva_ricavi || 0.22) + '</div>';
     html += '<div class="form-hint">IVA applicata ai ricavi per calcolo debito IVA</div></div>';
-    html += '</div>';
 
-    html += '<div style="display:flex;gap:20px;align-items:center;margin-top:8px;margin-bottom:4px">';
     html += '<div class="form-group"><span class="form-label">Liquidazione IVA</span>';
     var liqIva = fisc.liquidazione_iva || 'mensile';
     html += '<div class="toggle-group" id="tg-liq-iva" style="width:200px">';
@@ -2264,13 +2267,20 @@ const UI = (() => {
     html += '<div class="toggle-item' + (!rimbIva ? ' active' : '') + '" data-value="false" onclick="UI._handleFiscaleToggle(\'rimborso_iva_trim\',false)">No</div>';
     html += '</div>';
     html += '<div class="form-hint">Per società con IVA strutturalmente a credito (art. 38-bis)</div></div>';
-    html += '</div>';
 
-    // Inflazione per anno
-    html += '<h3 style="font-size:14px;font-weight:700;margin:24px 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Inflazione prevista %</h3>';
+    html += '</div>'; // flex IVA
+    html += '</div>'; // colonna IVA
+
+    html += '</div>'; // grid riga 1
+
+    // ── Riga 2: Inflazione + Variazione personale affiancate ─
+    html += '<div style="display:grid;grid-template-columns:minmax(280px,380px) minmax(280px,380px);gap:40px;margin-top:20px;align-items:start">';
+
+    // Inflazione
+    html += '<div>';
+    html += H3.replace('margin:0 0 12px', 'margin:0 0 4px') + 'Inflazione prevista %</h3>';
     html += '<div class="form-hint mb-8">Applicata automaticamente ai costi fissi soggetti a inflazione.</div>';
-
-    html += '<table class="schema-table" style="max-width:400px"><tbody>';
+    html += '<table class="schema-table"><tbody>';
     for (var i = 0; i < anniPrev.length; i++) {
       var a = String(anniPrev[i]);
       var val = fisc.inflazione ? (fisc.inflazione[a] || 0) : 0;
@@ -2278,12 +2288,13 @@ const UI = (() => {
       html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleFiscaleAnnoField(this,\'inflazione\',\'' + a + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(val) + '</div></td></tr>';
     }
     html += '</tbody></table>';
+    html += '</div>';
 
-    // Variazione personale per anno
-    html += '<h3 style="font-size:14px;font-weight:700;margin:24px 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Variazione costo personale %</h3>';
+    // Variazione costo personale
+    html += '<div>';
+    html += H3.replace('margin:0 0 12px', 'margin:0 0 4px') + 'Variazione costo personale %</h3>';
     html += '<div class="form-hint mb-8">Applicata alle voci costo di tipo "Personale" (indipendente dall\'inflazione).</div>';
-
-    html += '<table class="schema-table" style="max-width:400px"><tbody>';
+    html += '<table class="schema-table"><tbody>';
     for (var j = 0; j < anniPrev.length; j++) {
       var a2 = String(anniPrev[j]);
       var val2 = fisc.var_personale ? (fisc.var_personale[a2] || 0) : 0;
@@ -2291,8 +2302,10 @@ const UI = (() => {
       html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleFiscaleAnnoField(this,\'var_personale\',\'' + a2 + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(val2) + '</div></td></tr>';
     }
     html += '</tbody></table>';
-
     html += '</div>';
+
+    html += '</div>'; // grid riga 2
+
     return html;
   }
 
