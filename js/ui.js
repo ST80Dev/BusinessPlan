@@ -1639,7 +1639,7 @@ const UI = (() => {
       // Header categoria
       html += '<thead><tr class="row-sottomastro"><td colspan="8" style="padding:8px 12px;font-weight:700">' + cat.label + '</td></tr>';
       if (items.length > 0) {
-        html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td class="cell-amount" title="Costo del venduto">CDV</td><td class="cell-amount">IVA</td><td></td></tr>';
+        html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td class="cell-amount" title="Costo del venduto — attiva per costi (variabili o fissi) direttamente attribuibili alla produzione/erogazione del prodotto o servizio venduto (es. materie prime, hosting, licenze software produttive, canoni leasing di strumenti di delivery). Escludi spese commerciali, generali, amministrative o di rappresentanza.">CDV</td><td class="cell-amount">IVA</td><td></td></tr>';
       }
       html += '</thead><tbody>';
 
@@ -1674,18 +1674,16 @@ const UI = (() => {
           html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + flagColor + '" onclick="UI.toggleInflazione(\'' + did + '\')">' + flagIcon + '</div></td>';
         }
 
-        // CDV toggle (Costo del venduto)
+        // CDV toggle (Costo del venduto) — attivabile su costi variabili e fissi
+        // direttamente attribuibili al prodotto/servizio venduto
         var isB6 = cc.voce_ce && cc.voce_ce.indexOf('ce.B.6') === 0;
         if (isB6) {
           // B.6 is always CDV, show non-toggleable indicator
           html += '<td class="cell-amount"><span style="color:var(--color-success);font-size:12px" title="B.6 sempre nel Costo del venduto">✓</span></td>';
-        } else if (cc.tipo_driver === 'pct_ricavi') {
+        } else {
           var cdvIcon = cc.costo_venduto ? '✓' : '✕';
           var cdvColor = cc.costo_venduto ? 'var(--color-success)' : 'var(--color-text-muted)';
           html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + cdvColor + '" onclick="UI.toggleCostoVenduto(\'' + did + '\')">' + cdvIcon + '</div></td>';
-        } else {
-          // Fisso costs are never CDV
-          html += '<td class="cell-amount"><span class="text-muted" style="font-size:11px">—</span></td>';
         }
 
         // IVA % (toggle button)
@@ -3413,12 +3411,13 @@ const UI = (() => {
       html += detRow(ricaviDet[ri].label, ricaviDet[ri].values, 'ce-det-ricavi', 48);
     }
 
-    // ── COSTO DEL VENDUTO (MP + Var. rimanenze + Costi variabili vendita/acquisto) ──
+    // ── COSTO DEL VENDUTO (MP + Var. rimanenze + altri costi diretti attribuiti) ──
     var costiDet = collectDetail('costi_dettaglio');
     // Classifica in 3 gruppi:
     // 1. Costo del venduto: B.6 (materie prime) + driver con flag costo_venduto
+    //    (sia variabili sia fissi direttamente attribuibili al prodotto/servizio)
     // 2. Altri costi variabili: pct_ricavi senza flag costo_venduto e non B.6
-    // 3. Costi fissi: tipo_driver != pct_ricavi
+    // 3. Costi fissi: tipo_driver fisso senza flag costo_venduto
     var costiMP = [], costiVarCDV = [], altriCostiVar = [], costiFissi = [];
     for (var ci = 0; ci < costiDet.length; ci++) {
       var cd = costiDet[ci];
@@ -3460,9 +3459,9 @@ const UI = (() => {
       html += detRow('B.11 Var. rimanenze materie prime/merci', varRimValues, 'ce-det-cdv', 52);
     }
     if (costiVarCDV.length > 0) {
-      html += subHeader('Costi variabili vendita/acquisto', 'ce-det-cdv');
+      html += subHeader('Altri costi diretti attribuiti al venduto', 'ce-det-cdv');
       for (var cv = 0; cv < costiVarCDV.length; cv++) html += detRow(costiVarCDV[cv].label, costiVarCDV[cv].values, 'ce-det-cdv', 52);
-      if (costiVarCDV.length > 1) html += subTotalRow('Tot. Costi var. vendita/acquisto', costiVarCDV, 'ce-det-cdv');
+      if (costiVarCDV.length > 1) html += subTotalRow('Tot. altri costi diretti', costiVarCDV, 'ce-det-cdv');
     }
 
     // ═══ MARGINE DI CONTRIBUZIONE ═══
@@ -4106,7 +4105,7 @@ const UI = (() => {
     // ── CE ──
     'ce.valore_produzione':       { desc: 'Ricavi (A) — la var. rimanenze materie prime/merci va in B.11 per art. 2425 c.c.',
       c: [{k:'ricavi_totale',l:'Ricavi',s:'+'}] },
-    'ce.costo_venduto':           { desc: 'Materie prime (B.6) + Costi var. vendita/acquisto − Var. rimanenze (B.11)',
+    'ce.costo_venduto':           { desc: 'Materie prime (B.6) + Costi diretti (variabili o fissi) attribuiti alla produzione/erogazione − Var. rimanenze (B.11)',
       c: [{k:'costo_venduto',l:'Costo del venduto',s:'+'}] },
     'ce.margine_contribuzione':   { desc: 'Valore produzione - Costo del venduto',
       c: [{k:'valore_produzione',l:'Valore produzione',s:'+'},{k:'costo_venduto',l:'Costo venduto',s:'-'}] },

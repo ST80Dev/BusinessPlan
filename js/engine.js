@@ -465,8 +465,9 @@ const Engine = (() => {
 
       // Subtotali costi: costo del venduto vs altri variabili vs fissi
       // Costo del venduto: B.6 (materie prime) + driver con flag costo_venduto
+      //   (sia variabili sia fissi direttamente attribuibili al prodotto/servizio venduto)
       // Altri costi variabili: pct_ricavi senza flag costo_venduto e non B.6
-      // Costi fissi: tipo_driver = fisso
+      // Costi fissi: tipo_driver fisso senza flag costo_venduto
       var costoVenduto = 0, altriCostiVar = 0, costiFissiTot = 0;
       var detC = ce.costi_dettaglio;
       for (var dc = 0; dc < detC.length; dc++) {
@@ -1275,7 +1276,7 @@ const Engine = (() => {
     // ── CE ──
     t['ce.ricavi_totale'] = 'Somma driver ricavi';
     t['ce.costi_totale'] = 'Somma driver costi';
-    t['ce.costo_venduto'] = 'Materie prime (B.6) + Costi var. vendita/acquisto − Var. rimanenze (B.11) = ' + _fmt(ce.costo_venduto);
+    t['ce.costo_venduto'] = 'Materie prime (B.6) + Costi diretti (variabili o fissi) attribuiti alla produzione/erogazione − Var. rimanenze (B.11) = ' + _fmt(ce.costo_venduto);
     t['ce.altri_costi_variabili'] = 'Altri costi variabili (pct ricavi, non vendita/acquisto) = ' + _fmt(ce.altri_costi_variabili);
     t['ce.costi_fissi'] = 'Costi fissi di gestione = ' + _fmt(ce.costi_fissi);
     t['ce.variazione_rimanenze'] = 'B.11 — Rim. finali ' + _fmt(sp.rimanenze) + ' − Rim. iniziali ' + _fmt(spPrev.rimanenze) + ' (rettifica costi di produzione)';
