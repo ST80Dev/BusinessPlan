@@ -3565,9 +3565,9 @@ const UI = (() => {
 
     html += ceRow('costo_venduto', 'Costo del venduto', { indent: 1, toggle: 'ce-det-cdv' });
     if (costiMP.length > 0) {
-      html += subHeader('Acquisto materie prime, sussidiarie, di consumo e di merci', 'ce-det-cdv');
+      html += subHeader('Materie prime, sussidiarie, di consumo e di merci', 'ce-det-cdv');
       for (var mp = 0; mp < costiMP.length; mp++) html += detRow(costiMP[mp].label, costiMP[mp].values, 'ce-det-cdv', 52);
-      if (costiMP.length > 1) html += subTotalRow('Tot. Acquisto materie prime, sussidiarie, di consumo e di merci', costiMP, 'ce-det-cdv');
+      if (costiMP.length > 1) html += subTotalRow('Acquisti di materie prime, sussidiarie, di consumo e di merci nel periodo', costiMP, 'ce-det-cdv');
     }
     // B.11 Variazione rimanenze materie prime/merci (art. 2425 c.c.):
     // rettifica dei costi di produzione con convenzione civilistica

@@ -545,9 +545,9 @@ const Engine = (() => {
         }
         var lineaScost = {
           id: '_scostamento_magazzino',
-          label: scostRes.scost_eff > 0
-            ? 'Aumento rimanenze (acquisti eccedenti il consumo)'
-            : 'Utilizzo rimanenze (consumo da scorte esistenti)',
+          // Etichetta neutra (funziona per qualsiasi segno anno per anno):
+          // il +valore indica aumento rimanenze, il −valore indica utilizzo.
+          label: 'Aumento / Utilizzo rimanenze',
           importo: scostRes.scost_eff,
           iva_credito: Math.round(scostRes.scost_eff * ivaMediaB6),
           iva_pct: ivaMediaB6,
