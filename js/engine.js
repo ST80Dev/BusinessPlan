@@ -343,7 +343,7 @@ const Engine = (() => {
             break;
 
           // 'utilizzo_rimanenze': tipo deprecato. La gestione è ora centralizzata
-          // nel driver Magazzino (driver.magazzino.tasso_utilizzo). Eventuali
+          // nel driver Magazzino (driver.magazzino.scostamento_mp_pct). Eventuali
           // eventi salvati in vecchi progetti vengono ignorati silenziosamente.
         }
       }
@@ -507,10 +507,84 @@ const Engine = (() => {
       ce.imposte = ce.ires + ce.irap;
       ce.utile_netto = ce.risultato_ante_imposte - ce.imposte;
 
+      // 7b. DRIVER MAGAZZINO — scostamento acquisti MP vs consumo standard.
+      // Applicato PRIMA di _calcolaMensile così che distribuzione mensile, IVA
+      // a credito sugli acquisti e debiti fornitori riflettano le quantità
+      // effettivamente acquistate (non solo lo standard).
+      //
+      // Default Δ=0 → nessuna modifica. Δ>0 → aggiunta riga sintetica B.6
+      // "accumulo scorte"; Δ<0 → riga sintetica B.6 negativa "utilizzo scorte".
+      // Il consumo tecnico resta al pct_std, la differenza confluisce nella
+      // variazione rimanenze B.11 (calcolata dopo SP).
+      var acquistiStdMP = 0;
+      var b6Items = [];
+      for (var dmp = 0; dmp < ce.costi_dettaglio.length; dmp++) {
+        if ((ce.costi_dettaglio[dmp].voce_ce || '').indexOf('ce.B.6') === 0) {
+          acquistiStdMP += ce.costi_dettaglio[dmp].importo;
+          b6Items.push(ce.costi_dettaglio[dmp]);
+        }
+      }
+      var scostamentoPct = 0;
+      if (driver.magazzino && driver.magazzino.scostamento_mp_pct) {
+        var sRaw = driver.magazzino.scostamento_mp_pct[annoStr];
+        if (typeof sRaw === 'number' && isFinite(sRaw)) scostamentoPct = sRaw;
+      }
+      var scostamentoEuro = Math.round(scostamentoPct * ce.ricavi_totale);
+      var scostRes = _calcolaScostamentoMP(spPrev, scostamentoEuro);
+
+      if (scostRes.scost_eff !== 0) {
+        // IVA media ponderata sui driver B.6 esistenti (fallback 22%)
+        var ivaMediaB6 = 0.22;
+        if (b6Items.length > 0) {
+          var totB6 = 0, totIvaPct = 0;
+          for (var bi = 0; bi < b6Items.length; bi++) {
+            totB6 += b6Items[bi].importo;
+            totIvaPct += (b6Items[bi].iva_pct || 0) * b6Items[bi].importo;
+          }
+          if (totB6 > 0) ivaMediaB6 = totIvaPct / totB6;
+        }
+        var lineaScost = {
+          id: '_scostamento_magazzino',
+          label: scostRes.scost_eff > 0
+            ? 'Scostamento magazzino (accumulo scorte)'
+            : 'Scostamento magazzino (utilizzo scorte)',
+          importo: scostRes.scost_eff,
+          iva_credito: Math.round(scostRes.scost_eff * ivaMediaB6),
+          iva_pct: ivaMediaB6,
+          tipo_driver: 'pct_ricavi',
+          voce_ce: 'ce.B.6',
+          costo_venduto: true,
+          _sintetico: true
+        };
+        ce.costi_dettaglio.push(lineaScost);
+        ce.costi_totale += scostRes.scost_eff;
+        ce.costo_venduto += scostRes.scost_eff;
+        ce.costo_venduto = Math.max(0, ce.costo_venduto);
+        // EBITDA/EBIT/imposte verranno ricalcolate nel blocco variazione rimanenze
+      }
+      ce.magazzino = {
+        scostamento_pct:        scostamentoPct,
+        scostamento_euro:       scostamentoEuro,
+        scostamento_effettivo:  scostRes.scost_eff,
+        acquisti_standard:      acquistiStdMP,
+        acquisti_effettivi:     acquistiStdMP + scostRes.scost_eff,
+        consumo:                acquistiStdMP,
+        accumulo:               scostRes.accumulo,
+        drawdown:               scostRes.drawdown
+      };
+      if (scostRes.warning) {
+        if (!ce.warnings_magazzino) ce.warnings_magazzino = [];
+        ce.warnings_magazzino.push(scostRes.warning);
+      }
+
       // 8. CALCOLO MENSILE: distribuzione infrannuale di ricavi, costi, IVA
       // (incl. IVA capex detraibile per mese di acquisto) e rimanenze DIO.
       // È il motore authoritativo per crediti/debiti/IVA al 31/12.
+      // NB: ce.costi_totale include già lo scostamento magazzino (se ≠ 0),
+      // così l'IVA a credito sugli acquisti e i debiti fornitori rispecchiano
+      // l'effettivo ammontare acquistato.
       var mensile = _calcolaMensile(ce, driver, fisc, p.meta, anno, annoBase, ivaCreditoRiportoAnno, ivaInvestimentiMensili);
+      ce.magazzino.rimanenze_dio_target = mensile.rimanenze_dio;
 
       // 9. SP
       // SP: usa ammortPerSP (senza nuovi investimenti dell'anno, che vengono aggiunti dopo)
@@ -522,36 +596,13 @@ const Engine = (() => {
       sp.crediti_clienti = mensile.crediti_clienti;
       sp.debiti_fornitori = mensile.debiti_fornitori;
 
-      // Totale acquisti materie prime (B.6) dell'anno, da dettaglio CE
-      var acquistiMP = 0;
-      for (var dmp = 0; dmp < ce.costi_dettaglio.length; dmp++) {
-        if ((ce.costi_dettaglio[dmp].voce_ce || '').indexOf('ce.B.6') === 0) {
-          acquistiMP += ce.costi_dettaglio[dmp].importo;
-        }
-      }
-
-      // Driver magazzino: tasso di utilizzo acquisti per l'anno corrente
-      // (default 1.0 = 100% → comportamento classico DIO-based).
-      var tassoUtilizzo = 1.0;
-      if (driver.magazzino && driver.magazzino.tasso_utilizzo) {
-        var tuRaw = driver.magazzino.tasso_utilizzo[annoStr];
-        if (typeof tuRaw === 'number' && isFinite(tuRaw) && tuRaw >= 0) tassoUtilizzo = tuRaw;
-      }
-
-      // Applica tasso utilizzo: determina sp.rimanenze e metadati magazzino
-      var mag = _applicaTassoUtilizzo(spPrev, mensile, acquistiMP, tassoUtilizzo);
-      sp.rimanenze = mag.rimanenze;
-      ce.magazzino = {
-        tasso_utilizzo:     tassoUtilizzo,
-        acquisti_mp:        acquistiMP,
-        consumo_effettivo:  mag.consumo,
-        accumulo:           mag.accumulo,
-        drawdown:           mag.drawdown,
-        rimanenze_dio_target: mensile.rimanenze_dio
-      };
-      if (mag.warning) {
-        if (!ce.warnings_magazzino) ce.warnings_magazzino = [];
-        ce.warnings_magazzino.push(mag.warning);
+      // Rimanenze finali: se lo scostamento magazzino è ≠ 0, prevale il
+      // carry-forward puro (prev + scostamento effettivo, floor 0). Altrimenti
+      // applica logica classica DIO-based con carry-forward (max DIO, prev).
+      if (scostRes.scost_eff !== 0) {
+        sp.rimanenze = Math.max(0, (spPrev.rimanenze || 0) + scostRes.rim_delta);
+      } else {
+        sp.rimanenze = Math.max(mensile.rimanenze_dio, spPrev.rimanenze);
       }
 
       sp._deb_trib_iva = mensile.iva_debito_31dic;
@@ -1221,74 +1272,52 @@ const Engine = (() => {
    * della quantizzazione per mesi interi (che creava scalini a 31gg, 61gg, …).
    */
   /**
-   * Driver magazzino — applica il tasso di utilizzo degli acquisti di materie
-   * prime per determinare rimanenze finali, consumo effettivo ed eventuale
-   * accumulo/drawdown.
+   * Driver magazzino — calcola lo scostamento effettivo degli acquisti MP
+   * rispetto al consumo standard, applicando il cap sul drawdown quando le
+   * rimanenze iniziali non sono sufficienti.
    *
-   * Semantica (Opzione A):
-   *   tasso = 1.0 → comportamento classico: rimanenze = max(DIO-based, precedenti),
-   *                 consumo ≈ acquisti, nessun accumulo/drawdown esplicito.
-   *   tasso < 1.0 → ACCUMULO: parte degli acquisti non viene consumata e va a
-   *                 magazzino. consumo = acquisti × tasso, accumulo = acquisti × (1−tasso).
-   *   tasso > 1.0 → DRAWDOWN: consumo supera acquisti attingendo dalle rimanenze
-   *                 iniziali. drawdown richiesto = acquisti × (tasso−1), capped al
-   *                 saldo disponibile (warning quando insufficiente).
+   * Semantica (Opzione B, espressa come delta da standard):
+   *   Δ = 0   → nessuno scostamento, acquisti = consumo standard.
+   *   Δ > 0   → ACCUMULO: acquisti extra = +Δ×ricavi vanno a magazzino.
+   *   Δ < 0   → DRAWDOWN: minori acquisti = Δ×ricavi, il consumo standard è
+   *             coperto attingendo alle rimanenze (capped a disponibilità,
+   *             warning se insufficiente; scostamento effettivo ridotto in
+   *             magnitudo).
    *
-   * @param {Object} spPrev   SP dell'anno precedente (usa .rimanenze)
-   * @param {Object} mensile  output di _calcolaMensile (usa .rimanenze_dio come riferimento)
-   * @param {number} acquistiMP  totale B.6 materie prime dell'anno
-   * @param {number} tasso    tasso di utilizzo (1.0 = default)
-   * @returns {Object} { rimanenze, consumo, accumulo, drawdown, warning|null }
+   * @param {Object} spPrev  SP dell'anno precedente (usa .rimanenze)
+   * @param {number} scostamentoEuro  Δ × ricavi (+ accumulo, − drawdown)
+   * @returns {Object} { scost_eff, accumulo, drawdown, rim_delta, warning|null }
    */
-  function _applicaTassoUtilizzo(spPrev, mensile, acquistiMP, tasso) {
-    var eps = 0.001;
+  function _calcolaScostamentoMP(spPrev, scostamentoEuro) {
+    var eps = 0.5;
     var prev = spPrev.rimanenze || 0;
-    if (Math.abs(tasso - 1) < eps) {
-      // Comportamento classico: rimanenze guidate dal DIO con carry-forward
-      return {
-        rimanenze: Math.max(mensile.rimanenze_dio || 0, prev),
-        consumo: acquistiMP, // approssimazione: consumo ≈ acquisti
-        accumulo: 0,
-        drawdown: 0,
-        warning: null
-      };
+
+    if (Math.abs(scostamentoEuro) < eps) {
+      return { scost_eff: 0, accumulo: 0, drawdown: 0, rim_delta: 0, warning: null };
     }
-    if (tasso < 1) {
-      // Accumulo: parte degli acquisti resta a magazzino
-      var consumo = Math.round(acquistiMP * tasso);
-      var accumulo = Math.max(0, acquistiMP - consumo);
-      return {
-        rimanenze: Math.max(0, prev + accumulo),
-        consumo: consumo,
-        accumulo: accumulo,
-        drawdown: 0,
-        warning: null
-      };
+
+    if (scostamentoEuro > 0) {
+      var acc = Math.round(scostamentoEuro);
+      return { scost_eff: acc, accumulo: acc, drawdown: 0, rim_delta: acc, warning: null };
     }
-    // tasso > 1: drawdown da rimanenze iniziali, capped a disponibilità
-    var drawdownRichiesto = Math.round(acquistiMP * (tasso - 1));
-    var drawdownEffettivo = Math.min(drawdownRichiesto, prev);
-    var consumoEff = acquistiMP + drawdownEffettivo;
+
+    var drawRich = Math.round(-scostamentoEuro);
+    var drawEff = Math.min(drawRich, prev);
+    var scostEff = -drawEff;
     var warning = null;
-    if (drawdownRichiesto > drawdownEffettivo + eps) {
+    if (drawRich > drawEff + eps) {
       warning = {
         tipo: 'drawdown_insufficiente',
-        tasso_richiesto: tasso,
-        drawdown_richiesto: drawdownRichiesto,
-        drawdown_effettivo: drawdownEffettivo,
+        scostamento_richiesto: scostamentoEuro,
+        drawdown_richiesto: drawRich,
+        drawdown_effettivo: drawEff,
         rimanenze_disponibili: prev,
-        messaggio: 'Tasso utilizzo ' + Math.round(tasso * 100) + '% richiede un drawdown di ' +
-          drawdownRichiesto + ' ma le rimanenze iniziali disponibili sono ' + prev +
-          '. Applicato cap al saldo disponibile: drawdown effettivo ' + drawdownEffettivo + '.'
+        messaggio: 'Scostamento richiesto ' + _fmt(scostamentoEuro) + ' implica drawdown di ' +
+          _fmt(drawRich) + ' ma rimanenze disponibili ' + _fmt(prev) +
+          '. Applicato cap al saldo: drawdown effettivo ' + _fmt(drawEff) + '.'
       };
     }
-    return {
-      rimanenze: Math.max(0, prev - drawdownEffettivo),
-      consumo: consumoEff,
-      accumulo: 0,
-      drawdown: drawdownEffettivo,
-      warning: warning
-    };
+    return { scost_eff: scostEff, accumulo: 0, drawdown: drawEff, rim_delta: scostEff, warning: warning };
   }
 
   function _sommaUltimiGiorni(mensili, giorni) {
@@ -1505,11 +1534,13 @@ const Engine = (() => {
     t['sp.debiti_fornitori'] = 'Costi lordi (IVA incl.) ultimi ' + ggDPO + 'gg (DPO) = ' + _fmt(mensile.debiti_fornitori || 0) + (smobDeb > 0 ? ' + smobilizzo pregressi ' + _fmt(smobDeb) : '');
     var ggDIO = _normaliZzaGiorni(circ.dio, 30);
     var mag = ce.magazzino || {};
-    var tassoMagTxt = mag.tasso_utilizzo != null ? Math.round(mag.tasso_utilizzo * 100) + '%' : '100%';
+    var scostTxt = mag.scostamento_pct != null
+      ? (mag.scostamento_pct > 0 ? '+' : '') + (mag.scostamento_pct * 100).toFixed(1).replace('.', ',') + '%'
+      : '0%';
     if (mag.accumulo > 0) {
-      t['sp.rimanenze'] = 'Prec. ' + _fmt(spPrev.rimanenze) + ' + Accumulo (acquisti non consumati, tasso ' + tassoMagTxt + ') ' + _fmt(mag.accumulo);
+      t['sp.rimanenze'] = 'Prec. ' + _fmt(spPrev.rimanenze) + ' + Accumulo scorte (scostamento ' + scostTxt + ') ' + _fmt(mag.accumulo);
     } else if (mag.drawdown > 0) {
-      t['sp.rimanenze'] = 'Prec. ' + _fmt(spPrev.rimanenze) + ' − Drawdown (consumo > acquisti, tasso ' + tassoMagTxt + ') ' + _fmt(mag.drawdown);
+      t['sp.rimanenze'] = 'Prec. ' + _fmt(spPrev.rimanenze) + ' − Utilizzo scorte (scostamento ' + scostTxt + ') ' + _fmt(mag.drawdown);
     } else {
       t['sp.rimanenze'] = 'max(Costi ultimi ' + ggDIO + 'gg (DIO) = ' + _fmt(mensile.rimanenze_dio || 0) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
     }
