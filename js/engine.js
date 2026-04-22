@@ -1195,8 +1195,8 @@ const Engine = (() => {
     var personaleMensili = _distribuisciMensile(ce.personale_totale, _PROFILO_UNIFORME, meseAvvio, parziale);
 
     // ── IVA mensile ──
-    // IVA debito: usa aliquota IVA ricavi configurata
-    var ivaRicaviPct = fisc.iva_ricavi || 0.22;
+    // IVA debito: usa aliquota IVA ricavi configurata (0% e' valore valido, default solo se non impostata)
+    var ivaRicaviPct = fisc.iva_ricavi == null ? 0.22 : fisc.iva_ricavi;
     // IVA credito: calcolata per fascia IVA con distribuzione mensile propria
     // (costi pct_ricavi seguono profilo stagionale, fissi uniformi)
     var ivaCreditoMensilePerFascia = {};
