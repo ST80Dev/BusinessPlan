@@ -1305,6 +1305,7 @@ const UI = (() => {
     html += _driverTabItem('drv-costi', 'Costi', progetto);
     html += _driverTabItem('drv-personale', 'Personale', progetto);
     html += _driverTabItem('drv-circolante', 'Circolante', progetto);
+    html += _driverTabItem('drv-magazzino', 'Magazzino', progetto);
     html += _driverTabItem('drv-patrimoniali', 'Patrimoniali', progetto);
     html += _driverTabItem('drv-fiscale', 'Fiscale', progetto);
     html += '</div>';
@@ -1324,6 +1325,10 @@ const UI = (() => {
 
     html += '<div class="tab-pane' + (_driverTab === 'drv-circolante' ? ' active' : '') + '" id="drv-circolante">';
     html += _renderDriverCircolante(progetto);
+    html += '</div>';
+
+    html += '<div class="tab-pane' + (_driverTab === 'drv-magazzino' ? ' active' : '') + '" id="drv-magazzino">';
+    html += _renderDriverMagazzino(progetto);
     html += '</div>';
 
     html += '<div class="tab-pane' + (_driverTab === 'drv-patrimoniali' ? ' active' : '') + '" id="drv-patrimoniali">';
@@ -2023,11 +2028,46 @@ const UI = (() => {
     var circ = progetto.driver.circolante;
     var html = '<div style="max-width:400px">';
 
-    html += '<div style="margin-bottom:20px;font-size:13px;color:var(--color-text-secondary)">Indici di capitale circolante applicati a tutti gli anni previsionali.</div>';
+    html += '<div style="margin-bottom:20px;font-size:13px;color:var(--color-text-secondary)">Indici di capitale circolante applicati a tutti gli anni previsionali. I parametri magazzino (DIO, tasso utilizzo) sono gestiti nel tab "Magazzino".</div>';
 
     html += _campoCircolante('DSO — Giorni medi incasso clienti', 'dso', circ.dso, 'gg');
     html += _campoCircolante('DPO — Giorni medi pagamento fornitori', 'dpo', circ.dpo, 'gg');
+
+    html += '</div>';
+    return html;
+  }
+
+  /* ── Tab MAGAZZINO ───────────────────────────────────────── */
+
+  function _renderDriverMagazzino(progetto) {
+    var circ = progetto.driver.circolante;
+    var mag = progetto.driver.magazzino || { tasso_utilizzo: {} };
+    var anniPrev = (progetto.meta && progetto.meta.anni_previsione) || [];
+    var html = '';
+
+    html += '<div style="display:grid;grid-template-columns:minmax(320px,400px) 1fr;gap:40px;align-items:start">';
+
+    // Colonna 1: DIO (indicatore di giacenza)
+    html += '<div>';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 4px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Giacenza media (DIO)</h3>';
+    html += '<div class="form-hint mb-8">Giorni medi di giacenza a magazzino. Con tasso utilizzo 100% guida il livello fisiologico delle rimanenze; con tasso ≠ 100% è usato solo come valore di riferimento (non vincola il saldo).</div>';
     html += _campoCircolante('DIO — Giorni medi giacenza magazzino', 'dio', circ.dio, 'gg');
+    html += '</div>';
+
+    // Colonna 2: Tasso utilizzo acquisti per anno
+    html += '<div>';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 4px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Tasso utilizzo acquisti MP</h3>';
+    html += '<div class="form-hint mb-8">Percentuale degli acquisti di materie prime effettivamente consumata nell\'anno. <b>100%</b> (default): acquisti = consumo. <b>&lt;100%</b>: eccedenza accumulata come rimanenze. <b>&gt;100%</b>: consumo supera acquisti attingendo dalle rimanenze esistenti (capped al saldo disponibile).</div>';
+    html += '<table class="schema-table" style="max-width:280px"><tbody>';
+    html += '<tr class="row-sottomastro"><td>Anno</td><td class="cell-amount">% utilizzo</td></tr>';
+    for (var i = 0; i < anniPrev.length; i++) {
+      var a = String(anniPrev[i]);
+      var val = mag.tasso_utilizzo && (a in mag.tasso_utilizzo) ? mag.tasso_utilizzo[a] : 1.0;
+      html += '<tr class="row-conto"><td>' + a + '</td>';
+      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="100%" onblur="UI._handleMagazzinoAnnoField(this,\'' + a + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(val) + '</div></td></tr>';
+    }
+    html += '</tbody></table>';
+    html += '</div>';
 
     html += '</div>';
     return html;
@@ -2442,6 +2482,19 @@ const UI = (() => {
     var val = parseInt((el.textContent || '').replace(/\D/g, ''), 10) || 0;
     progetto.driver.circolante[campo] = val;
     el.textContent = val || '';
+    Projects.segnaModificato();
+    _scheduleAggiornaIndicatori();
+  }
+
+  function _handleMagazzinoAnnoField(el, anno) {
+    var progetto = Projects.getProgetto();
+    if (!progetto) return;
+    if (!progetto.driver.magazzino) progetto.driver.magazzino = { tasso_utilizzo: {} };
+    if (!progetto.driver.magazzino.tasso_utilizzo) progetto.driver.magazzino.tasso_utilizzo = {};
+    var val = _parsePct(el.textContent);
+    if (val < 0) val = 0;
+    progetto.driver.magazzino.tasso_utilizzo[anno] = val;
+    el.textContent = _formatPct(val);
     Projects.segnaModificato();
     _scheduleAggiornaIndicatori();
   }
@@ -3206,38 +3259,32 @@ const UI = (() => {
     return html;
   }
 
-  /* ── Tab 8: Utilizzo Rimanenze (Magazzino) ──────────────── */
+  /* ── Tab 8: Magazzino (nota di migrazione) ────────────────── */
 
   function _renderEvtMagazzino(progetto) {
-    var items = _eventiPerTipo(progetto, 'utilizzo_rimanenze');
-    var ultimoAnno = _ultimoAnnoPiano(progetto);
     var html = '';
-    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Utilizzo Rimanenze</h3>';
-    html += '<div class="form-hint mb-8">Smaltimento delle rimanenze di magazzino esistenti: la società decide di utilizzare una percentuale delle proprie rimanenze anziché acquistare nuove materie prime. Riduce il valore delle rimanenze (SP) e i costi di acquisto materie prime (CE).</div>';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 12px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Magazzino</h3>';
+    html += '<div class="form-hint mb-8">La gestione del magazzino è stata spostata nel pannello <b>Driver → Magazzino</b>. Il tasso di utilizzo degli acquisti (default 100%) governa accumulo (&lt;100%) e drawdown (&gt;100%) delle rimanenze in modo continuativo per ogni anno, rendendo superflui gli eventi puntuali.</div>';
 
-    html += '<div class="section-toolbar"><div class="section-toolbar-right">';
-    html += '<div class="btn btn-primary btn-sm" onclick="UI.aggiungiEvento(\'utilizzo_rimanenze\')">+ Aggiungi utilizzo</div>';
-    html += '</div></div>';
-
-    if (items.length === 0) {
-      html += '<div class="projects-empty" style="padding:24px"><p>Nessun utilizzo rimanenze pianificato.</p></div>';
-    } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:70px"><col style="width:100px"><col style="width:100px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Da anno</td><td class="cell-amount">% utilizzo</td><td class="cell-amount">Fino a</td><td></td></tr></thead><tbody>';
-
-      for (var i = 0; i < items.length; i++) {
-        var e = items[i].evt, idx = items[i].idx;
-        html += '<tr class="row-conto">';
-        html += '<td><div class="amount-field" contenteditable="true" style="text-align:left;min-width:150px;font-family:var(--font-ui)" onblur="UI._handleEvtField(this,' + idx + ',\'descrizione\')">' + _escapeHtml(e.descrizione || '') + '</div></td>';
-        html += '<td class="cell-amount">' + _selectAnno(idx, 'anno', e.anno, progetto) + '</td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleEvtField(this,' + idx + ',\'pct_utilizzo\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(e.pct_utilizzo) + '</div></td>';
-        html += _renderAnnoFineCell(e, idx, ultimoAnno);
-        html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviEvento(' + idx + ')">✕</div></td>';
-        html += '</tr>';
-      }
-      html += '</tbody></table>';
+    // Avvisa se ci sono eventi legacy utilizzo_rimanenze
+    var legacy = _eventiPerTipo(progetto, 'utilizzo_rimanenze');
+    if (legacy.length > 0) {
+      html += '<div class="projects-empty" style="padding:16px;margin-bottom:16px;border:1px solid var(--color-warning,#b45309);background:rgba(180,83,9,0.08)">';
+      html += '<p style="margin:0 0 8px"><b>Eventi legacy rilevati</b>: ' + legacy.length + ' evento/i "Utilizzo rimanenze" configurati in una versione precedente. Sono ignorati dal motore di calcolo. Rimuovili oppure usa il driver Magazzino.</p>';
+      html += '<div class="btn btn-ghost btn-sm" onclick="UI._rimuoviLegacyUtilizzoRimanenze()" style="color:var(--color-error)">Rimuovi eventi legacy</div>';
+      html += '</div>';
     }
+
+    html += '<div class="projects-empty" style="padding:24px"><p>Apri il tab <b>Driver → Magazzino</b> per configurare DIO e tasso utilizzo acquisti per ogni anno.</p></div>';
     return html;
+  }
+
+  function _rimuoviLegacyUtilizzoRimanenze() {
+    var progetto = Projects.getProgetto();
+    if (!progetto || !progetto.eventi) return;
+    progetto.eventi = progetto.eventi.filter(function(e) { return e && e.tipo !== 'utilizzo_rimanenze'; });
+    Projects.segnaModificato();
+    _renderEventi();
   }
 
   /* ── Helper: cella "Fino a" per anno di fine evento ────── */
@@ -3360,7 +3407,28 @@ const UI = (() => {
   function _renderProspettoCE(anniPrev, proiezioni, progetto) {
     var nAnni = anniPrev.length;
     var colW = Math.max(100, Math.floor(600 / nAnni));
-    var html = '<div class="prosp-scroll">';
+    var html = '';
+
+    // Warning banner: tasso utilizzo > 100% con rimanenze insufficienti
+    var magWarnings = [];
+    for (var wa = 0; wa < anniPrev.length; wa++) {
+      var wCe = proiezioni[String(anniPrev[wa])] && proiezioni[String(anniPrev[wa])].ce;
+      if (wCe && wCe.warnings_magazzino && wCe.warnings_magazzino.length > 0) {
+        for (var ww = 0; ww < wCe.warnings_magazzino.length; ww++) {
+          magWarnings.push({ anno: anniPrev[wa], w: wCe.warnings_magazzino[ww] });
+        }
+      }
+    }
+    if (magWarnings.length > 0) {
+      html += '<div style="padding:12px 14px;margin-bottom:12px;border-radius:4px;background:rgba(180,83,9,0.08);border:1px solid var(--color-warning,#b45309);font-size:13px">';
+      html += '<b>Avvisi magazzino</b><ul style="margin:6px 0 0;padding-left:22px">';
+      for (var mw = 0; mw < magWarnings.length; mw++) {
+        html += '<li>Anno ' + magWarnings[mw].anno + ': ' + _escapeHtml(magWarnings[mw].w.messaggio) + '</li>';
+      }
+      html += '</ul></div>';
+    }
+
+    html += '<div class="prosp-scroll">';
     html += '<table class="schema-table schema-table-sticky" id="table-prosp-ce"><colgroup><col style="width:auto">';
     for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
     html += '</colgroup>';
@@ -3500,6 +3568,26 @@ const UI = (() => {
       html += subHeader('Materie prime', 'ce-det-cdv');
       for (var mp = 0; mp < costiMP.length; mp++) html += detRow(costiMP[mp].label, costiMP[mp].values, 'ce-det-cdv', 52);
       if (costiMP.length > 1) html += subTotalRow('Tot. Materie prime', costiMP, 'ce-det-cdv');
+    }
+    // Riga informativa "di cui accumulo/utilizzo rimanenze" quando il tasso
+    // utilizzo acquisti è ≠ 100% (driver Magazzino). Non altera i totali
+    // civilistici (B.6 resta pieno, la rettifica viaggia in B.11); chiarisce
+    // la composizione del flusso fisico/contabile del magazzino.
+    var magAccumuloValues = anniPrev.map(function(a) {
+      var r = proiezioni[String(a)];
+      var m = r && r.ce && r.ce.magazzino;
+      return m ? (m.accumulo || 0) : 0;
+    });
+    var magDrawdownValues = anniPrev.map(function(a) {
+      var r = proiezioni[String(a)];
+      var m = r && r.ce && r.ce.magazzino;
+      return m ? (m.drawdown || 0) : 0;
+    });
+    if (magAccumuloValues.some(function(v) { return v !== 0; })) {
+      html += detRow('di cui accumulo a magazzino (acquisti > consumo)', magAccumuloValues, 'ce-det-cdv', 68);
+    }
+    if (magDrawdownValues.some(function(v) { return v !== 0; })) {
+      html += detRow('di cui utilizzo rimanenze esistenti (consumo > acquisti)', magDrawdownValues, 'ce-det-cdv', 68);
     }
     // B.11 Variazione rimanenze materie prime/merci (art. 2425 c.c.):
     // rettifica dei costi di produzione con convenzione civilistica
@@ -4684,6 +4772,8 @@ const UI = (() => {
     _salvaProfiloStagionale,
     _handleDriverField,
     _handleCircolanteField,
+    _handleMagazzinoAnnoField,
+    _rimuoviLegacyUtilizzoRimanenze,
     _handleFiscaleField,
     _handleFiscaleAnnoField,
     _handleFiscaleToggle,
