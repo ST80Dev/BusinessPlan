@@ -3638,6 +3638,20 @@ const UI = (() => {
     var tfrApertura = spSeries('tfr_apertura');
     var tfrQuota = spSeries('tfr_quota');
 
+    // Serie per-categoria (costo/fondo) dalla proiezione
+    function catSeries(catId, campo) {
+      var out = [];
+      for (var a = 0; a < nAnni; a++) {
+        var sp = proiezioni[String(anniPrev[a])] && proiezioni[String(anniPrev[a])].sp;
+        var cat = sp && sp.immob_cat && sp.immob_cat[catId];
+        out.push(cat ? (cat[campo] || 0) : 0);
+      }
+      return out;
+    }
+
+    var idsImmat = ['sp.BI.1','sp.BI.2','sp.BI.3','sp.BI.4','sp.BI.5','sp.BI.6','sp.BI.7'];
+    var idsMat = ['sp.BII.1','sp.BII.2','sp.BII.3','sp.BII.4','sp.BII.5'];
+
     var hasImmatDet = anyNonZero(costoImmat) || anyNonZero(fondoImmat);
     var hasMatDet = anyNonZero(costoMat) || anyNonZero(fondoMat);
     var hasTfrDet = anyNonZero(tfrApertura) || anyNonZero(tfrQuota);
@@ -3673,6 +3687,28 @@ const UI = (() => {
       { key: 'totale_passivo',      label: 'TOTALE PASSIVO + PN',               bold: true, highlight: true }
     ];
 
+    // Dettaglio per voce di immobilizzazione: per ogni categoria con valori
+    // non-nulli mostra costo lordo e fondo, usando le label ufficiali dello schema.
+    function catDetHtml(ids, groupId) {
+      var inner = '';
+      var any = false;
+      for (var i = 0; i < ids.length; i++) {
+        var id = ids[i];
+        var costo = catSeries(id, 'costo');
+        var fondo = catSeries(id, 'fondo');
+        if (!anyNonZero(costo) && !anyNonZero(fondo)) continue;
+        any = true;
+        var nodo = Schema.trovaNodo(id);
+        var label = nodo ? nodo.label : id;
+        inner += '<tr class="sp-detail-row ' + groupId + '" style="display:none"><td colspan="' + (nAnni + 1) + '" style="padding-left:48px;font-size:12px;font-weight:600;color:var(--color-text-secondary);padding-top:4px">' + _escapeHtml(label) + '</td></tr>\n';
+        inner += _prospettoDetRow('— Costo lordo', costo, groupId, 60);
+        inner += _prospettoDetRow('— Fondo ammortamento', fondo, groupId, 60);
+      }
+      if (!any) return '';
+      var head = '<tr class="sp-detail-row ' + groupId + '" style="display:none"><td colspan="' + (nAnni + 1) + '" style="padding-left:36px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--color-text-secondary);padding-top:8px">Dettaglio per voce</td></tr>\n';
+      return head + inner;
+    }
+
     // Sezione Attivo
     html += '<tr class="row-sottomastro"><td colspan="' + (nAnni + 1) + '" style="font-weight:700">ATTIVO</td></tr>';
     vociAtt.forEach(function(v) {
@@ -3681,11 +3717,13 @@ const UI = (() => {
         html += _prospettoDetRow('Costo storico (lordo)', costoImmat, 'sp-det-immat', 48);
         html += _prospettoDetRow('Fondo ammortamento', fondoImmat, 'sp-det-immat', 48);
         html += _prospettoDetRow('di cui ammortamento dell\'anno', quotaImmat, 'sp-det-immat', 60);
+        html += catDetHtml(idsImmat, 'sp-det-immat');
       }
       if (v.key === 'immob_materiali_nette' && hasMatDet) {
         html += _prospettoDetRow('Costo storico (lordo)', costoMat, 'sp-det-mat', 48);
         html += _prospettoDetRow('Fondo ammortamento', fondoMat, 'sp-det-mat', 48);
         html += _prospettoDetRow('di cui ammortamento dell\'anno', quotaMat, 'sp-det-mat', 60);
+        html += catDetHtml(idsMat, 'sp-det-mat');
       }
     });
 

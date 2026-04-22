@@ -201,6 +201,14 @@ const Engine = (() => {
     // Fondo cumulativo proiezioni per immobilizzazioni storiche (si accumula anno dopo anno)
     var fondoProiezioni = {}; // { nodoId: ammortamento_cumulato_in_proiezione }
 
+    // Incrementi cumulativi per categoria (costo da investimenti, fondo da ammortamenti).
+    // Utilizzati per comporre il dettaglio per voce di immobilizzazione nel SP futuro.
+    var catProiezioni = {}; // { categoriaId: { costoIncr, fondoIncr } }
+    function _catAcc(id) {
+      if (!catProiezioni[id]) catProiezioni[id] = { costoIncr: 0, fondoIncr: 0 };
+      return catProiezioni[id];
+    }
+
     // Stato SP portato avanti anno per anno
     var spPrev = _inizializzaSP(p, annoBase);
 
@@ -390,10 +398,12 @@ const Engine = (() => {
         });
         investimentiCassaAnno += nInv.importo;
         ivaInvestimentiMensili[meseInv - 1] += Math.round(nInv.importo * (nInv.iva_pct || 0));
+        // Incrementa il costo lordo della categoria (cumulativo fra anni)
+        _catAcc(nInv.categoria).costoIncr += nInv.importo;
       }
 
       // 4b. AMMORTAMENTI (da immobilizzazioni esistenti + investimenti cumulativi incl. anno corrente)
-      var ammort = _calcolaAmmortamentiAnno(p.immobilizzazioni, spPrev, fondoProiezioni);
+      var ammort = _calcolaAmmortamentiAnno(p.immobilizzazioni, spPrev, fondoProiezioni, catProiezioni);
       // Ammortamenti da investimenti, separati: nuovi dell'anno vs anni precedenti
       var ammortEvtImmatNew = 0, ammortEvtMatNew = 0;   // investimenti NUOVI quest'anno
       var ammortEvtImmatOld = 0, ammortEvtMatOld = 0;   // investimenti di anni precedenti
@@ -420,6 +430,7 @@ const Engine = (() => {
           if (isImmat) ammortEvtImmatOld += quotaInv; else ammortEvtMatOld += quotaInv;
         }
         inv.fondo += quotaInv;
+        if (quotaInv > 0) _catAcc(inv.categoria).fondoIncr += quotaInv;
       }
 
       // Per il CE: ammortamento totale (storico + tutti gli eventi)
@@ -580,6 +591,9 @@ const Engine = (() => {
       sp.immob_materiali_fondo += ammortEvtMatNew;
       sp.quota_amm_immat_anno += ammortEvtImmatNew;
       sp.quota_amm_mat_anno += ammortEvtMatNew;
+
+      // Snapshot dettaglio per categoria (costo lordo / fondo) a fine anno
+      sp.immob_cat = _snapshotCategorie(p.immobilizzazioni, catProiezioni);
 
       // SP: debiti finanziari calcolati direttamente (residuo essere + residuo eventi)
       sp.debiti_finanziari = finanz.residuo_totale + nuoviFinDebito;
@@ -1016,7 +1030,7 @@ const Engine = (() => {
 
   /* ── Ammortamenti da immobilizzazioni esistenti ──────────── */
 
-  function _calcolaAmmortamentiAnno(immobilizzazioni, spPrev, fondoProiezioni) {
+  function _calcolaAmmortamentiAnno(immobilizzazioni, spPrev, fondoProiezioni, catProiezioni) {
     var immateriali = 0;
     var materiali = 0;
 
@@ -1034,9 +1048,13 @@ const Engine = (() => {
         var nettoResiduo = im.costo_storico - fondoIniziale - fondoProiez;
         if (nettoResiduo <= 0) { quota = 0; }
         else if (quota > nettoResiduo) { quota = Math.round(nettoResiduo); }
-        // Aggiorna fondo cumulativo proiezioni
+        // Aggiorna fondo cumulativo proiezioni (per asset e per categoria)
         if (fondoProiezioni && quota > 0) {
           fondoProiezioni[id] = fondoProiez + quota;
+        }
+        if (catProiezioni && quota > 0) {
+          if (!catProiezioni[id]) catProiezioni[id] = { costoIncr: 0, fondoIncr: 0 };
+          catProiezioni[id].fondoIncr += quota;
         }
 
         if (id.indexOf('sp.BI.') === 0) {
@@ -1052,6 +1070,28 @@ const Engine = (() => {
       materiali: materiali,
       quota_annua: immateriali + materiali
     };
+  }
+
+  /** Snapshot costo lordo + fondo per ogni categoria di immobilizzazione
+   * (BI.1..BI.7, BII.1..BII.5). Combina dati storici (costo_storico,
+   * fondo_ammortamento) con gli incrementi cumulati da investimenti e
+   * ammortamenti di proiezione. */
+  function _snapshotCategorie(immobilizzazioni, catProiezioni) {
+    var ids = ['sp.BI.1','sp.BI.2','sp.BI.3','sp.BI.4','sp.BI.5','sp.BI.6','sp.BI.7',
+               'sp.BII.1','sp.BII.2','sp.BII.3','sp.BII.4','sp.BII.5'];
+    var out = {};
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var im = (immobilizzazioni && immobilizzazioni[id]) || {};
+      var initCosto = im.costo_storico || 0;
+      var initFondo = im.fondo_ammortamento || 0;
+      var acc = (catProiezioni && catProiezioni[id]) || { costoIncr: 0, fondoIncr: 0 };
+      var costo = initCosto + (acc.costoIncr || 0);
+      var fondo = initFondo + (acc.fondoIncr || 0);
+      if (fondo > costo) fondo = costo; // coerenza: fondo non eccede costo
+      out[id] = { costo: costo, fondo: fondo, nette: Math.max(0, costo - fondo) };
+    }
+    return out;
   }
 
   /* ── Finanziamenti in essere ─────────────────────────────── */
