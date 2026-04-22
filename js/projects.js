@@ -84,11 +84,13 @@ const Projects = (() => {
         smobilizzo: [],
         circolante: { dso: 60, dpo: 45, dio: 30 },
         magazzino: {
-          // Tasso di utilizzo degli acquisti di materie prime: default 1.0 (=100%).
-          // <1.0 → parte degli acquisti non viene consumata e accumula rimanenze;
-          // >1.0 → consumo supera gli acquisti attingendo dalle rimanenze iniziali
-          //        (capped al saldo disponibile, con warning quando insufficiente).
-          tasso_utilizzo: _creaParamAnnuale(anniPrev, 1.0)
+          // Scostamento % sui ricavi rispetto al consumo standard di materie
+          // prime (pct_ricavi dei driver B.6). Default 0 = comportamento
+          // classico: acquisti = consumo standard. Δ>0 → extra acquisti che
+          // accumulano rimanenze. Δ<0 → minori acquisti, consumo attinge
+          // dalle rimanenze esistenti (capped al saldo disponibile, warning
+          // quando insufficiente).
+          scostamento_mp_pct: _creaParamAnnuale(anniPrev, 0)
         },
         fiscale: {
           aliquota_ires: 0.24,
@@ -214,7 +216,7 @@ const Projects = (() => {
           anno: primoAnno, anno_fine: ultimoAnno, mese: 1, importo: 0, sottotipo: 'versamento_capitale'
         });
       // 'utilizzo_rimanenze': deprecato. Sostituito dal driver Magazzino
-      // (tasso_utilizzo per anno, default 100%). Gli eventi già presenti nei
+      // (scostamento_mp_pct per anno, default 0). Gli eventi già presenti nei
       // progetti salvati vengono ignorati dall'engine.
       default:
         return base;
@@ -581,9 +583,11 @@ const Projects = (() => {
       driver.fiscale.var_personale = _migraParam(driver.fiscale.var_personale, 0);
     }
 
-    // Driver magazzino (tasso utilizzo acquisti, default 100%)
-    if (!driver.magazzino) driver.magazzino = { tasso_utilizzo: {} };
-    driver.magazzino.tasso_utilizzo = _migraParam(driver.magazzino.tasso_utilizzo, 1.0);
+    // Driver magazzino: scostamento % sui ricavi vs consumo standard,
+    // default 0. Legacy: elimina vecchio campo tasso_utilizzo se presente.
+    if (!driver.magazzino) driver.magazzino = { scostamento_mp_pct: {} };
+    if (driver.magazzino.tasso_utilizzo) delete driver.magazzino.tasso_utilizzo;
+    driver.magazzino.scostamento_mp_pct = _migraParam(driver.magazzino.scostamento_mp_pct, 0);
 
     // Driver ricavi — crescita_annua
     if (driver.ricavi) {

@@ -2041,7 +2041,7 @@ const UI = (() => {
 
   function _renderDriverMagazzino(progetto) {
     var circ = progetto.driver.circolante;
-    var mag = progetto.driver.magazzino || { tasso_utilizzo: {} };
+    var mag = progetto.driver.magazzino || { scostamento_mp_pct: {} };
     var anniPrev = (progetto.meta && progetto.meta.anni_previsione) || [];
     var html = '';
 
@@ -2050,21 +2050,21 @@ const UI = (() => {
     // Colonna 1: DIO (indicatore di giacenza)
     html += '<div>';
     html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 4px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Giacenza media (DIO)</h3>';
-    html += '<div class="form-hint mb-8">Giorni medi di giacenza a magazzino. Con tasso utilizzo 100% guida il livello fisiologico delle rimanenze; con tasso ≠ 100% è usato solo come valore di riferimento (non vincola il saldo).</div>';
+    html += '<div class="form-hint mb-8">Giorni medi di giacenza a magazzino. Con scostamento 0% guida il livello fisiologico delle rimanenze; con scostamento ≠ 0% è usato solo come valore di riferimento (non vincola il saldo).</div>';
     html += _campoCircolante('DIO — Giorni medi giacenza magazzino', 'dio', circ.dio, 'gg');
     html += '</div>';
 
-    // Colonna 2: Tasso utilizzo acquisti per anno
+    // Colonna 2: Scostamento acquisti MP per anno
     html += '<div>';
-    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 4px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Tasso utilizzo acquisti MP</h3>';
-    html += '<div class="form-hint mb-8">Percentuale degli acquisti di materie prime effettivamente consumata nell\'anno. <b>100%</b> (default): acquisti = consumo. <b>&lt;100%</b>: eccedenza accumulata come rimanenze. <b>&gt;100%</b>: consumo supera acquisti attingendo dalle rimanenze esistenti (capped al saldo disponibile).</div>';
+    html += '<h3 style="font-size:14px;font-weight:700;margin:0 0 4px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em">Scostamento acquisti MP</h3>';
+    html += '<div class="form-hint mb-8">Punti percentuali sui ricavi in più (+) o in meno (−) rispetto al consumo standard dei driver B.6 (es. 50%). Il costo del venduto tecnico resta invariato; lo scostamento muove solo il magazzino. <b>0%</b> (default): acquisti = consumo standard. <b>Δ&gt;0</b>: extra acquisti che accumulano scorte. <b>Δ&lt;0</b>: minori acquisti, il consumo attinge alle rimanenze (capped al saldo disponibile).</div>';
     html += '<table class="schema-table" style="max-width:280px"><tbody>';
-    html += '<tr class="row-sottomastro"><td>Anno</td><td class="cell-amount">% utilizzo</td></tr>';
+    html += '<tr class="row-sottomastro"><td>Anno</td><td class="cell-amount">Δ % ricavi</td></tr>';
     for (var i = 0; i < anniPrev.length; i++) {
       var a = String(anniPrev[i]);
-      var val = mag.tasso_utilizzo && (a in mag.tasso_utilizzo) ? mag.tasso_utilizzo[a] : 1.0;
+      var val = mag.scostamento_mp_pct && (a in mag.scostamento_mp_pct) ? mag.scostamento_mp_pct[a] : 0;
       html += '<tr class="row-conto"><td>' + a + '</td>';
-      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="100%" onblur="UI._handleMagazzinoAnnoField(this,\'' + a + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(val) + '</div></td></tr>';
+      html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleMagazzinoAnnoField(this,\'' + a + '\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(val) + '</div></td></tr>';
     }
     html += '</tbody></table>';
     html += '</div>';
@@ -2489,11 +2489,11 @@ const UI = (() => {
   function _handleMagazzinoAnnoField(el, anno) {
     var progetto = Projects.getProgetto();
     if (!progetto) return;
-    if (!progetto.driver.magazzino) progetto.driver.magazzino = { tasso_utilizzo: {} };
-    if (!progetto.driver.magazzino.tasso_utilizzo) progetto.driver.magazzino.tasso_utilizzo = {};
+    if (!progetto.driver.magazzino) progetto.driver.magazzino = { scostamento_mp_pct: {} };
+    if (!progetto.driver.magazzino.scostamento_mp_pct) progetto.driver.magazzino.scostamento_mp_pct = {};
     var val = _parsePct(el.textContent);
-    if (val < 0) val = 0;
-    progetto.driver.magazzino.tasso_utilizzo[anno] = val;
+    // Ammessi valori negativi (drawdown) e positivi (accumulo). Nessun clip.
+    progetto.driver.magazzino.scostamento_mp_pct[anno] = val;
     el.textContent = _formatPct(val);
     Projects.segnaModificato();
     _scheduleAggiornaIndicatori();
@@ -3568,26 +3568,6 @@ const UI = (() => {
       html += subHeader('Materie prime, sussidiarie, di consumo e di merci', 'ce-det-cdv');
       for (var mp = 0; mp < costiMP.length; mp++) html += detRow(costiMP[mp].label, costiMP[mp].values, 'ce-det-cdv', 52);
       if (costiMP.length > 1) html += subTotalRow('Tot. Materie prime, sussidiarie, di consumo e di merci', costiMP, 'ce-det-cdv');
-    }
-    // Riga informativa "di cui accumulo/utilizzo rimanenze" quando il tasso
-    // utilizzo acquisti è ≠ 100% (driver Magazzino). Non altera i totali
-    // civilistici (B.6 resta pieno, la rettifica viaggia in B.11); chiarisce
-    // la composizione del flusso fisico/contabile del magazzino.
-    var magAccumuloValues = anniPrev.map(function(a) {
-      var r = proiezioni[String(a)];
-      var m = r && r.ce && r.ce.magazzino;
-      return m ? (m.accumulo || 0) : 0;
-    });
-    var magDrawdownValues = anniPrev.map(function(a) {
-      var r = proiezioni[String(a)];
-      var m = r && r.ce && r.ce.magazzino;
-      return m ? (m.drawdown || 0) : 0;
-    });
-    if (magAccumuloValues.some(function(v) { return v !== 0; })) {
-      html += detRow('di cui accumulo a magazzino (acquisti > consumo)', magAccumuloValues, 'ce-det-cdv', 68);
-    }
-    if (magDrawdownValues.some(function(v) { return v !== 0; })) {
-      html += detRow('di cui utilizzo rimanenze esistenti (consumo > acquisti)', magDrawdownValues, 'ce-det-cdv', 68);
     }
     // B.11 Variazione rimanenze materie prime/merci (art. 2425 c.c.):
     // rettifica dei costi di produzione con convenzione civilistica
