@@ -354,19 +354,22 @@ const Engine = (() => {
       var pers = calcolaPersonaleAnno(persTemp, anno, annoBase, p.meta);
 
       // 4a. Registra nuovi investimenti di quest'anno (prima del calcolo ammortamenti)
+      // IVA capex detraibile (art. 19 DPR 633/72): distribuita per mese di
+      // acquisto, confluisce nel motore mensile come credito del mese.
       var investimentiCassaAnno = 0;
-      var ivaInvestimentiAnno = 0;
+      var ivaInvestimentiMensili = [0,0,0,0,0,0,0,0,0,0,0,0];
       for (var ni = 0; ni < investimentiAnno.length; ni++) {
         var nInv = investimentiAnno[ni];
         // Retrocompat: se presente aliquota_ammortamento, usala; altrimenti converti da anni
         var aliqAmm = nInv.aliquota_ammortamento || (nInv.anni_ammortamento ? 1 / nInv.anni_ammortamento : 0);
+        var meseInv = nInv.mese || 1;
         investimentiCumulativi.push({
           categoria: nInv.categoria, importo: nInv.importo,
           aliquota: aliqAmm,
-          anno_acquisto: anno, mese_acquisto: nInv.mese || 1, fondo: 0
+          anno_acquisto: anno, mese_acquisto: meseInv, fondo: 0
         });
         investimentiCassaAnno += nInv.importo;
-        ivaInvestimentiAnno += Math.round(nInv.importo * (nInv.iva_pct || 0));
+        ivaInvestimentiMensili[meseInv - 1] += Math.round(nInv.importo * (nInv.iva_pct || 0));
       }
 
       // 4b. AMMORTAMENTI (da immobilizzazioni esistenti + investimenti cumulativi incl. anno corrente)
@@ -475,25 +478,21 @@ const Engine = (() => {
       ce.imposte = ce.ires + ce.irap;
       ce.utile_netto = ce.risultato_ante_imposte - ce.imposte;
 
-      // 8. IVA (inclusa IVA credito da investimenti)
-      var iva = _calcolaIvaAnno(ricavi.totale, costi, driver, fisc);
-      iva.iva_credito += ivaInvestimentiAnno;
-      iva.saldo = iva.iva_debito - iva.iva_credito;
-      iva.da_versare = iva.saldo > 0 ? iva.saldo : 0;
-      iva.a_credito = iva.saldo < 0 ? -iva.saldo : 0;
-      ce.iva = iva;
-
-      // 8b. CALCOLO MENSILE: distribuzione infrannuale per crediti/debiti/IVA
-      var mensile = _calcolaMensile(ce, driver, fisc, p.meta, anno, annoBase, ivaCreditoRiportoAnno);
+      // 8. CALCOLO MENSILE: distribuzione infrannuale di ricavi, costi, IVA
+      // (incl. IVA capex detraibile per mese di acquisto) e rimanenze DIO.
+      // È il motore authoritativo per crediti/debiti/IVA al 31/12.
+      var mensile = _calcolaMensile(ce, driver, fisc, p.meta, anno, annoBase, ivaCreditoRiportoAnno, ivaInvestimentiMensili);
 
       // 9. SP
       // SP: usa ammortPerSP (senza nuovi investimenti dell'anno, che vengono aggiunti dopo)
       var spPrev_saved = spPrev; // salva per trace
       var sp = _calcolaSPAnno(spPrev, ce, finanz, ammortPerSP, driver, anno, annoBase, p, impostePrecedenti);
 
-      // 9b. Override SP con valori dal motore mensile (più precisi della formula annuale)
+      // 9b. Popolamento SP da motore mensile (crediti/debiti commerciali,
+      // rimanenze DIO, IVA: _calcolaSPAnno non li calcola, delega qui).
       sp.crediti_clienti = mensile.crediti_clienti;
       sp.debiti_fornitori = mensile.debiti_fornitori;
+      sp.rimanenze = Math.max(mensile.rimanenze_dio, spPrev.rimanenze);
       sp._deb_trib_iva = mensile.iva_debito_31dic;
       sp.debiti_tributari = sp._deb_trib_imposte + mensile.iva_debito_31dic;
       // Crediti tributari IVA: se a fine anno IVA credito > IVA debito, il credito
@@ -1049,11 +1048,15 @@ const Engine = (() => {
    * Calcola i dati mensili per un anno: distribuzione ricavi/costi,
    * crediti/debiti al 31/12, IVA con liquidazione periodica.
    *
+   * @param {Array<number>} [ivaInvestimentiMensili] Array[12] con l'IVA a
+   *   credito sugli investimenti (capex) per mese di acquisto. Deducibile ai
+   *   sensi dell'art. 19 DPR 633/72. Viene sommata all'IVA a credito operativa
+   *   nel mese di registrazione, così da confluire nella liquidazione periodica.
    * @returns {Object} { ricavi[], costi[], personale[], iva_debito[], iva_credito[],
-   *   iva_netta[], crediti_clienti, debiti_fornitori, iva_debito_31dic,
-   *   iva_credito_31dic }
+   *   iva_netta[], crediti_clienti, debiti_fornitori, rimanenze_dio,
+   *   iva_debito_31dic, iva_credito_fine_anno }
    */
-  function _calcolaMensile(ce, driver, fisc, meta, anno, annoBase, ivaCreditoRiporto) {
+  function _calcolaMensile(ce, driver, fisc, meta, anno, annoBase, ivaCreditoRiporto, ivaInvestimentiMensili) {
     var circ = driver.circolante || {};
     var isCostitutenda = meta && meta.scenario === 'costituenda';
     var meseAvvio = (meta && meta.mese_avvio) || 1;
@@ -1119,6 +1122,8 @@ const Engine = (() => {
         var costoMese = (info.pctM ? info.pctM[m] : 0) + (info.fixM ? info.fixM[m] : 0);
         credM += Math.round(costoMese * info.aliq);
       }
+      // IVA credito da investimenti (capex) del mese — art. 19 DPR 633/72
+      if (ivaInvestimentiMensili) credM += ivaInvestimentiMensili[m] || 0;
       ivaCreditoM[m] = credM;
       ivaNettaM[m] = ivaDebitoM[m] - ivaCreditoM[m];
     }
@@ -1176,6 +1181,19 @@ const Engine = (() => {
       debitiFornitori += costiMensili[m] + ivaCreditoM[m];
     }
 
+    // ── Rimanenze al 31/12: fabbisogno DIO = costi degli ultimi ceil(DIO/30) mesi ──
+    // Simmetrico a DSO/DPO. Valutate al costo (OIC 13; art. 2426 c.c. c.1 n.9):
+    // nessuna IVA, perché l'IVA sugli acquisti in magazzino è già stata
+    // detratta nella liquidazione periodica. Usare gli ultimi mesi (anziché la
+    // media annuale) riflette correttamente la stagionalità: un'azienda con
+    // picco di acquisti in Q4 avrà più magazzino al 31/12 rispetto a una
+    // con acquisti uniformi.
+    var mesiDIO = Math.max(1, Math.ceil((circ.dio || 30) / 30));
+    var rimanenzeDIO = 0;
+    for (m = Math.max(0, 12 - mesiDIO); m < 12; m++) {
+      rimanenzeDIO += costiMensili[m];
+    }
+
     return {
       ricavi: ricaviMensili,
       costi: costiMensili,
@@ -1185,26 +1203,10 @@ const Engine = (() => {
       iva_netta: ivaNettaM,
       crediti_clienti: creditiClienti,
       debiti_fornitori: debitiFornitori,
+      rimanenze_dio: rimanenzeDIO,
       iva_debito_31dic: ivaDebito31dic,
       iva_credito_fine_anno: Math.max(0, -ivaCumuloCredito), // credito IVA residuo a fine anno (va in attivo SP)
       _ivaCumuloCredito: ivaCumuloCredito // carry-forward per anno successivo (negativo = credito)
-    };
-  }
-
-  /* ── IVA annuale (mantenuta per CE aggregato) ──────────────── */
-
-  function _calcolaIvaAnno(ricaviTotale, costiResult, driver, fisc) {
-    var ivaRicavi = fisc.iva_ricavi || 0.22;
-    var debito = Math.round(ricaviTotale * ivaRicavi);
-    var credito = costiResult.iva_credito || 0;
-    var saldo = debito - credito; // positivo = da versare, negativo = a credito
-
-    return {
-      iva_debito: debito,
-      iva_credito: credito,
-      saldo: saldo,
-      da_versare: saldo > 0 ? saldo : 0,
-      a_credito: saldo < 0 ? -saldo : 0
     };
   }
 
@@ -1252,7 +1254,8 @@ const Engine = (() => {
     var mesiDPO = Math.max(1, Math.ceil((circ.dpo || 30) / 30));
     var smobDeb = smobResidui.debiti_fornitori || 0;
     t['sp.debiti_fornitori'] = 'Costi lordi (IVA incl.) ultimi ' + mesiDPO + ' mesi (DPO ' + (circ.dpo || 30) + 'gg) = ' + _fmt(mensile.debiti_fornitori || 0) + (smobDeb > 0 ? ' + smobilizzo pregressi ' + _fmt(smobDeb) : '');
-    t['sp.rimanenze'] = 'max(Costi ' + _fmt(ce.costi_totale) + ' × DIO ' + (circ.dio || 0) + 'gg / 360 = ' + _fmt(Math.round(ce.costi_totale * (circ.dio || 0) / 360)) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
+    var mesiDIO = Math.max(1, Math.ceil((circ.dio || 30) / 30));
+    t['sp.rimanenze'] = 'max(Costi ultimi ' + mesiDIO + ' mesi (DIO ' + (circ.dio || 30) + 'gg) = ' + _fmt(mensile.rimanenze_dio || 0) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
     t['sp.altri_crediti'] = 'Smobilizzo residuo (mesi incasso configurati)';
     var ivaCredFine = (mensile.iva_credito_fine_anno || 0);
     t['sp.crediti_tributari_iva'] = ivaCredFine > 0
@@ -1294,7 +1297,6 @@ const Engine = (() => {
   /* ── SP previsionale ─────────────────────────────────────── */
 
   function _calcolaSPAnno(spPrev, ce, finanz, ammort, driver, anno, annoBase, progetto, impostePrecedenti) {
-    var circ = driver.circolante || {};
     var sp = {};
 
     // Immobilizzazioni: valore precedente - ammortamento anno
@@ -1303,14 +1305,13 @@ const Engine = (() => {
     sp.immob_finanziarie = spPrev.immob_finanziarie;
     sp.immobilizzazioni_nette = sp.immob_immateriali_nette + sp.immob_materiali_nette + sp.immob_finanziarie;
 
-    // Circolante: valori iniziali (sovrascritti dal motore mensile nel loop principale)
-    sp.crediti_clienti = Math.round(ce.ricavi_totale * (circ.dso || 0) / 360);
-    sp.debiti_fornitori = Math.round(ce.costi_totale * (circ.dpo || 0) / 360);
-    // Rimanenze: il livello DIO rappresenta il fabbisogno operativo;
-    // le rimanenze storiche eccedenti il DIO vengono preservate finché non
-    // consumate esplicitamente tramite eventi "utilizzo_rimanenze".
-    var rimanenzeDIO = Math.round(ce.costi_totale * (circ.dio || 0) / 360);
-    sp.rimanenze = Math.max(rimanenzeDIO, spPrev.rimanenze);
+    // Circolante: crediti/debiti commerciali e rimanenze sono calcolati dal
+    // motore mensile (_calcolaMensile) nel loop principale, che tiene conto di
+    // stagionalità, distribuzione dei costi e lordi IVA (art. 2424 c.c. C.II.1,
+    // D.7; OIC 15 §27, OIC 19 §31). Qui inizializzati a 0 e sovrascritti dopo.
+    sp.crediti_clienti = 0;
+    sp.debiti_fornitori = 0;
+    sp.rimanenze = spPrev.rimanenze; // carry-forward; sovrascritto da _calcolaMensile (rimanenze_dio) con max(livello DIO, precedente)
     sp.altri_crediti = spPrev.altri_crediti; // default; sovrascritto da smobilizzo nel loop principale
     sp.crediti_tributari_iva = 0; // default; sovrascritto dal motore mensile nel loop principale
     sp.attivo_circolante = sp.crediti_clienti + sp.rimanenze + sp.altri_crediti;
