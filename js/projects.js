@@ -374,7 +374,8 @@ const Projects = (() => {
       label:               label,
       base_annuale:        baseAnnuale || 0,
       base_tipo:           'annuale',   // 'annuale' | 'mensile'
-      crescita_annua:      {}    // { "2026": 0.05, "2027": 0.05, ... } per anno
+      crescita_annua:      {},   // { "2026": 0.05, "2027": 0.05, ... } per anno
+      soggetto_inflazione: true  // inflazione applicata ai ricavi (opt-out per modello reale o scenari rigidi)
     };
   }
 
@@ -399,6 +400,7 @@ const Projects = (() => {
       tipo_driver:           isPersonale ? 'fisso' : tipoDriver,
       pct_ricavi:            tipoDriver === 'pct_ricavi' ? 0 : null,
       var_pct_annua:         tipoDriver === 'pct_ricavi' ? 0 : null,
+      var_pct_annua_mode:    tipoDriver === 'pct_ricavi' ? 'assoluta' : null, // 'assoluta' (pp) | 'relativa' (moltiplicativa)
       importo_fisso:         tipoDriver !== 'pct_ricavi' ? 0 : null,
       base_tipo:             'annuale',   // 'annuale' | 'mensile'
       soggetto_inflazione:   !isPersonale && tipoDriver === 'fisso',
