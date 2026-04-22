@@ -915,9 +915,17 @@ const Engine = (() => {
       if (drv.tipo_driver === 'pct_ricavi') {
         var pct = drv.pct_ricavi || 0;
         // Variazione della percentuale anno su anno
+        // Modalità 'assoluta' (default): additiva in punti percentuali → pct + var × t
+        // Modalità 'relativa': moltiplicativa sulla pct stessa → pct × (1+var)^t
+        //   La modalità relativa modella scenari di margin squeeze (costi unitari che
+        //   crescono per inflazione mentre i prezzi di vendita restano rigidi).
         var anniDiff = anno - annoBase;
         if (drv.var_pct_annua && anniDiff > 0) {
-          pct = pct + (drv.var_pct_annua * anniDiff);
+          if (drv.var_pct_annua_mode === 'relativa') {
+            pct = pct * Math.pow(1 + drv.var_pct_annua, anniDiff);
+          } else {
+            pct = pct + (drv.var_pct_annua * anniDiff);
+          }
         }
         importo = Math.round(ricaviTotale * pct);
       } else {
@@ -1474,7 +1482,11 @@ const Engine = (() => {
         var pct = drv.pct_ricavi || 0;
         var anniDiff = anno - annoBase;
         if (drv.var_pct_annua && anniDiff > 0) {
-          pct = pct + (drv.var_pct_annua * anniDiff);
+          if (drv.var_pct_annua_mode === 'relativa') {
+            pct = pct * Math.pow(1 + drv.var_pct_annua, anniDiff);
+          } else {
+            pct = pct + (drv.var_pct_annua * anniDiff);
+          }
         }
         importo = Math.round(ricaviTotale * pct);
 

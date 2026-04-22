@@ -400,6 +400,7 @@ const Projects = (() => {
       tipo_driver:           isPersonale ? 'fisso' : tipoDriver,
       pct_ricavi:            tipoDriver === 'pct_ricavi' ? 0 : null,
       var_pct_annua:         tipoDriver === 'pct_ricavi' ? 0 : null,
+      var_pct_annua_mode:    tipoDriver === 'pct_ricavi' ? 'assoluta' : null, // 'assoluta' (pp) | 'relativa' (moltiplicativa)
       importo_fisso:         tipoDriver !== 'pct_ricavi' ? 0 : null,
       base_tipo:             'annuale',   // 'annuale' | 'mensile'
       soggetto_inflazione:   !isPersonale && tipoDriver === 'fisso',

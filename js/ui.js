@@ -1644,7 +1644,7 @@ const UI = (() => {
       // Header categoria
       html += '<thead><tr class="row-sottomastro"><td colspan="8" style="padding:8px 12px;font-weight:700">' + cat.label + '</td></tr>';
       if (items.length > 0) {
-        html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td class="cell-amount" title="Costo del venduto — attiva per costi (variabili o fissi) direttamente attribuibili alla produzione/erogazione del prodotto o servizio venduto (es. materie prime, hosting, licenze software produttive, canoni leasing di strumenti di delivery). Escludi spese commerciali, generali, amministrative o di rappresentanza.">CDV</td><td class="cell-amount">IVA</td><td></td></tr>';
+        html += '<tr style="font-size:11px;color:var(--color-text-muted)"><td></td><td class="cell-amount">Tipo</td><td class="cell-amount">Valore</td><td class="cell-amount" title="Variazione annua della percentuale sui ricavi. Modalità pp (assoluta): somma di punti percentuali all&#39;anno. Modalità rel (relativa): crescita moltiplicativa della pct (utile per modellare inflazione su costi variabili con prezzi di vendita rigidi). Clic sul badge pp/rel per cambiare.">Var. %/anno</td><td class="cell-amount">Inflaz.</td><td class="cell-amount" title="Costo del venduto — attiva per costi (variabili o fissi) direttamente attribuibili alla produzione/erogazione del prodotto o servizio venduto (es. materie prime, hosting, licenze software produttive, canoni leasing di strumenti di delivery). Escludi spese commerciali, generali, amministrative o di rappresentanza.">CDV</td><td class="cell-amount">IVA</td><td></td></tr>';
       }
       html += '</thead><tbody>';
 
@@ -1660,7 +1660,16 @@ const UI = (() => {
 
         if (cc.tipo_driver === 'pct_ricavi') {
           html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',\'' + did + '\',\'pct_ricavi\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.pct_ricavi) + '</div></td>';
-          html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',\'' + did + '\',\'var_pct_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.var_pct_annua) + '</div></td>';
+          // Var. %/anno con toggle modalità: 'pp' (assoluta, additiva) | 'rel' (relativa, moltiplicativa)
+          var varMode = cc.var_pct_annua_mode === 'relativa' ? 'relativa' : 'assoluta';
+          var varModeLabel = varMode === 'relativa' ? 'rel' : 'pp';
+          var varModeTitle = varMode === 'relativa'
+            ? 'Relativa: pct cresce moltiplicativamente (es. 30% × 1,02 → 30,6% → 31,21% con +2%/anno). Utile per inflazione costi con prezzi di vendita rigidi.'
+            : 'Assoluta: pct cresce additivamente in punti percentuali (es. 30% + 0,6pp → 30,6% → 31,2% con +0,6pp/anno).';
+          html += '<td class="cell-amount"><div style="display:flex;align-items:center;gap:2px;justify-content:flex-end">';
+          html += '<div class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 4px" onclick="UI.ciclaVarPctMode(\'' + did + '\')" title="' + varModeTitle + '">' + varModeLabel + '</div>';
+          html += '<div class="amount-field" contenteditable="true" style="width:50px" data-placeholder="0%" onblur="UI._handleDriverField(this,\'costi\',\'' + did + '\',\'var_pct_annua\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(cc.var_pct_annua) + '</div>';
+          html += '</div></td>';
         } else {
           var baseTipoC = cc.base_tipo || 'annuale';
           var baseTipoLabelC = baseTipoC === 'mensile' ? 'Mens.' : 'Ann.';
@@ -1798,12 +1807,14 @@ const UI = (() => {
       c.tipo_driver = 'fisso';
       c.pct_ricavi = null;
       c.var_pct_annua = null;
+      c.var_pct_annua_mode = null;
       c.importo_fisso = c.importo_fisso || 0;
       c.soggetto_inflazione = true;
     } else {
       c.tipo_driver = 'pct_ricavi';
       c.pct_ricavi = 0;
       c.var_pct_annua = 0;
+      c.var_pct_annua_mode = c.var_pct_annua_mode || 'assoluta';
       c.importo_fisso = null;
       c.soggetto_inflazione = false;
     }
@@ -1959,6 +1970,17 @@ const UI = (() => {
     if (!progetto || idx < 0) return;
     var c = progetto.driver.costi[idx];
     c.soggetto_inflazione = !c.soggetto_inflazione;
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function ciclaVarPctMode(idOrIdx) {
+    var idx = _findDriverIdx('costi', idOrIdx);
+    var progetto = Projects.getProgetto();
+    if (!progetto || idx < 0) return;
+    var c = progetto.driver.costi[idx];
+    if (c.tipo_driver !== 'pct_ricavi') return;
+    c.var_pct_annua_mode = c.var_pct_annua_mode === 'relativa' ? 'assoluta' : 'relativa';
     Projects.segnaModificato();
     _renderDriver();
   }
@@ -4514,6 +4536,7 @@ const UI = (() => {
     ciclaTipoDriver,
     toggleInflazione,
     toggleInflazioneRicavo,
+    ciclaVarPctMode,
     toggleCostoVenduto,
     rimuoviDriver,
     editProfiloStagionale,
