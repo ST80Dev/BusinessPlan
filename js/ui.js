@@ -2049,8 +2049,8 @@ const UI = (() => {
     if (fin.length === 0) {
       html += '<div class="projects-empty" style="padding:24px"><p>Nessun finanziamento in essere. Clicca "Aggiungi finanziamento" se la società ha mutui o finanziamenti attivi.</p></div>';
     } else {
-      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:120px"><col style="width:80px"><col style="width:80px"><col style="width:100px"><col style="width:90px"><col style="width:50px"></colgroup>';
-      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Capitale residuo</td><td class="cell-amount">Tasso %</td><td class="cell-amount">Durata mesi</td><td class="cell-amount">Tipo amm.</td><td class="cell-amount">Inizio rata</td><td></td></tr></thead><tbody>';
+      html += '<table class="schema-table"><colgroup><col style="width:auto"><col style="width:120px"><col style="width:80px"><col style="width:80px"><col style="width:50px"></colgroup>';
+      html += '<thead><tr class="row-mastro"><td>Descrizione</td><td class="cell-amount">Capitale residuo</td><td class="cell-amount">Tasso %</td><td class="cell-amount">Durata mesi</td><td></td></tr></thead><tbody>';
 
       for (var i = 0; i < fin.length; i++) {
         var f = fin[i];
@@ -2059,8 +2059,6 @@ const UI = (() => {
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleFinField(this,' + i + ',\'capitale_residuo\')" onkeydown="UI._handleAmountKey(event)">' + (f.capitale_residuo ? _formatImporto(f.capitale_residuo) : '') + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleFinField(this,' + i + ',\'tasso_annuo\')" onkeydown="UI._handleAmountKey(event)">' + _formatPct(f.tasso_annuo) + '</div></td>';
         html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleFinField(this,' + i + ',\'durata_mesi\')" onkeydown="UI._handleAmountKey(event)">' + (f.durata_mesi || '') + '</div></td>';
-        html += '<td class="cell-amount"><span style="font-size:12px;color:var(--color-text-secondary)">Italiano</span></td>';
-        html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" style="font-size:12px" data-placeholder="MM/AAAA" onblur="UI._handleFinField(this,' + i + ',\'data_inizio_rata\')" onkeydown="UI._handleAmountKey(event)">' + _escapeHtml(f.data_inizio_rata || '') + '</div></td>';
         html += '<td><div class="btn btn-ghost btn-sm" style="color:var(--color-error)" onclick="UI.rimuoviFinanziamento(' + i + ')">✕</div></td>';
         html += '</tr>';
       }
@@ -2109,9 +2107,7 @@ const UI = (() => {
       descrizione: 'Nuovo finanziamento',
       capitale_residuo: 0,
       tasso_annuo: 0,
-      durata_mesi: 60,
-      tipo_ammortamento: 'italiano',
-      data_inizio_rata: ''
+      durata_mesi: 60
     });
     Projects.segnaModificato();
     _renderDriver();
@@ -2125,17 +2121,13 @@ const UI = (() => {
     _renderDriver();
   }
 
-  function ciclaTipoAmm(idx) {
-    // Solo ammortamento italiano supportato — no-op
-  }
-
   function _handleFinField(el, idx, campo) {
     var progetto = Projects.getProgetto();
     if (!progetto || !progetto.driver.finanziamenti_essere) return;
     var f = progetto.driver.finanziamenti_essere[idx];
     if (!f) return;
 
-    if (campo === 'descrizione' || campo === 'data_inizio_rata') {
+    if (campo === 'descrizione') {
       f[campo] = (el.textContent || '').trim();
     } else if (campo === 'tasso_annuo') {
       f.tasso_annuo = _parsePct(el.textContent);
@@ -4571,7 +4563,6 @@ const UI = (() => {
     // Driver patrimoniali
     aggiungiFinanziamento,
     rimuoviFinanziamento,
-    ciclaTipoAmm,
     _handleFinField,
     aggiungiSmobilizzo,
     rimuoviSmobilizzo,
