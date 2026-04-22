@@ -1414,15 +1414,15 @@ const UI = (() => {
       return html;
     }
 
-    // Griglia ricavi: Voce | Tipo | Base | Anno1 | Anno2 | ... | ✕
+    // Griglia ricavi: Voce | Tipo | Base | Inflaz. | Anno1 | Anno2 | ... | ✕
     var isCostitutenda = progetto.meta.scenario === 'costituenda';
     var colW = Math.max(70, Math.floor(400 / nAnni));
-    html += '<div style="overflow-x:auto"><table class="schema-table"><colgroup><col style="width:auto"><col style="width:80px"><col style="width:130px">';
+    html += '<div style="overflow-x:auto"><table class="schema-table"><colgroup><col style="width:auto"><col style="width:80px"><col style="width:130px"><col style="width:60px">';
     for (var c = 0; c < nAnni; c++) html += '<col style="width:' + colW + 'px">';
     html += '<col style="width:40px"></colgroup>';
 
     // Header: anni con pulsante "↓ applica a tutte"
-    html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Tipo</td><td class="cell-amount">Base importo</td>';
+    html += '<thead><tr class="row-mastro"><td>Voce</td><td class="cell-amount">Tipo</td><td class="cell-amount">Base importo</td><td class="cell-amount" title="Inflazione — se attiva, i ricavi crescono automaticamente del tasso di inflazione annuo oltre alla crescita impostata anno per anno. Disattiva per modelli reali o scenari con prezzi di vendita rigidi (es. contratti pluriennali a prezzo fisso).">Inflaz.</td>';
     for (var h = 0; h < nAnni; h++) {
       if (isCostitutenda && h === 0) {
         html += '<td class="cell-amount" style="font-size:12px;color:var(--color-text-muted)">' + anniPrev[h] + '</td>';
@@ -1449,6 +1449,11 @@ const UI = (() => {
       html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" onclick="UI.ciclaBaseTipo(\'ricavi\',\'' + rid + '\')">' + baseTipoLabelR + '</div></td>';
       // Base annuale
       html += '<td class="cell-amount"><div class="amount-field" contenteditable="true" data-placeholder="0" onblur="UI._handleDriverField(this,\'ricavi\',\'' + rid + '\',\'base_annuale\')" onkeydown="UI._handleAmountKey(event)">' + (r.base_annuale ? _formatImporto(r.base_annuale) : '') + '</div></td>';
+      // Inflaz. toggle (default true per retrocompatibilità)
+      var inflazAttiva = r.soggetto_inflazione !== false;
+      var inflIcon = inflazAttiva ? '✓' : '✕';
+      var inflColor = inflazAttiva ? 'var(--color-success)' : 'var(--color-text-muted)';
+      html += '<td class="cell-amount"><div class="btn btn-ghost btn-sm" style="color:' + inflColor + '" onclick="UI.toggleInflazioneRicavo(\'' + rid + '\')">' + inflIcon + '</div></td>';
       // % per ogni anno + pulsante "→ a tutti gli anni"
       for (var a = 0; a < nAnni; a++) {
         var annoStr = String(anniPrev[a]);
@@ -1954,6 +1959,17 @@ const UI = (() => {
     if (!progetto || idx < 0) return;
     var c = progetto.driver.costi[idx];
     c.soggetto_inflazione = !c.soggetto_inflazione;
+    Projects.segnaModificato();
+    _renderDriver();
+  }
+
+  function toggleInflazioneRicavo(idOrIdx) {
+    var idx = _findDriverIdx('ricavi', idOrIdx);
+    var progetto = Projects.getProgetto();
+    if (!progetto || idx < 0) return;
+    var r = progetto.driver.ricavi[idx];
+    // default true: undefined → false, altrimenti toggle classico
+    r.soggetto_inflazione = r.soggetto_inflazione === false ? true : false;
     Projects.segnaModificato();
     _renderDriver();
   }
@@ -4497,6 +4513,7 @@ const UI = (() => {
     importaCostiDaCE,
     ciclaTipoDriver,
     toggleInflazione,
+    toggleInflazioneRicavo,
     toggleCostoVenduto,
     rimuoviDriver,
     editProfiloStagionale,

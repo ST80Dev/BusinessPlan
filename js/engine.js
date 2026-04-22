@@ -872,9 +872,11 @@ const Engine = (() => {
           base = Math.round(base * mesiOperativi1anno / 12);
         }
       }
-      // Crescita cumulativa anno su anno con % distinta per anno + inflazione per anno
+      // Crescita cumulativa anno su anno con % distinta per anno + inflazione opt-in
       // La crescita parte dall'anno successivo al base (il base usa i valori driver as-is)
+      // Inflazione applicata solo se drv.soggetto_inflazione !== false (default true per retrocompatibilità)
       var importo = base;
+      var applicaInflazione = drv.soggetto_inflazione !== false;
       for (var a = annoBase + 1; a <= anno; a++) {
         var crescita = 0;
         if (typeof drv.crescita_annua === 'object' && drv.crescita_annua) {
@@ -884,8 +886,10 @@ const Engine = (() => {
         }
         importo = importo * (1 + crescita);
         // Inflazione specifica dell'anno a (non dell'anno di calcolo)
-        var infAnno = (inflazioneMap && inflazioneMap[String(a)]) || 0;
-        if (infAnno) importo = importo * (1 + infAnno);
+        if (applicaInflazione) {
+          var infAnno = (inflazioneMap && inflazioneMap[String(a)]) || 0;
+          if (infAnno) importo = importo * (1 + infAnno);
+        }
       }
       importo = Math.round(importo);
       totale += importo;

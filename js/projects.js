@@ -374,7 +374,8 @@ const Projects = (() => {
       label:               label,
       base_annuale:        baseAnnuale || 0,
       base_tipo:           'annuale',   // 'annuale' | 'mensile'
-      crescita_annua:      {}    // { "2026": 0.05, "2027": 0.05, ... } per anno
+      crescita_annua:      {},   // { "2026": 0.05, "2027": 0.05, ... } per anno
+      soggetto_inflazione: true  // inflazione applicata ai ricavi (opt-out per modello reale o scenari rigidi)
     };
   }
 
