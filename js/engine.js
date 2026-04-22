@@ -674,7 +674,6 @@ const Engine = (() => {
         ce: ce,
         sp: sp,
         cash_flow: cf,
-        iva: iva,
         mensile: mensile,
         _trace: _buildTrace(ce, sp, cf, spPrev_saved, driver, fisc, smobResidui, mensile)
       };
