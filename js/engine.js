@@ -1323,13 +1323,14 @@ const Engine = (() => {
     //    nell'anno. Acconti calcolati con metodo storico (L. 97/1977, D.L. 69/1989):
     //    = imposte del periodo precedente. Anno 1: base storica assente → acconti = 0
     //    → debito = intero importo delle imposte correnti.
-    // 2. IVA ultimo mese: liquidazione dicembre da versare entro il 16 gennaio
-    var ivaUltimoMese = ce.iva ? Math.round(ce.iva.da_versare / 12) : 0;
+    // 2. IVA ultimo periodo non ancora versata: popolata dal motore mensile
+    //    (_calcolaMensile → iva_debito_31dic) con la liquidazione effettiva del
+    //    periodo residuo (dicembre per mensile art. 27 DPR 633/72; Q4 per
+    //    trimestrale art. 7 DPR 542/1999), al netto di crediti IVA riportati.
     var saldoImposte = Math.max(0, Math.round(ce.imposte - impostePrecedenti));
-    sp.debiti_tributari = saldoImposte + ivaUltimoMese;
-    // Salva componenti per trace
     sp._deb_trib_imposte = saldoImposte;
-    sp._deb_trib_iva = ivaUltimoMese;
+    sp._deb_trib_iva = 0; // sovrascritto dal motore mensile nel loop principale
+    sp.debiti_tributari = saldoImposte;
 
     // TFR: accumula quota annua
     sp.tfr = spPrev.tfr + ce.personale.tfr;
