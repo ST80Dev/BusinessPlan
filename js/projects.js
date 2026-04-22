@@ -83,6 +83,13 @@ const Projects = (() => {
         finanziamenti_essere: [],
         smobilizzo: [],
         circolante: { dso: 60, dpo: 45, dio: 30 },
+        magazzino: {
+          // Tasso di utilizzo degli acquisti di materie prime: default 1.0 (=100%).
+          // <1.0 → parte degli acquisti non viene consumata e accumula rimanenze;
+          // >1.0 → consumo supera gli acquisti attingendo dalle rimanenze iniziali
+          //        (capped al saldo disponibile, con warning quando insufficiente).
+          tasso_utilizzo: _creaParamAnnuale(anniPrev, 1.0)
+        },
         fiscale: {
           aliquota_ires: 0.24,
           aliquota_irap: 0.039,
@@ -206,10 +213,9 @@ const Projects = (() => {
         return Object.assign(base, {
           anno: primoAnno, anno_fine: ultimoAnno, mese: 1, importo: 0, sottotipo: 'versamento_capitale'
         });
-      case 'utilizzo_rimanenze':
-        return Object.assign(base, {
-          anno: primoAnno, anno_fine: ultimoAnno, pct_utilizzo: 0
-        });
+      // 'utilizzo_rimanenze': deprecato. Sostituito dal driver Magazzino
+      // (tasso_utilizzo per anno, default 100%). Gli eventi già presenti nei
+      // progetti salvati vengono ignorati dall'engine.
       default:
         return base;
     }
@@ -574,6 +580,10 @@ const Projects = (() => {
       driver.fiscale.inflazione    = _migraParam(driver.fiscale.inflazione, 0.02);
       driver.fiscale.var_personale = _migraParam(driver.fiscale.var_personale, 0);
     }
+
+    // Driver magazzino (tasso utilizzo acquisti, default 100%)
+    if (!driver.magazzino) driver.magazzino = { tasso_utilizzo: {} };
+    driver.magazzino.tasso_utilizzo = _migraParam(driver.magazzino.tasso_utilizzo, 1.0);
 
     // Driver ricavi — crescita_annua
     if (driver.ricavi) {

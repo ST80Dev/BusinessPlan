@@ -224,6 +224,13 @@ const Schema = (() => {
         { id: 'spc.LIQ.1', label: 'Cassa e conti bancari (saldo disponibile al via)', tipo: 'conto', segno: +1, editabile: true }
       ]
     },
+    {
+      id: 'spc.RIM', label: 'E) Rimanenze iniziali di magazzino', tipo: 'mastro', segno: +1, computed: true,
+      note: 'Scorte conferite alla costituzione o acquistate prima dell\'avvio operativo. Valorizzate al costo. Consentono di modellare un drawdown (tasso utilizzo >100%) già dal primo anno.',
+      children: [
+        { id: 'spc.RIM.1', label: 'Materie prime e merci (valorizzate al costo)', tipo: 'conto', segno: +1, editabile: true }
+      ]
+    },
     // ── PASSIVO ─────────────────────────────────────────
     {
       id: 'spc._PAS', label: '── PASSIVO ──', tipo: 'separatore', computed: false, editabile: false
