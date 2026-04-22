@@ -29,6 +29,7 @@ const UI = (() => {
     _setupDragDrop();
     _setupBeforeUnload();
     _setupKeyboard();
+    _setupAutoSelect();
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -588,6 +589,26 @@ const UI = (() => {
           el.classList.add('hidden');
         });
       }
+    });
+  }
+
+  // Al focus su un campo editabile, seleziona tutto il contenuto cosi' da
+  // poter sovrascrivere digitando direttamente senza cancellare manualmente.
+  function _setupAutoSelect() {
+    document.addEventListener('focusin', e => {
+      const el = e.target;
+      if (!el || el.getAttribute('contenteditable') !== 'true') return;
+      if (!el.classList.contains('amount-field') && !el.classList.contains('form-field')) return;
+      // setTimeout differisce la selezione dopo l'eventuale mouseup che
+      // posizionerebbe il cursore sul punto cliccato, annullandola.
+      setTimeout(() => {
+        if (document.activeElement !== el) return;
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }, 0);
     });
   }
 
