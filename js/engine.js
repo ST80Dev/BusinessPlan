@@ -701,9 +701,14 @@ const Engine = (() => {
       cf.flusso_finanziario = cf.flusso_netto - cf.flusso_operativo - cf.flusso_investimenti;
 
       // Dettaglio finanziario (informativo)
+      // Somma solo gli eventi con erogazione nell'anno corrente: l'array
+      // nuoviFinAnno contiene anche finanziamenti accesi in anni precedenti
+      // (serve al ricalcolo dell'ammortamento annuale).
       var nuoviFinErogati = 0;
       for (var ne = 0; ne < nuoviFinAnno.length; ne++) {
-        nuoviFinErogati += nuoviFinAnno[ne].importo || 0;
+        if (nuoviFinAnno[ne].anno === anno) {
+          nuoviFinErogati += nuoviFinAnno[ne].importo || 0;
+        }
       }
       cf.rimborso_finanziamenti = -finanz.capitale_rimborsato;
       cf.nuovi_finanziamenti = nuoviFinErogati;
