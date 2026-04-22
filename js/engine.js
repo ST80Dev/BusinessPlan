@@ -1093,6 +1093,39 @@ const Engine = (() => {
   }
 
   /**
+   * Normalizza un parametro "giorni" (DSO/DPO/DIO):
+   * - accetta 0 come valore valido (niente fallback al default),
+   * - fallback al default solo se il parametro è null/undefined/negativo/NaN.
+   * Il bug "|| default" non rispetta lo 0 (falsy) e sovrascrive l'input utente.
+   */
+  function _normaliZzaGiorni(val, def) {
+    if (typeof val !== 'number' || !isFinite(val) || val < 0) return def;
+    return val;
+  }
+
+  /**
+   * Somma frazionata degli ultimi N giorni di una serie mensile, assumendo
+   * 30 giorni/mese. Parte dal mese 11 (dicembre) a ritroso, prendendo ogni
+   * mese al massimo 30gg finché i giorni residui non si esauriscono:
+   *   giorni=45  → mese 11 intero + 15/30 del mese 10
+   *   giorni=30  → mese 11 intero
+   *   giorni=7   → 7/30 del mese 11
+   *   giorni=0   → 0
+   * Usato per DSO/DPO/DIO con finestra temporale frazionaria, in sostituzione
+   * della quantizzazione per mesi interi (che creava scalini a 31gg, 61gg, …).
+   */
+  function _sommaUltimiGiorni(mensili, giorni) {
+    if (!(giorni > 0) || !mensili) return 0;
+    var tot = 0, residui = giorni;
+    for (var m = 11; m >= 0 && residui > 0; m--) {
+      var copertura = Math.min(30, residui);
+      tot += (mensili[m] || 0) * (copertura / 30);
+      residui -= copertura;
+    }
+    return Math.round(tot);
+  }
+
+  /**
    * Calcola i dati mensili per un anno: distribuzione ricavi/costi,
    * crediti/debiti al 31/12, IVA con liquidazione periodica.
    *
@@ -1212,35 +1245,26 @@ const Engine = (() => {
       ivaCumuloCredito = saldoDic < 0 ? saldoDic : 0;
     }
 
-    // ── Crediti clienti al 31/12: fatturato LORDO (imponibile + IVA) degli ultimi ceil(DSO/30) mesi ──
-    // Art. 2424 c.c.: il credito verso il cliente è l'importo totale della fattura (IVA inclusa)
-    var mesiDSO = Math.max(1, Math.ceil((circ.dso || 30) / 30));
-    var creditiClienti = 0;
-    for (m = Math.max(0, 12 - mesiDSO); m < 12; m++) {
-      creditiClienti += ricaviMensili[m] + ivaDebitoM[m];
-    }
+    // ── Crediti clienti al 31/12: fatturato LORDO (imponibile + IVA) ultimi DSO giorni ──
+    // Art. 2424 c.c.: il credito verso il cliente è l'importo totale della fattura (IVA inclusa).
+    // Somma frazionata sui giorni: DSO=45 → mese dic. intero + metà di nov. (approssimando
+    // 30gg/mese). DSO=0 → nessun credito (incasso contestuale alla vendita).
+    var giorniDSO = _normaliZzaGiorni(circ.dso, 30);
+    var creditiClienti = _sommaUltimiGiorni(ricaviMensili, giorniDSO) + _sommaUltimiGiorni(ivaDebitoM, giorniDSO);
 
-    // ── Debiti fornitori al 31/12: costi LORDI (imponibile + IVA) degli ultimi ceil(DPO/30) mesi ──
-    // Solo costi operativi, NON personale (che genera debiti vs dipendenti/INPS)
-    // Il debito verso il fornitore include l'IVA esposta in fattura
-    var mesiDPO = Math.max(1, Math.ceil((circ.dpo || 30) / 30));
-    var debitiFornitori = 0;
-    for (m = Math.max(0, 12 - mesiDPO); m < 12; m++) {
-      debitiFornitori += costiMensili[m] + ivaCreditoM[m];
-    }
+    // ── Debiti fornitori al 31/12: costi LORDI (imponibile + IVA) ultimi DPO giorni ──
+    // Solo costi operativi, NON personale (che genera debiti vs dipendenti/INPS).
+    // DPO=0 → pagamento contestuale (nessun debito verso fornitori al 31/12).
+    var giorniDPO = _normaliZzaGiorni(circ.dpo, 30);
+    var debitiFornitori = _sommaUltimiGiorni(costiMensili, giorniDPO) + _sommaUltimiGiorni(ivaCreditoM, giorniDPO);
 
-    // ── Rimanenze al 31/12: fabbisogno DIO = costi degli ultimi ceil(DIO/30) mesi ──
-    // Simmetrico a DSO/DPO. Valutate al costo (OIC 13; art. 2426 c.c. c.1 n.9):
-    // nessuna IVA, perché l'IVA sugli acquisti in magazzino è già stata
-    // detratta nella liquidazione periodica. Usare gli ultimi mesi (anziché la
-    // media annuale) riflette correttamente la stagionalità: un'azienda con
-    // picco di acquisti in Q4 avrà più magazzino al 31/12 rispetto a una
-    // con acquisti uniformi.
-    var mesiDIO = Math.max(1, Math.ceil((circ.dio || 30) / 30));
-    var rimanenzeDIO = 0;
-    for (m = Math.max(0, 12 - mesiDIO); m < 12; m++) {
-      rimanenzeDIO += costiMensili[m];
-    }
+    // ── Rimanenze al 31/12: giacenza DIO giorni di costi (netto IVA) ──
+    // Valutate al costo (OIC 13; art. 2426 c.c. c.1 n.9): nessuna IVA, perché
+    // detratta nella liquidazione periodica. Somma frazionata sui giorni:
+    // DIO=0 → magazzino azzerato (just-in-time); DIO=7 → ~1 settimana di scorta.
+    // Usare gli ultimi giorni (anziché la media annuale) riflette la stagionalità.
+    var giorniDIO = _normaliZzaGiorni(circ.dio, 30);
+    var rimanenzeDIO = _sommaUltimiGiorni(costiMensili, giorniDIO);
 
     return {
       ricavi: ricaviMensili,
@@ -1296,14 +1320,14 @@ const Engine = (() => {
     t['sp.immob_immateriali_nette'] = 'Prec. ' + _fmt(spPrev.immob_immateriali_nette) + ' − Ammort. ' + _fmt(spPrev.immob_immateriali_nette - sp.immob_immateriali_nette);
     t['sp.immob_materiali_nette'] = 'Prec. ' + _fmt(spPrev.immob_materiali_nette) + ' − Ammort. ' + _fmt(spPrev.immob_materiali_nette - sp.immob_materiali_nette);
     t['sp.immob_finanziarie'] = 'Invariate dal periodo precedente';
-    var mesiDSO = Math.max(1, Math.ceil((circ.dso || 30) / 30));
+    var ggDSO = _normaliZzaGiorni(circ.dso, 30);
     var smobCred = smobResidui.crediti_clienti || 0;
-    t['sp.crediti_clienti'] = 'Fatt. lordo (IVA incl.) ultimi ' + mesiDSO + ' mesi (DSO ' + (circ.dso || 30) + 'gg) = ' + _fmt(mensile.crediti_clienti || 0) + (smobCred > 0 ? ' + smobilizzo pregressi ' + _fmt(smobCred) : '');
-    var mesiDPO = Math.max(1, Math.ceil((circ.dpo || 30) / 30));
+    t['sp.crediti_clienti'] = 'Fatt. lordo (IVA incl.) ultimi ' + ggDSO + 'gg (DSO) = ' + _fmt(mensile.crediti_clienti || 0) + (smobCred > 0 ? ' + smobilizzo pregressi ' + _fmt(smobCred) : '');
+    var ggDPO = _normaliZzaGiorni(circ.dpo, 30);
     var smobDeb = smobResidui.debiti_fornitori || 0;
-    t['sp.debiti_fornitori'] = 'Costi lordi (IVA incl.) ultimi ' + mesiDPO + ' mesi (DPO ' + (circ.dpo || 30) + 'gg) = ' + _fmt(mensile.debiti_fornitori || 0) + (smobDeb > 0 ? ' + smobilizzo pregressi ' + _fmt(smobDeb) : '');
-    var mesiDIO = Math.max(1, Math.ceil((circ.dio || 30) / 30));
-    t['sp.rimanenze'] = 'max(Costi ultimi ' + mesiDIO + ' mesi (DIO ' + (circ.dio || 30) + 'gg) = ' + _fmt(mensile.rimanenze_dio || 0) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
+    t['sp.debiti_fornitori'] = 'Costi lordi (IVA incl.) ultimi ' + ggDPO + 'gg (DPO) = ' + _fmt(mensile.debiti_fornitori || 0) + (smobDeb > 0 ? ' + smobilizzo pregressi ' + _fmt(smobDeb) : '');
+    var ggDIO = _normaliZzaGiorni(circ.dio, 30);
+    t['sp.rimanenze'] = 'max(Costi ultimi ' + ggDIO + 'gg (DIO) = ' + _fmt(mensile.rimanenze_dio || 0) + ', Prec. ' + _fmt(spPrev.rimanenze) + ')';
     t['sp.altri_crediti'] = 'Smobilizzo residuo (mesi incasso configurati)';
     var ivaCredFine = (mensile.iva_credito_fine_anno || 0);
     t['sp.crediti_tributari_iva'] = ivaCredFine > 0
