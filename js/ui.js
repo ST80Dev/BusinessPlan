@@ -3565,23 +3565,29 @@ const UI = (() => {
 
     html += ceRow('costo_venduto', 'Costo del venduto', { indent: 1, toggle: 'ce-det-cdv' });
     if (costiMP.length > 0) {
-      html += subHeader('Materie prime, sussidiarie, di consumo e di merci', 'ce-det-cdv');
-      for (var mp = 0; mp < costiMP.length; mp++) html += detRow(costiMP[mp].label, costiMP[mp].values, 'ce-det-cdv', 52);
-      if (costiMP.length > 1) html += subTotalRow('Acquisti di materie prime, sussidiarie, di consumo e di merci nel periodo', costiMP, 'ce-det-cdv');
+      // Riga aggregata: somma di tutti i driver B.6 + eventuale scostamento
+      // magazzino. Rappresenta gli acquisti di materie prime di periodo
+      // (componente cash-out).
+      var acquistiMPValues = anniPrev.map(function(a, idx) {
+        var sum = 0;
+        for (var mp = 0; mp < costiMP.length; mp++) sum += (costiMP[mp].values[idx] || 0);
+        return sum;
+      });
+      html += detRow('Acquisti di materie prime, sussidiarie, di consumo e di merci', acquistiMPValues, 'ce-det-cdv', 52);
     }
-    // B.11 Variazione rimanenze materie prime/merci (art. 2425 c.c.):
-    // rettifica dei costi di produzione con convenzione civilistica
-    // "rimanenze iniziali − finali": un aumento di magazzino si presenta
-    // come valore negativo (riduce il costo del venduto). Il valore è già
-    // incorporato nell'aggregato "Costo del venduto" sopra; qui è mostrato
-    // come dettaglio espandibile per trasparenza.
+    // Aumento/Utilizzo rimanenze (= B.11 Variazione delle rimanenze, art.
+    // 2425 c.c.): rettifica civilistica per competenza economica (art.
+    // 2423-bis, OIC 13). Segno civilistico: aumento rimanenze → valore
+    // negativo (riduce costi, gli acquisti eccedenti sono asset a SP);
+    // utilizzo rimanenze → valore positivo (aumenta costi, consumo da
+    // scorte esistenti). Sommata agli acquisti dà il costo del venduto.
     var varRimValues = anniPrev.map(function(a) {
       var r = proiezioni[String(a)];
       return r && r.ce ? -(r.ce.variazione_rimanenze || 0) : 0;
     });
     var hasVarRim = varRimValues.some(function(v) { return v !== 0; });
     if (hasVarRim) {
-      html += detRow('B.11 Var. rimanenze materie prime/merci', varRimValues, 'ce-det-cdv', 52);
+      html += detRow('Aumento / Utilizzo rimanenze', varRimValues, 'ce-det-cdv', 52);
     }
     if (costiVarCDV.length > 0) {
       html += subHeader('Altri costi diretti attribuiti al venduto', 'ce-det-cdv');
