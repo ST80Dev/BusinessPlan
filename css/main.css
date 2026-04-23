@@ -1370,6 +1370,162 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   height: 260px;
 }
 
+/* ── Sezione Importa bilancio ─────────────────────────────────── */
+.import-intro {
+  margin-bottom: 24px;
+}
+.import-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 8px 0;
+}
+.import-desc {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0 0 8px 0;
+  max-width: 840px;
+}
+
+.import-dropzone {
+  border: 2px dashed var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  padding: 36px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  margin-bottom: 16px;
+}
+.import-dropzone:hover,
+.import-dropzone.dragover {
+  background: var(--color-accent-light);
+  border-color: var(--color-accent);
+}
+.import-dropzone-icon {
+  font-size: 32px;
+  color: var(--color-accent);
+  margin-bottom: 8px;
+}
+.import-dropzone-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.import-dropzone-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.import-status {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background: var(--color-info-bg);
+  border-left: 3px solid var(--color-info);
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+.import-status.import-status-warn {
+  background: var(--color-warning-bg);
+  border-left-color: var(--color-warning);
+  color: var(--color-text-primary);
+}
+
+.import-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.import-table-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+.import-table-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.import-table-scroll {
+  max-height: 560px;
+  overflow: auto;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+}
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+.import-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.import-table thead th.num {
+  text-align: right;
+}
+.import-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: middle;
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+.import-table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+.import-cell-text {
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-cell-value.num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  text-align: right;
+  white-space: nowrap;
+}
+.import-table select {
+  width: 100%;
+  max-width: 420px;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.import-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.import-badge.badge-auto    { background: var(--color-success-bg); color: var(--color-success); }
+.import-badge.badge-partial { background: var(--color-warning-bg); color: var(--color-warning); }
+.import-badge.badge-manual  { background: var(--color-accent-light); color: var(--color-accent-hover); }
+.import-badge.badge-none    { background: var(--color-error-bg); color: var(--color-error); }
+
 /* ── Print ───────────────────────────────────────────────────── */
 @media print {
   #sidebar, #header, #footer { display: none; }

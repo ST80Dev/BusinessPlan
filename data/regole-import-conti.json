@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "aggiornato": "2026-04-23",
+  "descrizione": "Dizionario globale delle regole di import bilancio PDF. Mappa testi normalizzati provenienti dai PDF di bilancio dei clienti alle voci dello schema civilistico SP/CE (schema.js). Aggiornato automaticamente da GitHub Actions (v. tappa A5) quando gli operatori confermano mapping nel tool.",
+  "regole": {}
+}

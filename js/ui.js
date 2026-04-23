@@ -64,6 +64,7 @@ const UI = (() => {
     // Aggiorna header
     const titoli = {
       'home':           'Home',
+      'importa':        'Importa bilancio',
       'dati-partenza':  'Dati di partenza',
       'driver':         'Driver & Parametri',
       'eventi':         'Eventi',
@@ -83,6 +84,9 @@ const UI = (() => {
     switch (sezione) {
       case 'home':
         renderHome();
+        break;
+      case 'importa':
+        _renderImportaBilancio();
         break;
       case 'dati-partenza':
         _renderDatiPartenza();
@@ -624,6 +628,293 @@ const UI = (() => {
 
   function _escapeAttr(str) {
     return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Sezione Importa bilancio — PDF → schema SP/CE
+     ══════════════════════════════════════════════════════════ */
+
+  const _importState = {
+    righe: [],                    // output annotato da pdf-import.estraiRighe()
+    schemaFlat: [],               // lista piatta { id, label } da buildDictionary
+    regoleGlobali: null,          // dizionario dal file repo (lazy load)
+    regoleLocali: null,           // dizionario da localStorage
+    statusMsg: 'Carica un PDF di bilancio per iniziare.',
+    pdfModule: null,              // modulo js/pdf-import.js (lazy load)
+    pdfjsLib: null,               // libreria PDF.js (lazy load)
+    loading: false
+  };
+
+  const _IMPORT_REGOLE_PATH = 'data/regole-import-conti.json';
+  const _IMPORT_REGOLE_LOCAL_KEY = 'bp_pdf_mapping';
+
+  async function _importLoadModuli() {
+    if (!_importState.pdfModule) {
+      _importState.pdfModule = await import('./pdf-import.js');
+    }
+    if (!_importState.pdfjsLib) {
+      _importState.pdfjsLib = await import('../lib/pdf.min.mjs');
+      _importState.pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.mjs';
+    }
+  }
+
+  async function _importLoadRegoleGlobali() {
+    if (_importState.regoleGlobali !== null) return _importState.regoleGlobali;
+    try {
+      const res = await fetch(_IMPORT_REGOLE_PATH, { cache: 'no-cache' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      _importState.regoleGlobali = data && data.regole ? data.regole : {};
+    } catch (err) {
+      console.warn('Regole globali non caricate:', err.message);
+      _importState.regoleGlobali = {};
+    }
+    return _importState.regoleGlobali;
+  }
+
+  function _importLoadRegoleLocali() {
+    if (_importState.regoleLocali !== null) return _importState.regoleLocali;
+    try {
+      const raw = localStorage.getItem(_IMPORT_REGOLE_LOCAL_KEY);
+      _importState.regoleLocali = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      _importState.regoleLocali = {};
+    }
+    return _importState.regoleLocali;
+  }
+
+  function _importSaveRegoleLocali() {
+    try {
+      localStorage.setItem(_IMPORT_REGOLE_LOCAL_KEY, JSON.stringify(_importState.regoleLocali || {}));
+    } catch (e) {
+      console.warn('Salvataggio regole locali fallito:', e.message);
+    }
+  }
+
+  function _importMergedMapping() {
+    // Locale vince sul globale (l'operatore ha l'ultima parola sul proprio PC)
+    return Object.assign({}, _importState.regoleGlobali || {}, _importState.regoleLocali || {});
+  }
+
+  async function _renderImportaBilancio() {
+    const content = document.getElementById('content');
+    const progetto = Projects.getProgetto();
+    if (!content || !progetto) return;
+
+    // Costruisci schema piatto una volta per progetto (per i dropdown)
+    if (_importState.schemaFlat.length === 0) {
+      try {
+        await _importLoadModuli();
+        const built = _importState.pdfModule.buildDictionary([
+          Schema.SP_ATTIVO, Schema.SP_PASSIVO
+        ]);
+        _importState.schemaFlat = built.flatList;
+      } catch (err) {
+        content.innerHTML = '<div class="section-pad"><div class="callout callout-warn">Errore caricamento modulo PDF: ' + _escapeHtml(err.message) + '</div></div>';
+        return;
+      }
+    }
+
+    // Carica regole in parallelo (fetch + localStorage)
+    await _importLoadRegoleGlobali();
+    _importLoadRegoleLocali();
+
+    const hasRighe = _importState.righe.length > 0;
+    const cntG = Object.keys(_importState.regoleGlobali || {}).length;
+    const cntL = Object.keys(_importState.regoleLocali || {}).length;
+
+    content.innerHTML = `
+      <div class="section-pad">
+        <div class="import-intro">
+          <h2 class="import-title">Importa bilancio da PDF</h2>
+          <p class="import-desc">
+            Carica un PDF di bilancio civilistico del cliente. Il tool estrae i testi e gli importi,
+            propone un mapping verso le voci dello Stato Patrimoniale (art. 2424 c.c.) e ti permette
+            di confermare o correggere ogni riga.
+          </p>
+          <p class="import-desc">
+            Le regole di mapping confermate vengono salvate localmente e usate nei prossimi import.
+            Il tool si avvia anche con un dizionario globale condiviso sul repository
+            (${cntG} regole globali, ${cntL} regole locali).
+          </p>
+        </div>
+
+        <div id="import-dropzone" class="import-dropzone">
+          <div class="import-dropzone-icon">⇪</div>
+          <div class="import-dropzone-title">Trascina qui il PDF del bilancio</div>
+          <div class="import-dropzone-sub">oppure clicca per selezionare un file</div>
+          <input type="file" id="import-file" accept="application/pdf" class="hidden">
+        </div>
+
+        <div id="import-status" class="import-status">${_escapeHtml(_importState.statusMsg)}</div>
+
+        <div id="import-table-wrap" class="${hasRighe ? '' : 'hidden'}">
+          <div class="import-table-header">
+            <h3 class="import-table-title">Mapping proposto</h3>
+            <div class="import-table-actions">
+              <div class="btn btn-primary btn-sm" onclick="UI.importaSalvaRegole()" title="Salva i mapping confermati in localStorage">Salva regole</div>
+            </div>
+          </div>
+          <div class="import-table-scroll">
+            <table class="import-table">
+              <thead>
+                <tr>
+                  <th>Testo PDF</th>
+                  <th class="num">Importo</th>
+                  <th>Voce schema SP</th>
+                  <th>Stato</th>
+                </tr>
+              </thead>
+              <tbody id="import-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    _importBindDropzone();
+    if (hasRighe) _importRenderTable();
+  }
+
+  function _importBindDropzone() {
+    const dz = document.getElementById('import-dropzone');
+    const fi = document.getElementById('import-file');
+    if (!dz || !fi) return;
+
+    dz.addEventListener('click', () => fi.click());
+    dz.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dz.classList.add('dragover');
+    });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) _importHandleFile(f);
+    });
+    fi.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) _importHandleFile(f);
+    });
+  }
+
+  async function _importHandleFile(file) {
+    if (!file || file.type !== 'application/pdf') {
+      _importSetStatus('Seleziona un PDF valido.', 'warn');
+      return;
+    }
+    if (_importState.loading) return;
+    _importState.loading = true;
+    _importSetStatus('Estrazione in corso…');
+
+    try {
+      await _importLoadModuli();
+      const buffer = await file.arrayBuffer();
+      const savedMapping = _importMergedMapping();
+      _importState.righe = await _importState.pdfModule.estraiRighe(buffer, {
+        pdfjsLib: _importState.pdfjsLib,
+        schemaRoots: [Schema.SP_ATTIVO, Schema.SP_PASSIVO],
+        savedMapping
+      });
+
+      const auto = _importState.righe.filter(r => r.status === 'auto').length;
+      const partial = _importState.righe.filter(r => r.status === 'partial').length;
+      const manual = _importState.righe.filter(r => r.status === 'manual').length;
+      const none = _importState.righe.length - auto - partial - manual;
+
+      _importSetStatus(
+        `Estratte ${_importState.righe.length} righe. ` +
+        `Auto ${auto} · Parziali ${partial} · Salvate ${manual} · Da mappare ${none}.`
+      );
+
+      document.getElementById('import-table-wrap').classList.remove('hidden');
+      _importRenderTable();
+    } catch (err) {
+      console.error(err);
+      _importSetStatus('Errore: ' + err.message, 'warn');
+    } finally {
+      _importState.loading = false;
+    }
+  }
+
+  function _importSetStatus(msg, variant) {
+    _importState.statusMsg = msg;
+    const el = document.getElementById('import-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.toggle('import-status-warn', variant === 'warn');
+  }
+
+  function _importRenderTable() {
+    const tbody = document.getElementById('import-tbody');
+    if (!tbody) return;
+
+    const optionsHtml = '<option value="">— non mappato —</option>' +
+      _importState.schemaFlat.map(n =>
+        `<option value="${_escapeHtml(n.id)}">${_escapeHtml(n.id)} · ${_escapeHtml(n.label)}</option>`
+      ).join('');
+
+    tbody.innerHTML = _importState.righe.map((r, idx) => {
+      const badge = r.status === 'auto' ? 'badge-auto'
+                  : r.status === 'partial' ? 'badge-partial'
+                  : r.status === 'manual' ? 'badge-manual' : 'badge-none';
+      const badgeTxt = r.status === 'auto' ? 'Auto'
+                     : r.status === 'partial' ? 'Parziale'
+                     : r.status === 'manual' ? 'Salvato' : 'Da mappare';
+      const valueFmt = r.value != null
+        ? (_importState.pdfModule ? _importState.pdfModule.formatItalianNumber(r.value) : String(r.value))
+        : '';
+      const opts = optionsHtml.replace(
+        `value="${_escapeHtml(r.schemaId)}"`,
+        `value="${_escapeHtml(r.schemaId)}" selected`
+      );
+      return `<tr class="import-row status-${r.status}" data-idx="${idx}">
+        <td class="import-cell-text" title="${_escapeHtml(r.fullText)}">${_escapeHtml(r.text)}</td>
+        <td class="import-cell-value num">${valueFmt}</td>
+        <td>
+          <select data-idx="${idx}" onchange="UI.importaCambiaVoce(${idx}, this.value)">
+            ${r.schemaId ? opts : optionsHtml}
+          </select>
+        </td>
+        <td><span class="import-badge ${badge}">${badgeTxt}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function importaCambiaVoce(idx, schemaId) {
+    const r = _importState.righe[idx];
+    if (!r) return;
+    r.schemaId = schemaId || '';
+    if (schemaId) {
+      const node = _importState.schemaFlat.find(n => n.id === schemaId);
+      r.schemaLabel = node ? node.label : '';
+      r.status = 'manual';
+    } else {
+      r.schemaLabel = '';
+      r.status = 'none';
+    }
+    _importRenderTable();
+  }
+
+  function importaSalvaRegole() {
+    _importLoadRegoleLocali();
+    let nuove = 0;
+    for (const r of _importState.righe) {
+      if (!r.schemaId || !r.text) continue;
+      const key = r.text;
+      if (_importState.regoleLocali[key] !== r.schemaId) {
+        _importState.regoleLocali[key] = r.schemaId;
+        nuove++;
+      }
+    }
+    _importSaveRegoleLocali();
+    mostraNotifica(
+      nuove > 0
+        ? `Salvate ${nuove} nuove regole nel dizionario locale.`
+        : 'Nessuna nuova regola da salvare.',
+      nuove > 0 ? 'success' : 'info'
+    );
   }
 
   /* ══════════════════════════════════════════════════════════
@@ -4722,6 +5013,9 @@ const UI = (() => {
     mostraNotifica,
     apriModificaCliente,
     _apriDaRecente,
+    // Importa bilancio
+    importaCambiaVoce,
+    importaSalvaRegole,
     // Fase 2
     switchDatiTab,
     toggleModalita,
