@@ -3705,10 +3705,8 @@ const UI = (() => {
 
     var costoImmat = spSeries('immob_immateriali_costo');
     var fondoImmat = spSeries('immob_immateriali_fondo');
-    var quotaImmat = spSeries('quota_amm_immat_anno');
     var costoMat = spSeries('immob_materiali_costo');
     var fondoMat = spSeries('immob_materiali_fondo');
-    var quotaMat = spSeries('quota_amm_mat_anno');
     var tfrApertura = spSeries('tfr_apertura');
     var tfrQuota = spSeries('tfr_quota');
 
@@ -3779,8 +3777,7 @@ const UI = (() => {
         inner += _prospettoDetRow('— Fondo ammortamento', fondo, groupId, 60);
       }
       if (!any) return '';
-      var head = '<tr class="sp-detail-row ' + groupId + '" style="display:none"><td colspan="' + (nAnni + 1) + '" style="padding-left:36px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--color-text-secondary);padding-top:8px">Dettaglio per voce</td></tr>\n';
-      return head + inner;
+      return inner;
     }
 
     // Sezione Attivo
@@ -3788,15 +3785,9 @@ const UI = (() => {
     vociAtt.forEach(function(v) {
       html += _prospettoRow(v, anniPrev, proiezioni, 'sp');
       if (v.key === 'immob_immateriali_nette' && hasImmatDet) {
-        html += _prospettoDetRow('Costo storico (lordo)', costoImmat, 'sp-det-immat', 48);
-        html += _prospettoDetRow('Fondo ammortamento', fondoImmat, 'sp-det-immat', 48);
-        html += _prospettoDetRow('di cui ammortamento dell\'anno', quotaImmat, 'sp-det-immat', 60);
         html += catDetHtml(idsImmat, 'sp-det-immat');
       }
       if (v.key === 'immob_materiali_nette' && hasMatDet) {
-        html += _prospettoDetRow('Costo storico (lordo)', costoMat, 'sp-det-mat', 48);
-        html += _prospettoDetRow('Fondo ammortamento', fondoMat, 'sp-det-mat', 48);
-        html += _prospettoDetRow('di cui ammortamento dell\'anno', quotaMat, 'sp-det-mat', 60);
         html += catDetHtml(idsMat, 'sp-det-mat');
       }
     });
