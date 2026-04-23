@@ -1,5 +1,7 @@
 # Business Plan Tool — Caratteristiche funzionali, dinamiche e fiscali
-**Versione 1.1 | Studio Commerciale | 2025**
+**Versione 1.2 | Studio Commerciale | 2026-04**
+
+> Aggiornamento v1.2 rispetto alla v1.1: margine di contribuzione + Costo del venduto con flag `costo_venduto`, driver magazzino (tasso utilizzo acquisti + scostamento % sui ricavi), IVA progressiva mensile con carry-forward e credito IVA su investimenti, debiti tributari (IVA dicembre, acconti imposte, contributi INPS), smobilizzo crediti/debiti storici, operazioni soci puntuali, pro-rata primo anno costituenda, var. rimanenze in B.11 (art. 2425 c.c.), rendiconto finanziario con imposte esplicite e nuovi finanziamenti visualizzati solo nell'anno di erogazione. Nessuna modifica agli aspetti IRES/IRAP descritti nel §5.
 
 ---
 
@@ -29,6 +31,16 @@ Ogni voce di ricavo si configura con tre livelli di controllo indipendenti e cum
 I tre tipi sono cumulativi sulla stessa voce. La variazione strutturale modifica la base su cui poi si applica la puntuale.
 
 > **Nota:** la stessa struttura a tre livelli si applica simmetricamente ai costi variabili legati ai ricavi. I costi fissi usano solo variazioni strutturali proprie (es. nuovo contratto di affitto).
+
+### 1.1 Costo del venduto e margine di contribuzione
+
+- Ogni driver costo ha un flag `costo_venduto` (CDV) che lo include nel computo del Costo del venduto
+- Il flag CDV è esteso anche ai costi fissi direttamente attribuibili (es. manodopera diretta allocata a produzione)
+- `Costo del venduto` = somma costi con flag attivo + acquisto materie prime e sussid. (B.6) al netto della variazione rimanenze
+- `Margine di contribuzione` = Valore della produzione − Costo del venduto
+- Il CE presenta tre sezioni costi distinte: variabili, fissi direttamente attribuibili, fissi generali
+- Modalità `Var. %/anno` sui costi variabili: assoluta (punti percentuali) o relativa (% sul valore)
+- L'inflazione sui ricavi è un flag opt-in, non un automatismo
 
 ---
 
@@ -96,6 +108,29 @@ La **variazione del circolante** (differenza tra saldo mese corrente e precedent
 
 > **Nota:** DSO, DPO e DIO possono essere modificati nel tempo come eventi strutturali (es. rinegoziazione condizioni commerciali da un mese specifico).
 
+> **Nota:** i valori DSO=0, DPO=0, DIO=0 sono rispettati come scelta esplicita (non vengono surrogati con fallback). La somma del circolante usa una frazione in giorni per evitare squadrature mensili.
+
+### 4.1 Crediti e debiti lordi IVA
+
+I crediti verso clienti e i debiti verso fornitori sono rappresentati **al lordo dell'IVA** (art. 2424 c.c.). Il motore applica l'aliquota IVA di ciascun driver ricavo/costo per determinare l'importo lordo e tiene traccia del debito/credito IVA maturato (vedi §5.3).
+
+### 4.2 Smobilizzo crediti/debiti storici
+
+I saldi di crediti, debiti e debiti tributari provenienti dal bilancio storico vengono smobilizzati sui mesi previsionali secondo una pianificazione specifica (`driver.smobilizzo`) con riconciliazione su `voce_sp`. Questo evita che le poste storiche restino "congelate" a saldo e permette di proiettare realisticamente i flussi di cassa dei primi mesi.
+
+### 4.3 Driver magazzino
+
+Oltre al DIO, il magazzino può essere modellato con due driver alternativi:
+
+| Opzione | Descrizione |
+|---|---|
+| A — Tasso utilizzo acquisti (annuale) | % degli acquisti B.6 che viene consumata nell'anno (1 − var. rimanenze) |
+| B — Scostamento % sui ricavi | Variazione delle rimanenze come % dei ricavi, in aggiunta o alternativa al DIO |
+
+La variazione delle rimanenze è contabilizzata in CE **B.11** (non A.2), coerentemente con l'art. 2425 c.c. che colloca i ricavi a A.1 e la variazione delle rimanenze di materie prime tra i costi della produzione. La vista CE della sezione B.6 è narrativa: `utilizzo + movimento scorte = acquisti`, con due righe esplicite (acquisti + var. rimanenze) e la dicitura ufficiale `Per materie prime, sussid., di consumo e merci`.
+
+Quando il tasso di utilizzo supera il 100% con rimanenze iniziali insufficienti, il motore emette un warning dedicato e lo espone nei prospetti tramite banner.
+
 ---
 
 ## 5. Aspetti fiscali
@@ -111,7 +146,20 @@ La **variazione del circolante** (differenza tra saldo mese corrente e precedent
 - Base imponibile IRAP: valore della produzione (A) meno costi della produzione (B), esclusi gli oneri finanziari e il costo del personale dipendente a tempo indeterminato (deducibile)
 - Il tool calcola la base IRAP separatamente dalla base IRES
 
-> **Semplificazione v1.0:** nessuna gestione di imposte differite/anticipate, ACE, Patent Box. Queste voci potranno essere aggiunte come rettifiche manuali su righe dedicate in versioni successive.
+### 5.3 IVA — calcolo progressivo mensile
+- Ogni driver ricavo e costo ha un'aliquota IVA propria (`iva_pct`), con valore 0% rispettato come scelta esplicita
+- Il motore calcola mese per mese l'IVA a debito (sui ricavi) e l'IVA a credito (sui costi e sugli investimenti)
+- Il saldo IVA mensile si somma al carry-forward del mese precedente: se diventa a credito, si riporta al mese successivo; se resta a debito, a dicembre confluisce nei debiti tributari dell'SP (art. 19 DPR 633/72)
+- Gli investimenti generano un credito IVA distribuito pro-rata Capex dal mese di acquisto, secondo il piano di pagamento configurato
+- Il parametro IVA ricavi è configurato nella tab Ricavi; le aliquote costo sono sui singoli driver
+
+### 5.4 Debiti tributari
+- Debiti tributari a fine anno: IVA di dicembre + acconti imposte IRES/IRAP + contributi INPS di competenza
+- Nel primo anno previsionale il debito tributario rappresenta l'intero importo delle imposte maturate, in assenza di un saldo di apertura proveniente dal bilancio storico
+- Smobilizzo eventuali debiti tributari storici secondo la pianificazione definita in `driver.smobilizzo`
+
+### 5.5 Semplificazioni attuali
+Nessuna gestione di imposte differite/anticipate, ACE, Patent Box. Queste voci restano gestibili come rettifiche manuali su righe dedicate; l'introduzione automatica è rimandata a versioni successive.
 
 ---
 
@@ -127,6 +175,7 @@ PN fine anno = PN inizio anno
 - I dividendi vengono distribuiti nell'anno successivo a quello di maturazione (default) o nello stesso anno (configurabile)
 - La riserva legale (5% dell'utile fino a 1/5 del capitale) è calcolata automaticamente se abilitata
 - Aumenti di capitale gestiti come eventi puntuali con data e importo
+- **Operazioni soci puntuali**: evento dedicato (`tipo: "operazione_soci"`) per versamenti e prelievi non assimilabili a dividendi, con impatto esplicito su PN e cassa nel mese dell'evento
 
 ---
 
@@ -139,15 +188,17 @@ Generato automaticamente come output di verifica — metodo indiretto. Non richi
 - \+ Ammortamenti (reintegro costi non monetari)
 - +/- Variazione capitale circolante netto (da DSO/DPO/DIO)
 - +/- Variazioni altre poste operative
+- \- Imposte pagate (forma esplicita: IRES + IRAP liquidate per cassa secondo le scadenze fiscali, non solo per competenza)
 
 ### Area investimenti
 - \- Acquisti cespiti (Capex per mese da eventi investimento)
 - \+ Incassi da dismissioni (se configurate)
 
 ### Area finanziaria
-- \+ Nuovi finanziamenti erogati
+- \+ Nuovi finanziamenti erogati — visualizzati **solo nell'anno di erogazione** (non nei periodi successivi)
 - \- Rimborso quote capitale mutui
 - \- Dividendi pagati
+- \+ / \- Operazioni soci puntuali (versamenti/prelievi non-dividendo)
 - +/- Variazioni altre poste finanziarie
 
 ### Verifica di quadratura
@@ -194,7 +245,9 @@ Se i due valori non coincidono il motore segnala un errore di quadratura con det
 | Piano ammortamento mutui | Tabella rata per rata per ogni mutuo attivo |
 | Piano ammortamento cespiti | Quota annua per investimento — fondo e valore netto |
 | KPI dashboard | EBITDA%, ROE, ROI, PFN/EBITDA, indice liquidità, DSO/DPO effettivi |
-| Export PDF | Prospetti formattati per presentazione a banche o soci |
+| Cruscotto riepilogativo | Vista compatta con KPI chiave per anno previsionale, affianca i prospetti di dettaglio |
+| Tooltip engine-trace | Ogni cella dei prospetti espone un `title` con la decomposizione del calcolo (driver di origine, formula applicata, valori intermedi) per rendere tracciabile ogni numero |
+| Export PDF | Prospetti formattati per presentazione a banche o soci (attualmente via stampa browser con CSS `@media print`) |
 
 ---
 
@@ -233,6 +286,8 @@ Quando il progetto è di tipo "Costituenda", lo SP di avvio raccoglie solo le vo
 - Partecipazioni e depositi cauzionali
 
 Questo SP semplificato diventa il saldo di apertura del primo mese del primo anno previsionale.
+
+**Pro-rata primo anno costituenda.** Nello scenario "Costituenda" è configurabile un `meseAvvio` (mese di effettiva partenza operativa). I mesi del primo anno precedenti a `meseAvvio` sono considerati pre-operativi: headcount = 0, ricavi = 0, costi = 0. Il motore calcola il primo anno con soli `12 − meseAvvio + 1` mesi effettivi, senza duplicare o annualizzare le voci. La stessa logica pro-rata si applica a crescita, inflazione, acconti imposte e IVA.
 
 ### 10.3 Granularità inserimento: modalità Rapida e Analitica
 
