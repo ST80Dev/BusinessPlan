@@ -331,6 +331,11 @@ body {
 <!-- Main logic as ES module for pdf.js -->
 <script type="module">
 import * as pdfjsLib from './lib/pdf.min.mjs';
+import {
+  buildDictionary,
+  formatItalianNumber,
+  estraiRighe
+} from './js/pdf-import.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = './lib/pdf.worker.min.mjs';
 
@@ -340,37 +345,14 @@ let schemaDict = {};     // normalized_label -> { id, label }
 let allSchemaNodes = [];  // flat list of { id, label }
 let savedMapping = {};   // text -> schemaId  from localStorage
 
-// ── Build schema dictionary ──
-function normalizeLabel(s) {
-  return s.toLowerCase()
-    .replace(/[''`\u2019\u2018]/g, "'")
-    .replace(/[^\w\s'àèéìòùç]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+// Build schema dictionary (wrappa il modulo js/pdf-import.js)
+if (typeof Schema === 'undefined') {
+  console.error('Schema.js not loaded');
+} else {
+  const built = buildDictionary([Schema.SP_ATTIVO, Schema.SP_PASSIVO, Schema.CE]);
+  schemaDict = built.dict;
+  allSchemaNodes = built.flatList;
 }
-
-function walkTree(nodes, collector) {
-  for (const node of nodes) {
-    collector.push({ id: node.id, label: node.label });
-    const key = normalizeLabel(node.label);
-    schemaDict[key] = { id: node.id, label: node.label };
-    if (node.children) walkTree(node.children, collector);
-  }
-}
-
-function buildDictionary() {
-  schemaDict = {};
-  allSchemaNodes = [];
-  if (typeof Schema === 'undefined') {
-    console.error('Schema.js not loaded');
-    return;
-  }
-  walkTree(Schema.SP_ATTIVO, allSchemaNodes);
-  walkTree(Schema.SP_PASSIVO, allSchemaNodes);
-  walkTree(Schema.CE, allSchemaNodes);
-}
-
-buildDictionary();
 
 // Load saved mapping
 try {
@@ -378,174 +360,6 @@ try {
   if (raw) savedMapping = JSON.parse(raw);
 } catch(e) { savedMapping = {}; }
 
-// ── Number parsing (Italian format) ──
-function parseItalianNumber(s) {
-  // Match patterns like 1.234.567,89 or 1234567,89 or 1.234 or just 1234
-  const m = s.match(/([\d.]+,\d{2})\b/);
-  if (m) {
-    return parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
-  }
-  // Try plain integer with dots as thousands
-  const m2 = s.match(/\b(\d{1,3}(?:\.\d{3})+)\b/);
-  if (m2) {
-    return parseFloat(m2[1].replace(/\./g, ''));
-  }
-  // Try plain number
-  const m3 = s.match(/\b(\d+)\b/);
-  if (m3 && m3[1].length >= 2) {
-    return parseFloat(m3[1]);
-  }
-  return null;
-}
-
-function formatItalianNumber(n) {
-  if (n == null) return '';
-  return n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-}
-
-// ── Matching logic ──
-function findBestMatch(text) {
-  const norm = normalizeLabel(text);
-  if (!norm) return null;
-
-  // Check saved mapping first
-  if (savedMapping[text]) {
-    const node = allSchemaNodes.find(n => n.id === savedMapping[text]);
-    if (node) return { id: node.id, label: node.label, status: 'manual' };
-  }
-
-  // Exact match
-  if (schemaDict[norm]) {
-    return { ...schemaDict[norm], status: 'auto' };
-  }
-
-  // Substring match: check if any schema label is contained in the PDF text or vice versa
-  let bestMatch = null;
-  let bestScore = 0;
-
-  for (const [key, entry] of Object.entries(schemaDict)) {
-    // Skip very short keys (like "Altre", "Acconti") to avoid false positives
-    if (key.length < 6) continue;
-
-    let score = 0;
-    if (norm.includes(key)) {
-      score = key.length / norm.length;
-    } else if (key.includes(norm) && norm.length >= 8) {
-      score = norm.length / key.length;
-    } else {
-      // Word-based overlap
-      const wordsA = norm.split(' ').filter(w => w.length > 3);
-      const wordsB = key.split(' ').filter(w => w.length > 3);
-      if (wordsA.length > 0 && wordsB.length > 0) {
-        const common = wordsA.filter(w => wordsB.includes(w));
-        score = common.length / Math.max(wordsA.length, wordsB.length);
-      }
-    }
-
-    if (score > bestScore && score >= 0.4) {
-      bestScore = score;
-      bestMatch = { ...entry, status: score >= 0.7 ? 'auto' : 'partial' };
-    }
-  }
-
-  return bestMatch;
-}
-
-// ── PDF Extraction ──
-async function extractPdf(arrayBuffer) {
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  const allItems = [];
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 1.0 });
-    const textContent = await page.getTextContent();
-    const pageWidth = viewport.width;
-
-    for (const item of textContent.items) {
-      if (!item.str || !item.str.trim()) continue;
-      const x = item.transform[4];
-      const y = item.transform[5];
-      allItems.push({
-        text: item.str.trim(),
-        x, y,
-        page: i,
-        column: x < pageWidth / 2 ? 'left' : 'right',
-        pageWidth
-      });
-    }
-  }
-
-  return allItems;
-}
-
-function groupIntoLines(items) {
-  // Group items by page and approximate y-coordinate (within 3 units)
-  const lines = [];
-  const sorted = [...items].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
-
-  let currentLine = null;
-  for (const item of sorted) {
-    if (!currentLine || currentLine.page !== item.page || Math.abs(currentLine.y - item.y) > 3) {
-      currentLine = { page: item.page, y: item.y, items: [], column: item.column };
-      lines.push(currentLine);
-    }
-    currentLine.items.push(item);
-    // Column is determined by leftmost item
-    if (item.x < currentLine.items[0].x) {
-      currentLine.column = item.column;
-    }
-  }
-
-  // Merge items into text per line
-  return lines.map(line => {
-    const sortedItems = line.items.sort((a, b) => a.x - b.x);
-    const text = sortedItems.map(i => i.text).join(' ');
-    // Determine column by the x of the label (first non-number item)
-    const firstItem = sortedItems[0];
-    return {
-      text,
-      column: firstItem.column,
-      page: line.page,
-      x: firstItem.x,
-      y: line.y
-    };
-  });
-}
-
-function processLines(lines) {
-  extractedRows = [];
-
-  for (const line of lines) {
-    const text = line.text;
-    if (!text || text.length < 3) continue;
-
-    // Try to separate label from value
-    // Value is typically at the end of the line
-    const value = parseItalianNumber(text);
-
-    // Get label part (remove the number at the end)
-    let label = text;
-    if (value != null) {
-      // Remove the last number occurrence
-      label = text.replace(/([\d.]+,\d{2})\s*$/, '').replace(/\b(\d{1,3}(?:\.\d{3})+)\s*$/, '').replace(/\b(\d+)\s*$/, '').trim();
-    }
-    if (!label) label = text;
-
-    const match = findBestMatch(label);
-
-    extractedRows.push({
-      text: label,
-      fullText: text,
-      value,
-      column: line.column,
-      schemaId: match ? match.id : '',
-      schemaLabel: match ? match.label : '',
-      status: match ? match.status : 'none',
-      page: line.page
-    });
-  }
-}
 
 // ── UI Rendering ──
 function renderTextColumns() {
@@ -654,9 +468,11 @@ async function handleFile(file) {
 
   try {
     const buffer = await file.arrayBuffer();
-    const items = await extractPdf(buffer);
-    const lines = groupIntoLines(items);
-    processLines(lines);
+    extractedRows = await estraiRighe(buffer, {
+      pdfjsLib,
+      schemaRoots: [Schema.SP_ATTIVO, Schema.SP_PASSIVO, Schema.CE],
+      savedMapping
+    });
     renderTextColumns();
     renderCorrespondenceTable();
 
