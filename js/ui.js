@@ -763,6 +763,7 @@ const UI = (() => {
                   <th class="num">Importo</th>
                   <th>Voce schema SP</th>
                   <th>Stato</th>
+                  <th class="import-col-actions" title="Elimina voce dalla lista"></th>
                 </tr>
               </thead>
               <tbody id="import-tbody"></tbody>
@@ -880,8 +881,17 @@ const UI = (() => {
           </select>
         </td>
         <td><span class="import-badge ${badge}">${badgeTxt}</span></td>
+        <td class="import-col-actions">
+          <div class="import-btn-remove" onclick="UI.importaRimuoviRiga(${idx})" title="Elimina questa voce dalla lista">×</div>
+        </td>
       </tr>`;
     }).join('');
+  }
+
+  function importaRimuoviRiga(idx) {
+    if (idx == null || !_importState.righe[idx]) return;
+    _importState.righe.splice(idx, 1);
+    _importRenderTable();
   }
 
   function importaCambiaVoce(idx, schemaId) {
@@ -5018,6 +5028,7 @@ const UI = (() => {
     // Importa bilancio
     importaCambiaVoce,
     importaSalvaRegole,
+    importaRimuoviRiga,
     // Fase 2
     switchDatiTab,
     toggleModalita,
