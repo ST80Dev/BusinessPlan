@@ -823,11 +823,12 @@ const UI = (() => {
       const auto = _importState.righe.filter(r => r.status === 'auto').length;
       const partial = _importState.righe.filter(r => r.status === 'partial').length;
       const manual = _importState.righe.filter(r => r.status === 'manual').length;
-      const none = _importState.righe.length - auto - partial - manual;
+      const inherited = _importState.righe.filter(r => r.status === 'inherited').length;
+      const none = _importState.righe.length - auto - partial - manual - inherited;
 
       _importSetStatus(
         `Estratte ${_importState.righe.length} righe. ` +
-        `Auto ${auto} · Parziali ${partial} · Salvate ${manual} · Da mappare ${none}.`
+        `Auto ${auto} · Parziali ${partial} · Salvate ${manual} · Ereditate ${inherited} · Da mappare ${none}.`
       );
 
       document.getElementById('import-table-wrap').classList.remove('hidden');
@@ -861,10 +862,12 @@ const UI = (() => {
     tbody.innerHTML = _importState.righe.map((r, idx) => {
       const badge = r.status === 'auto' ? 'badge-auto'
                   : r.status === 'partial' ? 'badge-partial'
-                  : r.status === 'manual' ? 'badge-manual' : 'badge-none';
+                  : r.status === 'manual' ? 'badge-manual'
+                  : r.status === 'inherited' ? 'badge-inherited' : 'badge-none';
       const badgeTxt = r.status === 'auto' ? 'Auto'
                      : r.status === 'partial' ? 'Parziale'
-                     : r.status === 'manual' ? 'Salvato' : 'Da mappare';
+                     : r.status === 'manual' ? 'Salvato'
+                     : r.status === 'inherited' ? 'Ereditato' : 'Da mappare';
       const valueFmt = r.value != null
         ? (_importState.pdfModule ? _importState.pdfModule.formatItalianNumber(r.value) : String(r.value))
         : '';

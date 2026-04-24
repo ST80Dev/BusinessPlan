@@ -335,6 +335,88 @@ export function annotateLines(lines, dict, flatList, savedMapping = {}) {
 }
 
 /**
+ * Riconosce in testa alla riga un codice conto nel formato dello studio:
+ *   - XX/**\/***   → mastro (es. "18/**\/***")
+ *   - XX/XX/***   → conto (es. "18/20/***")
+ *   - XX/XX/XXX   → sottoconto (es. "18/20/068")
+ * Il separatore e' la barra; il marker di aggregato e' una sequenza di `*`.
+ * Le X sono cifre decimali (1-4 cifre per segmento per essere tolleranti a
+ * numerazioni leggermente diverse).
+ *
+ * Ritorna { kind, mastro, conto } oppure null se il formato non e' riconosciuto.
+ *
+ * @param {string} text
+ * @returns {{ kind: 'mastro'|'conto'|'sottoconto', mastro: string, conto: string|null }|null}
+ */
+export function parseContoCode(text) {
+  if (!text) return null;
+  const m = /^\s*(\d{1,4})\/(\d{1,4}|\*+)\/(\d{1,4}|\*+)(?=\s|$)/.exec(text);
+  if (!m) return null;
+  const [, p1, p2, p3] = m;
+  const isStar2 = /^\*+$/.test(p2);
+  const isStar3 = /^\*+$/.test(p3);
+  if (isStar2 && !isStar3) return null; // XX/**/XXX non ammesso
+  let kind;
+  if (isStar2 && isStar3) kind = 'mastro';
+  else if (!isStar2 && isStar3) kind = 'conto';
+  else kind = 'sottoconto';
+  return {
+    kind,
+    mastro: p1,
+    conto: isStar2 ? null : p2
+  };
+}
+
+/**
+ * Propaga il mapping schema dai padri (conto XX/XX/***, mastro XX/**\/***)
+ * ai sottoconti XX/XX/XXX che non hanno un mapping esistente o hanno solo
+ * un match debole (status 'partial' o 'none'). Lo stato propagato e'
+ * 'inherited' per distinguerlo da auto/manual nella UI.
+ *
+ * Rows e' modificato in-place. Torna lo stesso array per comodita' di chain.
+ *
+ * @param {Array} rows — righe annotate da annotateLines()
+ * @returns {Array}
+ */
+export function propagateHierarchicalMapping(rows) {
+  if (!Array.isArray(rows)) return rows;
+
+  // Indicizza i padri che hanno un mapping. Il conto e' piu' specifico del
+  // mastro, quindi ha priorita' in lookup.
+  const mastroMap = {};                     // "18"      -> { schemaId, schemaLabel }
+  const contoMap  = {};                     // "18/20"   -> { schemaId, schemaLabel }
+
+  for (const r of rows) {
+    if (!r || !r.schemaId) continue;
+    const code = parseContoCode(r.fullText || r.text);
+    if (!code) continue;
+    if (code.kind === 'mastro') {
+      mastroMap[code.mastro] = { schemaId: r.schemaId, schemaLabel: r.schemaLabel };
+    } else if (code.kind === 'conto') {
+      contoMap[code.mastro + '/' + code.conto] = { schemaId: r.schemaId, schemaLabel: r.schemaLabel };
+    }
+  }
+
+  for (const r of rows) {
+    if (!r) continue;
+    // Non sovrascrivere scelte forti: match esatto/auto (score >=0.7) o scelta
+    // persistita dall'operatore. Si interviene solo su 'none' e 'partial'.
+    if (r.status !== 'none' && r.status !== 'partial') continue;
+
+    const code = parseContoCode(r.fullText || r.text);
+    if (!code || code.kind !== 'sottoconto') continue;
+
+    const parent = contoMap[code.mastro + '/' + code.conto] || mastroMap[code.mastro];
+    if (!parent) continue;
+
+    r.schemaId = parent.schemaId;
+    r.schemaLabel = parent.schemaLabel;
+    r.status = 'inherited';
+  }
+  return rows;
+}
+
+/**
  * Pipeline completa: PDF ArrayBuffer → righe mappate pronte per la UI.
  * Funzione di alto livello che combina extractPdf, groupIntoLines, annotateLines.
  *
@@ -360,5 +442,6 @@ export async function estraiRighe(arrayBuffer, {
   const lines = groupIntoLines(items);
   const { dict, flatList } = buildDictionary(schemaRoots);
   const rows = annotateLines(lines, dict, flatList, savedMapping);
+  propagateHierarchicalMapping(rows);
   return soloConImporto ? rows.filter(r => r.value != null) : rows;
 }

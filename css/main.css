@@ -1533,10 +1533,11 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.import-badge.badge-auto    { background: var(--color-success-bg); color: var(--color-success); }
-.import-badge.badge-partial { background: var(--color-warning-bg); color: var(--color-warning); }
-.import-badge.badge-manual  { background: var(--color-accent-light); color: var(--color-accent-hover); }
-.import-badge.badge-none    { background: var(--color-error-bg); color: var(--color-error); }
+.import-badge.badge-auto      { background: var(--color-success-bg); color: var(--color-success); }
+.import-badge.badge-partial   { background: var(--color-warning-bg); color: var(--color-warning); }
+.import-badge.badge-manual    { background: var(--color-accent-light); color: var(--color-accent-hover); }
+.import-badge.badge-inherited { background: var(--color-info-bg); color: var(--color-info); }
+.import-badge.badge-none      { background: var(--color-error-bg); color: var(--color-error); }
 
 /* Intestazioni di sezione: separano Colonna sinistra / Colonna destra */
 .import-table tbody tr.import-section-header td {
