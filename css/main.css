@@ -1538,6 +1538,27 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .import-badge.badge-manual  { background: var(--color-accent-light); color: var(--color-accent-hover); }
 .import-badge.badge-none    { background: var(--color-error-bg); color: var(--color-error); }
 
+/* Intestazioni di sezione: separano Colonna sinistra / Colonna destra */
+.import-table tbody tr.import-section-header td {
+  background: var(--color-sidebar-bg);
+  color: var(--color-sidebar-text);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 10px 14px;
+  border-bottom: 2px solid var(--color-border);
+  position: sticky;
+  top: 40px;          /* sotto l'header della tabella */
+  z-index: 1;
+}
+.import-table tbody tr.import-section-header:hover td {
+  background: var(--color-sidebar-bg);
+}
+.import-table tbody tr.import-section-right td {
+  background: var(--color-accent-hover);
+}
+
 /* Colonna Azioni + pulsante elimina riga */
 .import-col-actions {
   width: 40px;

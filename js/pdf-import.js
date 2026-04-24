@@ -246,18 +246,27 @@ export async function extractPdf(arrayBuffer, pdfjsLib) {
  */
 export function groupIntoLines(items) {
   const lines = [];
-  const sorted = [...items].sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
+  // Ordina per pagina, poi colonna (left prima di right), poi y discendente, poi x.
+  // Raggruppare per colonna evita che item di sx e dx con la stessa y finiscano
+  // nella stessa riga: in un bilancio a sezioni contrapposte quella riga conterrebbe
+  // voci e importi di entrambe le colonne mescolati.
+  const sorted = [...items].sort((a, b) =>
+    a.page - b.page
+    || (a.column === b.column ? 0 : a.column === 'left' ? -1 : 1)
+    || b.y - a.y
+    || a.x - b.x
+  );
 
   let currentLine = null;
   for (const item of sorted) {
-    if (!currentLine || currentLine.page !== item.page || Math.abs(currentLine.y - item.y) > 3) {
+    if (!currentLine
+        || currentLine.page !== item.page
+        || currentLine.column !== item.column
+        || Math.abs(currentLine.y - item.y) > 3) {
       currentLine = { page: item.page, y: item.y, items: [], column: item.column };
       lines.push(currentLine);
     }
     currentLine.items.push(item);
-    if (item.x < currentLine.items[0].x) {
-      currentLine.column = item.column;
-    }
   }
 
   const onlyNumeric = /^[\d.,\s]+$/;
@@ -268,7 +277,7 @@ export function groupIntoLines(items) {
     const labelItem = sortedItems.find(it => !onlyNumeric.test(it.text)) || firstItem;
     return {
       text,
-      column: firstItem.column,
+      column: line.column,
       page: line.page,
       x: firstItem.x,
       y: line.y,
