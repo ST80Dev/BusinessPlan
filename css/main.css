@@ -1512,6 +1512,18 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   color: var(--color-text-primary);
 }
 
+/* Righe bold: rappresentano totali o sezioni del PDF originale */
+.import-table tbody tr.import-row-bold td {
+  font-weight: 700;
+  background: var(--color-surface-alt);
+}
+.import-table tbody tr.import-row-bold:hover td {
+  background: var(--color-surface-hover);
+}
+.import-table tbody tr.import-row-bold .import-cell-value.num {
+  font-weight: 700;
+}
+
 .import-badge {
   display: inline-block;
   padding: 2px 8px;

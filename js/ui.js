@@ -815,7 +815,8 @@ const UI = (() => {
       _importState.righe = await _importState.pdfModule.estraiRighe(buffer, {
         pdfjsLib: _importState.pdfjsLib,
         schemaRoots: [Schema.SP_ATTIVO, Schema.SP_PASSIVO],
-        savedMapping
+        savedMapping,
+        soloConImporto: true
       });
 
       const auto = _importState.righe.filter(r => r.status === 'auto').length;
@@ -869,7 +870,8 @@ const UI = (() => {
         `value="${_escapeHtml(r.schemaId)}"`,
         `value="${_escapeHtml(r.schemaId)}" selected`
       );
-      return `<tr class="import-row status-${r.status}" data-idx="${idx}">
+      const boldCls = r.bold ? ' import-row-bold' : '';
+      return `<tr class="import-row status-${r.status}${boldCls}" data-idx="${idx}">
         <td class="import-cell-text" title="${_escapeHtml(r.fullText)}">${_escapeHtml(r.text)}</td>
         <td class="import-cell-value num">${valueFmt}</td>
         <td>

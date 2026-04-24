@@ -149,10 +149,35 @@ export function findBestMatch(text, dict, flatList, savedMapping = {}) {
 }
 
 /**
+ * Heuristica per detection grassetto a partire dal fontName PDF.
+ * PDF.js espone item.fontName (id opaco tipo "g_d0_f1") + styles[fontName]
+ * con eventuali info sulla fontFamily. I font "bold" hanno tipicamente il
+ * nome che contiene "bold", "heavy", "black", "semibold", "demi", "extrabold".
+ *
+ * Non e' 100% affidabile: dipende da come il PDF e' stato generato. Sui PDF
+ * nativi di software contabili funziona bene nella maggior parte dei casi.
+ *
+ * @param {string} fontName
+ * @param {Object} styles                 — textContent.styles da PDF.js
+ * @returns {boolean}
+ */
+function isBoldFont(fontName, styles) {
+  const candidates = [];
+  if (fontName) candidates.push(fontName);
+  if (styles && styles[fontName]) {
+    const s = styles[fontName];
+    if (s.fontFamily) candidates.push(s.fontFamily);
+  }
+  const joined = candidates.join(' ').toLowerCase();
+  return /\b(bold|heavy|black|semibold|demibold|demi|extrabold)\b/.test(joined)
+      || /bold|heavy|black/.test(joined); // fallback senza word-boundary per nomi concatenati
+}
+
+/**
  * Estrae tutti gli item testuali da un PDF tramite PDF.js.
  * @param {ArrayBuffer} arrayBuffer
  * @param {Object} pdfjsLib          — istanza PDF.js (es. import da lib/pdf.min.mjs)
- * @returns {Promise<Array>}         — item: { text, x, y, page, column, pageWidth }
+ * @returns {Promise<Array>}         — item: { text, x, y, page, column, pageWidth, bold }
  */
 export async function extractPdf(arrayBuffer, pdfjsLib) {
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -163,6 +188,7 @@ export async function extractPdf(arrayBuffer, pdfjsLib) {
     const viewport = page.getViewport({ scale: 1.0 });
     const textContent = await page.getTextContent();
     const pageWidth = viewport.width;
+    const styles = textContent.styles || {};
 
     for (const item of textContent.items) {
       if (!item.str || !item.str.trim()) continue;
@@ -173,7 +199,8 @@ export async function extractPdf(arrayBuffer, pdfjsLib) {
         x, y,
         page: i,
         column: x < pageWidth / 2 ? 'left' : 'right',
-        pageWidth
+        pageWidth,
+        bold: isBoldFont(item.fontName, styles)
       });
     }
   }
@@ -183,8 +210,13 @@ export async function extractPdf(arrayBuffer, pdfjsLib) {
 
 /**
  * Raggruppa gli item estratti per riga (stessa pagina, y approssimativa ±3).
+ * Il flag `bold` della riga e' quello dell'item-label (primo item non numerico,
+ * o primo item se tutti numerici). Gli importi nei bilanci sono spesso non-bold
+ * anche quando la label e' in grassetto (es. totali), quindi guardare la label
+ * e' piu' affidabile che un "any bold" sulla riga intera.
+ *
  * @param {Array} items
- * @returns {Array} — righe: { text, column, page, x, y }
+ * @returns {Array} — righe: { text, column, page, x, y, bold }
  */
 export function groupIntoLines(items) {
   const lines = [];
@@ -202,16 +234,19 @@ export function groupIntoLines(items) {
     }
   }
 
+  const onlyNumeric = /^[\d.,\s]+$/;
   return lines.map(line => {
     const sortedItems = line.items.sort((a, b) => a.x - b.x);
     const text = sortedItems.map(i => i.text).join(' ');
     const firstItem = sortedItems[0];
+    const labelItem = sortedItems.find(it => !onlyNumeric.test(it.text)) || firstItem;
     return {
       text,
       column: firstItem.column,
       page: line.page,
       x: firstItem.x,
-      y: line.y
+      y: line.y,
+      bold: !!(labelItem && labelItem.bold)
     };
   });
 }
@@ -223,7 +258,7 @@ export function groupIntoLines(items) {
  * @param {Object} dict           — da buildDictionary
  * @param {Array}  flatList       — da buildDictionary
  * @param {Object} [savedMapping] — mapping salvato (opzionale)
- * @returns {Array} righe: { text, fullText, value, column, schemaId, schemaLabel, status, page }
+ * @returns {Array} righe: { text, fullText, value, column, schemaId, schemaLabel, status, page, bold }
  */
 export function annotateLines(lines, dict, flatList, savedMapping = {}) {
   const rows = [];
@@ -253,7 +288,8 @@ export function annotateLines(lines, dict, flatList, savedMapping = {}) {
       schemaId: match ? match.id : '',
       schemaLabel: match ? match.label : '',
       status: match ? match.status : 'none',
-      page: line.page
+      page: line.page,
+      bold: !!line.bold
     });
   }
   return rows;
@@ -268,11 +304,22 @@ export function annotateLines(lines, dict, flatList, savedMapping = {}) {
  * @param {Object} opts.pdfjsLib            — istanza PDF.js
  * @param {Array<Array>} opts.schemaRoots   — alberi schema (es. [SP_ATTIVO, SP_PASSIVO, CE])
  * @param {Object} [opts.savedMapping={}]   — mapping persistito (testo → id voce)
+ * @param {boolean} [opts.soloConImporto=false]
+ *                                           — se true, scarta righe senza valore
+ *                                             numerico riconosciuto (utile per
+ *                                             import bilancio; false per debug
+ *                                             estrazione testuale)
  * @returns {Promise<Array>}                — righe annotate
  */
-export async function estraiRighe(arrayBuffer, { pdfjsLib, schemaRoots, savedMapping = {} }) {
+export async function estraiRighe(arrayBuffer, {
+  pdfjsLib,
+  schemaRoots,
+  savedMapping = {},
+  soloConImporto = false
+}) {
   const items = await extractPdf(arrayBuffer, pdfjsLib);
   const lines = groupIntoLines(items);
   const { dict, flatList } = buildDictionary(schemaRoots);
-  return annotateLines(lines, dict, flatList, savedMapping);
+  const rows = annotateLines(lines, dict, flatList, savedMapping);
+  return soloConImporto ? rows.filter(r => r.value != null) : rows;
 }
