@@ -857,6 +857,7 @@ const UI = (() => {
         `<option value="${_escapeHtml(n.id)}">${_escapeHtml(n.id)} · ${_escapeHtml(n.label)}</option>`
       ).join('');
 
+    let lastColumn = null;
     tbody.innerHTML = _importState.righe.map((r, idx) => {
       const badge = r.status === 'auto' ? 'badge-auto'
                   : r.status === 'partial' ? 'badge-partial'
@@ -872,7 +873,19 @@ const UI = (() => {
         `value="${_escapeHtml(r.schemaId)}" selected`
       );
       const boldCls = r.bold ? ' import-row-bold' : '';
-      return `<tr class="import-row status-${r.status}${boldCls}" data-idx="${idx}">
+
+      let sectionRow = '';
+      if (r.column !== lastColumn) {
+        const sectionTitle = r.column === 'left'
+          ? 'Colonna sinistra — Attivo'
+          : 'Colonna destra — Passivo';
+        sectionRow = `<tr class="import-section-header import-section-${r.column}">
+          <td colspan="5">${sectionTitle}</td>
+        </tr>`;
+        lastColumn = r.column;
+      }
+
+      return sectionRow + `<tr class="import-row status-${r.status}${boldCls}" data-idx="${idx}">
         <td class="import-cell-text" title="${_escapeHtml(r.fullText)}">${_escapeHtml(r.text)}</td>
         <td class="import-cell-value num">${valueFmt}</td>
         <td>
