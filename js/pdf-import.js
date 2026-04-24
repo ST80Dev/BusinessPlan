@@ -61,6 +61,32 @@ export function parseItalianNumber(s) {
 }
 
 /**
+ * Versione restrittiva di parseItalianNumber: considera valido SOLO un numero
+ * posizionato alla fine della stringa (con eventuali spazi finali). Un numero
+ * in mezzo al testo non viene riconosciuto.
+ *
+ * Motivazione: nei bilanci PDF l'importo di una voce e' sempre l'ultimo
+ * elemento a destra della riga. Numeri "in mezzo" (es. codici conto, date,
+ * riferimenti) non sono importi da importare.
+ *
+ * @param {string} s
+ * @returns {number|null}
+ */
+export function parseTrailingItalianNumber(s) {
+  const t = s.replace(/\s+$/, '');
+  // 1.234,56 oppure 1234,56 a fine stringa
+  let m = t.match(/(?:^|\s)([\d.]+,\d{2})$/);
+  if (m) return parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
+  // 1.234 oppure 1.234.567 a fine stringa (separatori migliaia, senza decimali)
+  m = t.match(/(?:^|\s)(\d{1,3}(?:\.\d{3})+)$/);
+  if (m) return parseFloat(m[1].replace(/\./g, ''));
+  // Intero plain a fine stringa, almeno 2 cifre, preceduto da spazio
+  m = t.match(/\s(\d{2,})$/);
+  if (m) return parseFloat(m[1]);
+  return null;
+}
+
+/**
  * Formatta un numero in locale italiana.
  * @param {number|null} n
  * @returns {string}
@@ -266,14 +292,18 @@ export function annotateLines(lines, dict, flatList, savedMapping = {}) {
     const text = line.text;
     if (!text || text.length < 3) continue;
 
-    const value = parseItalianNumber(text);
+    // Per l'import bilancio si considera valido solo il numero in fondo a
+    // destra della riga: codici/date/riferimenti in mezzo al testo non sono
+    // importi. Le righe che restano con value=null vengono filtrate a monte
+    // da estraiRighe({ soloConImporto: true }) nella UI.
+    const value = parseTrailingItalianNumber(text);
 
     let label = text;
     if (value != null) {
       label = text
-        .replace(/([\d.]+,\d{2})\s*$/, '')
-        .replace(/\b(\d{1,3}(?:\.\d{3})+)\s*$/, '')
-        .replace(/\b(\d+)\s*$/, '')
+        .replace(/\s*([\d.]+,\d{2})\s*$/, '')
+        .replace(/\s*(\d{1,3}(?:\.\d{3})+)\s*$/, '')
+        .replace(/\s*(\d{2,})\s*$/, '')
         .trim();
     }
     if (!label) label = text;
