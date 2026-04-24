@@ -761,9 +761,9 @@ const UI = (() => {
                 <tr>
                   <th>Testo PDF</th>
                   <th class="num">Importo</th>
+                  <th class="import-col-actions" title="Elimina voce dalla lista"></th>
                   <th>Voce schema SP</th>
                   <th>Stato</th>
-                  <th class="import-col-actions" title="Elimina voce dalla lista"></th>
                 </tr>
               </thead>
               <tbody id="import-tbody"></tbody>
@@ -888,15 +888,15 @@ const UI = (() => {
       return sectionRow + `<tr class="import-row status-${r.status}${boldCls}" data-idx="${idx}">
         <td class="import-cell-text" title="${_escapeHtml(r.fullText)}">${_escapeHtml(r.text)}</td>
         <td class="import-cell-value num">${valueFmt}</td>
+        <td class="import-col-actions">
+          <div class="import-btn-remove" onclick="UI.importaRimuoviRiga(${idx})" title="Elimina questa voce dalla lista">×</div>
+        </td>
         <td>
           <select data-idx="${idx}" onchange="UI.importaCambiaVoce(${idx}, this.value)">
             ${r.schemaId ? opts : optionsHtml}
           </select>
         </td>
         <td><span class="import-badge ${badge}">${badgeTxt}</span></td>
-        <td class="import-col-actions">
-          <div class="import-btn-remove" onclick="UI.importaRimuoviRiga(${idx})" title="Elimina questa voce dalla lista">×</div>
-        </td>
       </tr>`;
     }).join('');
   }
