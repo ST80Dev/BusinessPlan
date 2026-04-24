@@ -287,6 +287,72 @@ export function groupIntoLines(items) {
 }
 
 /**
+ * Determina, per una lista di righe ordinate, il confine SP → CE.
+ * Euristiche (in ordine di priorita'):
+ *   1. Riga che contiene 'conto economico' → da quella riga inizia il CE
+ *   2. Riga con 'totale passivo' / 'totale a pareggio' / 'totale stato patrimoniale'
+ *      → la riga successiva inizia il CE
+ *   3. Prima pagina con sole righe in colonna sinistra (no dx): suggerisce CE
+ *      scalare. Si adotta solo se nelle pagine precedenti il layout era 2-col.
+ *
+ * Se nessuna euristica scatta, tutte le righe sono considerate SP.
+ *
+ * Non muta le righe in input, ritorna l'indice della prima riga CE (o -1 se
+ * il boundary non e' stato rilevato → tutto SP).
+ *
+ * @param {Array} rows       — righe annotate da annotateLines (con .text, .fullText, .column, .page)
+ * @returns {number}         — indice della prima riga CE, -1 se non trovato
+ */
+export function detectBoundarySpCe(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return -1;
+
+  const norm = s => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  // Pattern 1: 'conto economico' come titolo di sezione
+  for (let i = 0; i < rows.length; i++) {
+    const t = norm(rows[i].fullText || rows[i].text);
+    if (/\bconto economico\b/.test(t)) return i;
+  }
+
+  // Pattern 2: totale passivo / totale a pareggio / totale stato patrimoniale
+  for (let i = 0; i < rows.length; i++) {
+    const t = norm(rows[i].fullText || rows[i].text);
+    if (/\btotale (passivo|a pareggio|stato patrimoniale)\b/.test(t)
+        && i + 1 < rows.length) {
+      return i + 1;
+    }
+  }
+
+  // Pattern 3: cambio di layout 2-col → 1-col
+  // Raggruppa per pagina e calcola se la pagina ha sia colonna sx che dx
+  const pages = new Map();
+  for (const r of rows) {
+    if (!pages.has(r.page)) pages.set(r.page, { left: 0, right: 0, firstIdx: null, lastIdx: null });
+    const p = pages.get(r.page);
+    if (r.column === 'left') p.left++;
+    if (r.column === 'right') p.right++;
+  }
+  // Per ogni pagina, nota il primo indice di riga
+  for (let i = 0; i < rows.length; i++) {
+    const p = pages.get(rows[i].page);
+    if (p.firstIdx == null) p.firstIdx = i;
+    p.lastIdx = i;
+  }
+  const pageList = [...pages.keys()].sort((a, b) => a - b);
+  let prevTwoCol = false;
+  for (const page of pageList) {
+    const p = pages.get(page);
+    const isTwoCol = p.left > 0 && p.right > 0;
+    if (prevTwoCol && !isTwoCol && p.left > 0 && p.right === 0) {
+      return p.firstIdx;
+    }
+    if (isTwoCol) prevTwoCol = true;
+  }
+
+  return -1;
+}
+
+/**
  * Trasforma una lista di righe in righe annotate con valore numerico, label
  * ripulita e match con lo schema.
  * @param {Array}  lines          — output di groupIntoLines
@@ -336,29 +402,79 @@ export function annotateLines(lines, dict, flatList, savedMapping = {}) {
 
 /**
  * Pipeline completa: PDF ArrayBuffer → righe mappate pronte per la UI.
- * Funzione di alto livello che combina extractPdf, groupIntoLines, annotateLines.
+ *
+ * Due modalita' supportate, scelte automaticamente in base alla forma di
+ * opts.schemaRoots:
+ *
+ *  - Legacy (singolo schema): schemaRoots e' un Array di alberi
+ *      es: [SP_ATTIVO, SP_PASSIVO]
+ *    Tutte le righe matchate sullo stesso dizionario. Compatibile con
+ *    pdf-test.html e con l'uso SP-only.
+ *
+ *  - Per sezione SP/CE: schemaRoots e' un oggetto { sp: [...], ce: [...] }
+ *    Il modulo rileva euristicamente il confine SP→CE con detectBoundarySpCe
+ *    e matcha ciascuna riga sul dizionario corrispondente alla sua sezione.
+ *    Il risultato include il campo `sezione: 'sp' | 'ce'` e `boundarySpCe`
+ *    (indice prima riga CE) puo' essere inviato fuori via opts.onBoundary
+ *    (callback opzionale) per la UI.
  *
  * @param {ArrayBuffer} arrayBuffer
  * @param {Object} opts
  * @param {Object} opts.pdfjsLib            — istanza PDF.js
- * @param {Array<Array>} opts.schemaRoots   — alberi schema (es. [SP_ATTIVO, SP_PASSIVO, CE])
+ * @param {Array|Object} opts.schemaRoots   — Array<alberi> (legacy) oppure { sp, ce }
  * @param {Object} [opts.savedMapping={}]   — mapping persistito (testo → id voce)
  * @param {boolean} [opts.soloConImporto=false]
  *                                           — se true, scarta righe senza valore
- *                                             numerico riconosciuto (utile per
- *                                             import bilancio; false per debug
- *                                             estrazione testuale)
+ *                                             numerico riconosciuto
+ * @param {Function} [opts.onBoundary]      — callback (boundaryIdx) chiamata in
+ *                                             modalita' per-sezione dopo la
+ *                                             detection automatica
  * @returns {Promise<Array>}                — righe annotate
  */
 export async function estraiRighe(arrayBuffer, {
   pdfjsLib,
   schemaRoots,
   savedMapping = {},
-  soloConImporto = false
+  soloConImporto = false,
+  onBoundary
 }) {
   const items = await extractPdf(arrayBuffer, pdfjsLib);
   const lines = groupIntoLines(items);
-  const { dict, flatList } = buildDictionary(schemaRoots);
-  const rows = annotateLines(lines, dict, flatList, savedMapping);
-  return soloConImporto ? rows.filter(r => r.value != null) : rows;
+
+  const perSezione = schemaRoots
+    && !Array.isArray(schemaRoots)
+    && typeof schemaRoots === 'object'
+    && Array.isArray(schemaRoots.sp);
+
+  if (!perSezione) {
+    // Legacy: singolo schema per tutte le righe
+    const { dict, flatList } = buildDictionary(schemaRoots);
+    const rows = annotateLines(lines, dict, flatList, savedMapping);
+    return soloConImporto ? rows.filter(r => r.value != null) : rows;
+  }
+
+  // Per-sezione: costruisce due dizionari, annota prima tutto come SP per
+  // poter rilevare il boundary con euristiche testuali su fullText, poi
+  // rimatcha le righe CE con il proprio dizionario.
+  const spBuilt = buildDictionary(schemaRoots.sp);
+  const ceBuilt = buildDictionary(schemaRoots.ce || []);
+
+  const rowsSP = annotateLines(lines, spBuilt.dict, spBuilt.flatList, savedMapping);
+  const boundary = detectBoundarySpCe(rowsSP);
+  if (typeof onBoundary === 'function') onBoundary(boundary);
+
+  const final = rowsSP.map((r, i) => {
+    const isCE = boundary >= 0 && i >= boundary;
+    if (!isCE) return { ...r, sezione: 'sp' };
+    const match = findBestMatch(r.text, ceBuilt.dict, ceBuilt.flatList, savedMapping);
+    return {
+      ...r,
+      sezione: 'ce',
+      schemaId: match ? match.id : '',
+      schemaLabel: match ? match.label : '',
+      status: match ? match.status : 'none'
+    };
+  });
+
+  return soloConImporto ? final.filter(r => r.value != null) : final;
 }

@@ -1538,25 +1538,54 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .import-badge.badge-manual  { background: var(--color-accent-light); color: var(--color-accent-hover); }
 .import-badge.badge-none    { background: var(--color-error-bg); color: var(--color-error); }
 
-/* Intestazioni di sezione: separano Colonna sinistra / Colonna destra */
+/* Intestazioni: due livelli (prospetto SP/CE, colonna sx/dx dentro il prospetto) */
 .import-table tbody tr.import-section-header td {
   background: var(--color-sidebar-bg);
   color: var(--color-sidebar-text);
-  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 10px 14px;
   border-bottom: 2px solid var(--color-border);
-  position: sticky;
-  top: 40px;          /* sotto l'header della tabella */
-  z-index: 1;
 }
 .import-table tbody tr.import-section-header:hover td {
   background: var(--color-sidebar-bg);
 }
-.import-table tbody tr.import-section-right td {
+/* Livello 1: intestazione prospetto (Stato Patrimoniale / Conto Economico) */
+.import-table tbody tr.import-section-prospetto td {
+  background: var(--color-text-primary);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+}
+.import-table tbody tr.import-section-prospetto.import-prospetto-ce td {
   background: var(--color-accent-hover);
+}
+/* Livello 2: intestazione colonna dentro il prospetto */
+.import-table tbody tr.import-section-right td {
+  background: var(--color-accent);
+  font-size: 12px;
+}
+.import-table tbody tr.import-section-left td {
+  font-size: 12px;
+}
+
+/* Pulsante "qui inizia il CE" — override manuale del boundary */
+.import-btn-boundary {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-right: 4px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-accent-hover);
+  background: var(--color-accent-light);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, color 0.15s;
+}
+.import-btn-boundary:hover {
+  background: var(--color-accent);
+  color: var(--color-sidebar-text);
 }
 
 /* Colonna Azioni + pulsante elimina riga */

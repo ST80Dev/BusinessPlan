@@ -636,7 +636,9 @@ const UI = (() => {
 
   const _importState = {
     righe: [],                    // output annotato da pdf-import.estraiRighe()
-    schemaFlat: [],               // lista piatta { id, label } da buildDictionary
+    schemaFlatSP: [],             // lista piatta { id, label } voci SP
+    schemaFlatCE: [],             // lista piatta { id, label } voci CE
+    boundarySpCe: -1,             // indice prima riga CE (-1 = tutto SP)
     regoleGlobali: null,          // dizionario dal file repo (lazy load)
     regoleLocali: null,           // dizionario da localStorage
     statusMsg: 'Carica un PDF di bilancio per iniziare.',
@@ -701,14 +703,16 @@ const UI = (() => {
     const progetto = Projects.getProgetto();
     if (!content || !progetto) return;
 
-    // Costruisci schema piatto una volta per progetto (per i dropdown)
-    if (_importState.schemaFlat.length === 0) {
+    // Costruisci schemi piatti SP/CE una volta per progetto (per i dropdown)
+    if (_importState.schemaFlatSP.length === 0) {
       try {
         await _importLoadModuli();
-        const built = _importState.pdfModule.buildDictionary([
+        const builtSP = _importState.pdfModule.buildDictionary([
           Schema.SP_ATTIVO, Schema.SP_PASSIVO
         ]);
-        _importState.schemaFlat = built.flatList;
+        _importState.schemaFlatSP = builtSP.flatList;
+        const builtCE = _importState.pdfModule.buildDictionary([Schema.CE]);
+        _importState.schemaFlatCE = builtCE.flatList;
       } catch (err) {
         content.innerHTML = '<div class="section-pad"><div class="callout callout-warn">Errore caricamento modulo PDF: ' + _escapeHtml(err.message) + '</div></div>';
         return;
@@ -813,11 +817,16 @@ const UI = (() => {
       await _importLoadModuli();
       const buffer = await file.arrayBuffer();
       const savedMapping = _importMergedMapping();
+      _importState.boundarySpCe = -1;
       _importState.righe = await _importState.pdfModule.estraiRighe(buffer, {
         pdfjsLib: _importState.pdfjsLib,
-        schemaRoots: [Schema.SP_ATTIVO, Schema.SP_PASSIVO],
+        schemaRoots: {
+          sp: [Schema.SP_ATTIVO, Schema.SP_PASSIVO],
+          ce: [Schema.CE]
+        },
         savedMapping,
-        soloConImporto: true
+        soloConImporto: true,
+        onBoundary: (idx) => { _importState.boundarySpCe = idx; }
       });
 
       const auto = _importState.righe.filter(r => r.status === 'auto').length;
@@ -848,17 +857,33 @@ const UI = (() => {
     el.classList.toggle('import-status-warn', variant === 'warn');
   }
 
+  function _importColumnLabel(sezione, column) {
+    if (sezione === 'ce') return column === 'left' ? 'Costi' : 'Ricavi';
+    return column === 'left' ? 'Attivo' : 'Passivo';
+  }
+
+  function _importOptionsHtmlPerSezione(sezione) {
+    const flat = sezione === 'ce' ? _importState.schemaFlatCE : _importState.schemaFlatSP;
+    return '<option value="">— non mappato —</option>' +
+      flat.map(n =>
+        `<option value="${_escapeHtml(n.id)}">${_escapeHtml(n.id)} · ${_escapeHtml(n.label)}</option>`
+      ).join('');
+  }
+
   function _importRenderTable() {
     const tbody = document.getElementById('import-tbody');
     if (!tbody) return;
 
-    const optionsHtml = '<option value="">— non mappato —</option>' +
-      _importState.schemaFlat.map(n =>
-        `<option value="${_escapeHtml(n.id)}">${_escapeHtml(n.id)} · ${_escapeHtml(n.label)}</option>`
-      ).join('');
+    const optsHtmlCache = { sp: null, ce: null };
+    const optsHtml = (sezione) => {
+      if (!optsHtmlCache[sezione]) optsHtmlCache[sezione] = _importOptionsHtmlPerSezione(sezione);
+      return optsHtmlCache[sezione];
+    };
 
+    let lastSezione = null;
     let lastColumn = null;
     tbody.innerHTML = _importState.righe.map((r, idx) => {
+      const sezione = r.sezione || 'sp';
       const badge = r.status === 'auto' ? 'badge-auto'
                   : r.status === 'partial' ? 'badge-partial'
                   : r.status === 'manual' ? 'badge-manual' : 'badge-none';
@@ -868,33 +893,46 @@ const UI = (() => {
       const valueFmt = r.value != null
         ? (_importState.pdfModule ? _importState.pdfModule.formatItalianNumber(r.value) : String(r.value))
         : '';
-      const opts = optionsHtml.replace(
+      const baseOpts = optsHtml(sezione);
+      const opts = r.schemaId ? baseOpts.replace(
         `value="${_escapeHtml(r.schemaId)}"`,
         `value="${_escapeHtml(r.schemaId)}" selected`
-      );
+      ) : baseOpts;
       const boldCls = r.bold ? ' import-row-bold' : '';
 
-      let sectionRow = '';
+      let headers = '';
+      if (sezione !== lastSezione) {
+        const title = sezione === 'ce' ? 'Conto Economico' : 'Stato Patrimoniale';
+        headers += `<tr class="import-section-header import-section-prospetto import-prospetto-${sezione}">
+          <td colspan="5">${title}</td>
+        </tr>`;
+        lastSezione = sezione;
+        lastColumn = null; // forza ristampa header colonna per la nuova sezione
+      }
       if (r.column !== lastColumn) {
-        const sectionTitle = r.column === 'left'
-          ? 'Colonna sinistra — Attivo'
-          : 'Colonna destra — Passivo';
-        sectionRow = `<tr class="import-section-header import-section-${r.column}">
-          <td colspan="5">${sectionTitle}</td>
+        const label = _importColumnLabel(sezione, r.column);
+        const sideLabel = r.column === 'left' ? 'Colonna sinistra' : 'Colonna destra';
+        headers += `<tr class="import-section-header import-section-${r.column}">
+          <td colspan="5">${sideLabel} — ${label}</td>
         </tr>`;
         lastColumn = r.column;
       }
 
-      return sectionRow + `<tr class="import-row status-${r.status}${boldCls}" data-idx="${idx}">
+      const ceHereBtn = (sezione === 'sp')
+        ? `<div class="import-btn-boundary" onclick="UI.importaImpostaBoundary(${idx})" title="Segnala che da qui in poi inizia il Conto Economico">⇓ CE</div>`
+        : '';
+
+      return headers + `<tr class="import-row status-${r.status}${boldCls}" data-idx="${idx}">
         <td class="import-cell-text" title="${_escapeHtml(r.fullText)}">${_escapeHtml(r.text)}</td>
         <td class="import-cell-value num">${valueFmt}</td>
         <td>
           <select data-idx="${idx}" onchange="UI.importaCambiaVoce(${idx}, this.value)">
-            ${r.schemaId ? opts : optionsHtml}
+            ${opts}
           </select>
         </td>
         <td><span class="import-badge ${badge}">${badgeTxt}</span></td>
         <td class="import-col-actions">
+          ${ceHereBtn}
           <div class="import-btn-remove" onclick="UI.importaRimuoviRiga(${idx})" title="Elimina questa voce dalla lista">×</div>
         </td>
       </tr>`;
@@ -907,12 +945,44 @@ const UI = (() => {
     _importRenderTable();
   }
 
+  function importaImpostaBoundary(idx) {
+    if (idx == null || !_importState.righe[idx]) return;
+    _importState.boundarySpCe = idx;
+    const saved = _importMergedMapping();
+    // Ricostruisci i dizionari (utilizzati per il re-matching delle righe CE)
+    const builtSP = _importState.pdfModule.buildDictionary([Schema.SP_ATTIVO, Schema.SP_PASSIVO]);
+    const builtCE = _importState.pdfModule.buildDictionary([Schema.CE]);
+
+    _importState.righe = _importState.righe.map((r, i) => {
+      const isCE = i >= idx;
+      const sezione = isCE ? 'ce' : 'sp';
+      const flat = isCE ? builtCE.flatList : builtSP.flatList;
+
+      // Se l'utente aveva gia' confermato un mapping manuale e punta a una voce
+      // ancora valida nella nuova sezione, preservalo. Altrimenti rimatcha.
+      if (r.status === 'manual' && flat.some(n => n.id === r.schemaId)) {
+        return { ...r, sezione };
+      }
+      const dict = isCE ? builtCE.dict : builtSP.dict;
+      const match = _importState.pdfModule.findBestMatch(r.text, dict, flat, saved);
+      return {
+        ...r,
+        sezione,
+        schemaId: match ? match.id : '',
+        schemaLabel: match ? match.label : '',
+        status: match ? match.status : 'none'
+      };
+    });
+    _importRenderTable();
+  }
+
   function importaCambiaVoce(idx, schemaId) {
     const r = _importState.righe[idx];
     if (!r) return;
     r.schemaId = schemaId || '';
     if (schemaId) {
-      const node = _importState.schemaFlat.find(n => n.id === schemaId);
+      const flat = r.sezione === 'ce' ? _importState.schemaFlatCE : _importState.schemaFlatSP;
+      const node = flat.find(n => n.id === schemaId);
       r.schemaLabel = node ? node.label : '';
       r.status = 'manual';
     } else {
@@ -5042,6 +5112,7 @@ const UI = (() => {
     importaCambiaVoce,
     importaSalvaRegole,
     importaRimuoviRiga,
+    importaImpostaBoundary,
     // Fase 2
     switchDatiTab,
     toggleModalita,
