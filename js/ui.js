@@ -161,69 +161,128 @@ const UI = (() => {
     if (badges) badges.innerHTML = '';
     if (actions) actions.innerHTML = '';
 
+    // Reset stato sidebar progetto (siamo tornati alla home: nessun progetto attivo a livello UI)
+    const editEl = document.getElementById('sidebar-project-edit');
+    if (editEl) editEl.classList.add('hidden');
+
     const recenti = Projects.leggiRecenti();
+    const recentiBP = recenti.filter(r => (r.tipo || 'bp') === 'bp');
+    const recentiAB = recenti.filter(r => r.tipo === 'ab');
 
     let html = `
       <div class="home-welcome">
-        <h1>Business Plan Tool</h1>
-        <p>Elabora dati di bilancio storici e genera prospetti contabili previsionali pluriennali.</p>
+        <h1>Studio Commerciale</h1>
+        <p>Scegli lo strumento da usare. Ciascun modulo ha proprio formato di progetto e propria interfaccia operativa.</p>
       </div>
 
-      <div class="home-actions">
-        <div class="btn btn-primary" onclick="UI.openModal('modal-nuovo-progetto')">+ Nuovo progetto</div>
-        <div class="btn btn-secondary" onclick="Projects.apriProgetto()">Apri file JSON</div>
+      <div class="home-modules">
+        ${_renderModuleCard({
+          tipo: 'bp',
+          titolo: 'Business Plan',
+          descrizione: 'Bilancio storico SP/CE → proiezioni pluriennali → SP, CE, rendiconto, dashboard KPI.',
+          ctaLabel: '+ Nuovo business plan',
+          ctaOnclick: "UI.openModal('modal-nuovo-progetto')",
+          aprilLabel: 'Apri file JSON',
+          apriOnclick: "Projects.apriProgetto()"
+        })}
+        ${_renderModuleCard({
+          tipo: 'ab',
+          titolo: 'Analisi Costi & Budget',
+          descrizione: 'CE storico Excel → medie % sul fatturato → budget annuale, fatturato di break-even, monitoraggio consuntivo.',
+          ctaLabel: '+ Nuova analisi',
+          ctaOnclick: "UI.openModal('modal-nuova-analisi')",
+          aprilLabel: 'Apri file JSON',
+          apriOnclick: "Projects.apriProgetto()"
+        })}
+      </div>
+
+      <div class="home-recenti-grid">
+        <div class="home-recenti-col">
+          <div class="projects-section-title">Business plan recenti</div>
+          ${_renderListaRecenti(recentiBP, 'bp')}
+        </div>
+        <div class="home-recenti-col">
+          <div class="projects-section-title">Analisi recenti</div>
+          ${_renderListaRecenti(recentiAB, 'ab')}
+        </div>
       </div>
     `;
 
-    if (recenti.length > 0) {
-      html += `<div class="projects-section-title">Progetti recenti</div>`;
-      html += `<div class="projects-grid">`;
+    content.innerHTML = html;
+  }
 
-      for (const r of recenti) {
-        const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
-        const scenarioClass  = { sp_ce: 'tag-sp-ce', sp_only: 'tag-sp-only', costituenda: 'tag-costituenda' };
-        const tagLabel = scenarioLabels[r.scenario] || r.scenario;
-        const tagClass = scenarioClass[r.scenario] || 'tag-sp-ce';
+  /**
+   * Card "modulo" della landing (BP o AB).
+   */
+  function _renderModuleCard(opts) {
+    return (
+      '<div class="home-module-card home-module-' + opts.tipo + '">' +
+        '<div class="home-module-title">' + _escapeHtml(opts.titolo) + '</div>' +
+        '<div class="home-module-desc">' + _escapeHtml(opts.descrizione) + '</div>' +
+        '<div class="home-module-actions">' +
+          '<div class="btn btn-primary" onclick="' + opts.ctaOnclick + '">' + _escapeHtml(opts.ctaLabel) + '</div>' +
+          '<div class="btn btn-secondary" onclick="' + opts.apriOnclick + '">' + _escapeHtml(opts.aprilLabel) + '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
 
-        const anniPrev = Array.isArray(r.anni_previsione)
-          ? r.anni_previsione.join(', ')
-          : r.anni_previsione;
-
-        html += `
-          <div class="project-card" onclick="UI._apriDaRecente('${_escapeAttr(r.id)}')">
-            <div class="project-card-name">${_escapeHtml(r.cliente)}</div>
-            <div class="project-card-meta">
-              <span>Anno base: ${r.anno_base}</span>
-              <span>Prev: ${anniPrev}</span>
-              ${r.settore ? '<span>' + _escapeHtml(r.settore) + '</span>' : ''}
-            </div>
-            <div>
-              <span class="project-card-tag ${tagClass}">${tagLabel}</span>
-            </div>
-            <div class="project-card-date">
-              Modificato: ${r.modificato || r.creato || '—'}
-            </div>
-            <div class="project-card-actions" onclick="event.stopPropagation()">
-              <div class="btn btn-ghost btn-sm" onclick="Projects.richiediElimina('${_escapeAttr(r.id)}', '${_escapeAttr(r.cliente)}')">Elimina</div>
-            </div>
-          </div>
-        `;
-      }
-
-      html += `</div>`;
-    } else {
-      html += `
-        <div class="projects-section-title">Progetti recenti</div>
-        <div class="projects-grid">
-          <div class="projects-empty">
-            <div class="projects-empty-icon">📂</div>
-            <p>Nessun progetto recente.<br>Crea un nuovo progetto o apri un file JSON esistente.</p>
-          </div>
-        </div>
-      `;
+  /**
+   * Lista compatta di recenti, filtrata per tipo (bp o ab).
+   */
+  function _renderListaRecenti(recenti, tipo) {
+    if (!recenti || recenti.length === 0) {
+      return (
+        '<div class="projects-grid">' +
+          '<div class="projects-empty">' +
+            '<div class="projects-empty-icon">📂</div>' +
+            '<p>Nessun progetto recente.</p>' +
+          '</div>' +
+        '</div>'
+      );
     }
 
-    content.innerHTML = html;
+    const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
+    const scenarioClass  = { sp_ce: 'tag-sp-ce', sp_only: 'tag-sp-only', costituenda: 'tag-costituenda' };
+
+    let html = '<div class="projects-grid">';
+    for (const r of recenti) {
+      let metaInner = '';
+      let tagHtml = '';
+
+      if (tipo === 'ab') {
+        const anniSt = Array.isArray(r.anni_storici) ? r.anni_storici.join(', ') : (r.anni_storici || '—');
+        metaInner =
+          '<span>Anno corrente: ' + (r.anno_corrente || '—') + '</span>' +
+          '<span>Storico: ' + anniSt + '</span>' +
+          (r.settore ? '<span>' + _escapeHtml(r.settore) + '</span>' : '');
+        tagHtml = '<span class="project-card-tag tag-ab">Analisi</span>';
+      } else {
+        const anniPrev = Array.isArray(r.anni_previsione) ? r.anni_previsione.join(', ') : (r.anni_previsione || '—');
+        const tagLabel = scenarioLabels[r.scenario] || r.scenario || 'BP';
+        const tagClass = scenarioClass[r.scenario] || 'tag-sp-ce';
+        metaInner =
+          '<span>Anno base: ' + (r.anno_base || '—') + '</span>' +
+          '<span>Prev: ' + anniPrev + '</span>' +
+          (r.settore ? '<span>' + _escapeHtml(r.settore) + '</span>' : '');
+        tagHtml = '<span class="project-card-tag ' + tagClass + '">' + tagLabel + '</span>';
+      }
+
+      const nome = r.cliente || r.ditta || 'Senza nome';
+
+      html +=
+        '<div class="project-card" onclick="UI._apriDaRecente(\'' + _escapeAttr(r.id) + '\')">' +
+          '<div class="project-card-name">' + _escapeHtml(nome) + '</div>' +
+          '<div class="project-card-meta">' + metaInner + '</div>' +
+          '<div>' + tagHtml + '</div>' +
+          '<div class="project-card-date">Modificato: ' + (r.modificato || r.creato || '—') + '</div>' +
+          '<div class="project-card-actions" onclick="event.stopPropagation()">' +
+            '<div class="btn btn-ghost btn-sm" onclick="Projects.richiediElimina(\'' + _escapeAttr(r.id) + '\', \'' + _escapeAttr(nome) + '\')">Elimina</div>' +
+          '</div>' +
+        '</div>';
+    }
+    html += '</div>';
+    return html;
   }
 
   /**
@@ -377,7 +436,11 @@ const UI = (() => {
     const el = document.getElementById(id);
     if (!el) return;
     let val = parseInt(el.textContent, 10) || 1;
-    val = Math.max(1, Math.min(8, val + delta));
+    const min = parseInt(el.dataset.min, 10);
+    const max = parseInt(el.dataset.max, 10);
+    const lo = Number.isFinite(min) ? min : 1;
+    const hi = Number.isFinite(max) ? max : 8;
+    val = Math.max(lo, Math.min(hi, val + delta));
     el.textContent = val;
   }
 
