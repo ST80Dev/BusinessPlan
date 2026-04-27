@@ -4991,9 +4991,12 @@ const UI = (() => {
    */
   function _valutaCompletezzaSezione(sezione, progetto) {
     var m = progetto.meta;
+    // Le sezioni qui valutate sono BP-specific. Se siamo in un progetto AB
+    // (o in un progetto senza la struttura driver attesa), nulla da indicare.
+    if (m && m.modulo === 'ab') return { status: 'empty', count: 0 };
     var anno = String(m.anno_base);
-    var st = progetto.storico[anno];
-    var d = progetto.driver;
+    var st = (progetto.storico && progetto.storico[anno]) || null;
+    var d = progetto.driver || {};
 
     switch (sezione) {
 
