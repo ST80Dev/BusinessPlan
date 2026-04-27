@@ -255,64 +255,104 @@ const BudgetEngine = (() => {
   }
 
   /**
-   * Preconsuntivo: dato il fatturato realmente realizzato in N periodi
-   * (mesi o trimestri) dell'anno corrente, applica le % variabili al
-   * fatturato consuntivato e ratei dei fissi pro-rata temporis.
+   * Preconsuntivo: data la frequenza (mensile/trimestrale) e il
+   * fatturato realmente fatturato in N periodi chiusi dell'anno
+   * corrente, costruisce due viste:
+   *
+   *   - CONSUNTIVATO (year-to-date):
+   *       fatturato      = somma effettiva inserita
+   *       costi var.     = pct_budget × fatturato_consuntivato
+   *       costi fissi    = budget_annuale × frazione_anno
+   *
+   *   - PROIEZIONE FINE ANNO:
+   *       fatturato      = fatturato_consuntivato / frazione_anno
+   *                         (ipotesi: stesso ritmo di fatturazione)
+   *       costi var.     = pct_budget × fatturato_proiettato
+   *       costi fissi    = budget_annuale (intero)
+   *
+   * Le percentuali e gli importi fissi vengono dal budget calcolato
+   * (rispetta gli override impostati dall'utente nello Step 6).
+   * Le rimanenze sono assunte stabili (= budget intero, sia consuntivato
+   * che proiettato): il preconsuntivo non chiede saldi SP intermedi.
+   *
+   * Quando frazione_anno = 0 (nessun periodo chiuso) la proiezione
+   * fine anno coincide col budget originale e il consuntivato è 0.
    *
    * @param {Object} progetto
-   * @returns {{
-   *   periodi_chiusi: number,
-   *   frazione_anno: number,
-   *   fatturato_consuntivo: number,
-   *   righe: Array<{id, label, var_fisso, pct, costo}>,
-   *   tot_variabili: number,
-   *   tot_fissi: number,
-   *   risultato: number
-   * }}
+   * @returns {Object} { frequenza, periodi_totali, periodi_chiusi,
+   *   frazione_anno, fatturato_consuntivato, fatturato_proiettato,
+   *   consuntivato: { valori: {id: {valore}}, totali: {...} },
+   *   proiezione:   { valori: {id: {valore}}, totali: {...} },
+   *   budget }
    */
   function calcolaPreconsuntivo(progetto) {
     const macro = progetto.macro_sezioni || [];
-    const consuntivo = progetto.consuntivo || { frequenza: 'mensile', fatturato: {} };
+    const cons  = progetto.consuntivo || { frequenza: 'mensile', fatturato: {} };
     const budget = calcolaBudget(progetto);
 
-    const periodiTotali = consuntivo.frequenza === 'trimestrale' ? 4 : 12;
-    const valori = consuntivo.fatturato || {};
-    const periodiChiusi = Object.keys(valori).filter(k => typeof valori[k] === 'number' && isFinite(valori[k])).length;
-    const fattReale = Object.values(valori).reduce((s, v) => s + (Number(v) || 0), 0);
+    const periodiTotali = cons.frequenza === 'trimestrale' ? 4 : 12;
+    const fattPerPeriodo = cons.fatturato || {};
+    const periodiChiusi = Object.keys(fattPerPeriodo)
+      .filter(k => typeof fattPerPeriodo[k] === 'number' && isFinite(fattPerPeriodo[k]) && fattPerPeriodo[k] > 0)
+      .length;
+    const fattConsuntivato = Object.values(fattPerPeriodo)
+      .reduce((s, v) => s + (Number(v) || 0), 0);
     const frazione = periodiTotali > 0 ? periodiChiusi / periodiTotali : 0;
 
-    const pctMedie = calcolaPctMedie(macro, progetto.storico || {});
-    const medieEur = calcolaMedieEuro(macro, progetto.storico || {});
+    const fattProiettato = frazione > 0 ? (fattConsuntivato / frazione) : budget.fatturato;
 
-    const righe = [];
-    let totVar = 0, totFis = 0;
+    function _calcolaVista(fattConsForCosti, fattAnnoCompleto, frazTempo) {
+      const valori = {};
+      for (const m of macro) {
+        if (m.id === 'ricavi') {
+          valori[m.id] = { valore: fattAnnoCompleto };
+          continue;
+        }
 
-    for (const m of macro) {
-      if (m.tipo !== 'costo') continue;
+        // Variabili pure: % budget × fatturato (annuale completo)
+        if (m.var_fisso === 'variabile' && !m.calcolato) {
+          const pct = (budget.valori[m.id] && budget.valori[m.id].pct) || 0;
+          valori[m.id] = { valore: pct * fattAnnoCompleto };
+          continue;
+        }
 
-      if (m.var_fisso === 'variabile') {
-        const ovr = (progetto.budget && progetto.budget.override_pct) ? progetto.budget.override_pct[m.id] : null;
-        const pct = (typeof ovr === 'number') ? ovr : (pctMedie[m.id] || 0);
-        const costo = pct * fattReale;
-        righe.push({ id: m.id, label: m.label, var_fisso: 'variabile', pct: pct, costo: costo });
-        totVar += costo;
-      } else {
-        const annuo = budget.righe.find(r => r.id === m.id);
-        const costoAnnuo = annuo ? annuo.costo : (medieEur[m.id] || 0);
-        const costo = costoAnnuo * frazione;
-        righe.push({ id: m.id, label: m.label, var_fisso: 'fisso', pct: null, costo: costo });
-        totFis += costo;
+        // Fissi/calcolato/sotto_linea/imposte: budget annuale × frazione tempo
+        const valBudget = (budget.valori[m.id] && budget.valori[m.id].valore) || 0;
+        valori[m.id] = { valore: valBudget * frazTempo };
       }
+
+      const v = id => (valori[id] && valori[id].valore) || 0;
+      const cdv     = v('mat_prime') + v('altri_var') + v('rim_ini') - v('rim_fin');
+      const totVar  = cdv;
+      const mdc     = v('ricavi') - totVar;
+      const fissi   = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
+                        .reduce((s, k) => s + v(k), 0);
+      const totCosti = totVar + fissi;
+      const sottoLineaNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
+      const utileAnteImposte = mdc - fissi + sottoLineaNetto;
+      const imposteVal = v('imposte');
+      const utileNetto = utileAnteImposte - imposteVal;
+
+      return {
+        valori,
+        cdv, totVar, mdc, fissi, totCosti,
+        sottoLineaNetto, utileAnteImposte, imposte: imposteVal, utileNetto
+      };
     }
 
+    const consuntivato = _calcolaVista(fattConsuntivato, fattConsuntivato, frazione);
+    const proiezione   = _calcolaVista(fattConsuntivato, fattProiettato, 1);
+
     return {
-      periodi_chiusi:        periodiChiusi,
-      frazione_anno:         frazione,
-      fatturato_consuntivo:  fattReale,
-      righe:                 righe,
-      tot_variabili:         totVar,
-      tot_fissi:             totFis,
-      risultato:             fattReale - totVar - totFis
+      frequenza:              cons.frequenza,
+      periodi_totali:         periodiTotali,
+      periodi_chiusi:         periodiChiusi,
+      frazione_anno:          frazione,
+      fatturato_consuntivato: fattConsuntivato,
+      fatturato_proiettato:   fattProiettato,
+      consuntivato,
+      proiezione,
+      budget
     };
   }
 
