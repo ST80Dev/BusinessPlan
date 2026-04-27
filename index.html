@@ -243,6 +243,70 @@
 </div><!-- /#modal-nuovo-progetto -->
 
 <!-- =====================================================
+     MODALE NUOVA ANALISI COSTI
+     ===================================================== -->
+<div class="modal-overlay hidden" id="modal-nuova-analisi">
+  <div class="modal" style="width:520px">
+    <div class="modal-header">
+      <span class="modal-title">Nuova analisi costi</span>
+      <div class="modal-close" onclick="UI.closeModal('modal-nuova-analisi')">✕</div>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Nome ditta -->
+      <div class="form-group">
+        <span class="form-label required">Nome ditta / Ragione sociale</span>
+        <div class="form-field"
+             contenteditable="true"
+             id="na-ditta"
+             data-placeholder="Es. Rossi Srl"
+             spellcheck="false"></div>
+      </div>
+
+      <!-- Settore -->
+      <div class="form-group">
+        <span class="form-label">Settore</span>
+        <div class="form-field"
+             contenteditable="true"
+             id="na-settore"
+             data-placeholder="Es. Commercio al dettaglio"
+             spellcheck="false"></div>
+      </div>
+
+      <!-- Anno corrente + Numero anni storici -->
+      <div class="form-row">
+        <div class="form-group">
+          <span class="form-label required">Anno corrente</span>
+          <div class="form-field"
+               contenteditable="true"
+               id="na-anno-corrente"
+               data-placeholder="Es. 2026"
+               spellcheck="false"></div>
+          <div class="form-hint">Anno per cui si fa il budget</div>
+        </div>
+
+        <div class="form-group">
+          <span class="form-label required">Anni di storico</span>
+          <div class="stepper">
+            <div class="stepper-btn" onclick="UI.stepperChange('na-anni-storici', -1)">−</div>
+            <div class="stepper-value" id="na-anni-storici" data-min="1" data-max="3">3</div>
+            <div class="stepper-btn" onclick="UI.stepperChange('na-anni-storici', +1)">+</div>
+          </div>
+          <div class="form-hint">Da 1 a 3 anni precedenti</div>
+        </div>
+      </div>
+
+    </div><!-- /.modal-body -->
+
+    <div class="modal-footer">
+      <div class="btn btn-secondary" onclick="UI.closeModal('modal-nuova-analisi')">Annulla</div>
+      <div class="btn btn-primary" onclick="Projects.creaAnalisi()">Crea analisi</div>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
      MODALE MODIFICA DATI CLIENTE
      ===================================================== -->
 <div class="modal-overlay hidden" id="modal-modifica-cliente">
@@ -345,7 +409,9 @@
 <script src="lib/chart.umd.js"></script>
 <script src="js/schema.js"></script>
 <script src="js/engine.js"></script>
+<script src="js/budget-engine.js"></script>
 <script src="js/projects.js"></script>
+<script src="js/budget-ui.js"></script>
 <script src="js/ui.js"></script>
 
 <script>

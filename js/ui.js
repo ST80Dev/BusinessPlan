@@ -161,80 +161,55 @@ const UI = (() => {
     if (badges) badges.innerHTML = '';
     if (actions) actions.innerHTML = '';
 
-    const recenti = Projects.leggiRecenti();
+    // Reset stato sidebar progetto (siamo tornati alla home: nessun progetto attivo a livello UI)
+    const editEl = document.getElementById('sidebar-project-edit');
+    if (editEl) editEl.classList.add('hidden');
 
     let html = `
       <div class="home-welcome">
-        <h1>Business Plan Tool</h1>
-        <p>Elabora dati di bilancio storici e genera prospetti contabili previsionali pluriennali.</p>
+        <h1>Studio Commerciale</h1>
+        <p>Scegli lo strumento da usare. Ciascun modulo ha proprio formato di progetto e propria interfaccia operativa.</p>
       </div>
 
-      <div class="home-actions">
-        <div class="btn btn-primary" onclick="UI.openModal('modal-nuovo-progetto')">+ Nuovo progetto</div>
-        <div class="btn btn-secondary" onclick="Projects.apriProgetto()">Apri file JSON</div>
+      <div class="home-modules">
+        ${_renderModuleCard({
+          tipo: 'bp',
+          titolo: 'Business Plan',
+          descrizione: 'Bilancio storico SP/CE → proiezioni pluriennali → SP, CE, rendiconto, dashboard KPI.',
+          ctaLabel: '+ Nuovo business plan',
+          ctaOnclick: "UI.openModal('modal-nuovo-progetto')",
+          aprilLabel: 'Apri file JSON',
+          apriOnclick: "Projects.apriProgetto()"
+        })}
+        ${_renderModuleCard({
+          tipo: 'ab',
+          titolo: 'Analisi Costi & Budget',
+          descrizione: 'CE storico Excel → medie % sul fatturato → budget annuale, fatturato di break-even, monitoraggio consuntivo.',
+          ctaLabel: '+ Nuova analisi',
+          ctaOnclick: "UI.openModal('modal-nuova-analisi')",
+          aprilLabel: 'Apri file JSON',
+          apriOnclick: "Projects.apriProgetto()"
+        })}
       </div>
     `;
-
-    if (recenti.length > 0) {
-      html += `<div class="projects-section-title">Progetti recenti</div>`;
-      html += `<div class="projects-grid">`;
-
-      for (const r of recenti) {
-        const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
-        const scenarioClass  = { sp_ce: 'tag-sp-ce', sp_only: 'tag-sp-only', costituenda: 'tag-costituenda' };
-        const tagLabel = scenarioLabels[r.scenario] || r.scenario;
-        const tagClass = scenarioClass[r.scenario] || 'tag-sp-ce';
-
-        const anniPrev = Array.isArray(r.anni_previsione)
-          ? r.anni_previsione.join(', ')
-          : r.anni_previsione;
-
-        html += `
-          <div class="project-card" onclick="UI._apriDaRecente('${_escapeAttr(r.id)}')">
-            <div class="project-card-name">${_escapeHtml(r.cliente)}</div>
-            <div class="project-card-meta">
-              <span>Anno base: ${r.anno_base}</span>
-              <span>Prev: ${anniPrev}</span>
-              ${r.settore ? '<span>' + _escapeHtml(r.settore) + '</span>' : ''}
-            </div>
-            <div>
-              <span class="project-card-tag ${tagClass}">${tagLabel}</span>
-            </div>
-            <div class="project-card-date">
-              Modificato: ${r.modificato || r.creato || '—'}
-            </div>
-            <div class="project-card-actions" onclick="event.stopPropagation()">
-              <div class="btn btn-ghost btn-sm" onclick="Projects.richiediElimina('${_escapeAttr(r.id)}', '${_escapeAttr(r.cliente)}')">Elimina</div>
-            </div>
-          </div>
-        `;
-      }
-
-      html += `</div>`;
-    } else {
-      html += `
-        <div class="projects-section-title">Progetti recenti</div>
-        <div class="projects-grid">
-          <div class="projects-empty">
-            <div class="projects-empty-icon">📂</div>
-            <p>Nessun progetto recente.<br>Crea un nuovo progetto o apri un file JSON esistente.</p>
-          </div>
-        </div>
-      `;
-    }
 
     content.innerHTML = html;
   }
 
   /**
-   * Apre un progetto dalla lista recenti.
-   * I recenti contengono solo metadata, quindi mostra un prompt per caricare il file.
-   * @param {string} id
+   * Card "modulo" della landing (BP o AB).
    */
-  function _apriDaRecente(id) {
-    // I recenti sono solo metadata — serve il file JSON completo
-    mostraNotifica('Per riaprire questo progetto, carica il file JSON corrispondente.', 'info');
-    Projects.apriProgetto();
+  function _renderModuleCard(opts) {
+    return (
+      '<div class="home-module-card home-module-' + opts.tipo + '">' +
+        '<div class="home-module-title">' + _escapeHtml(opts.titolo) + '</div>' +
+        '<div class="home-module-desc">' + _escapeHtml(opts.descrizione) + '</div>' +
+        '<div class="home-module-actions">' +
+          '<div class="btn btn-primary" onclick="' + opts.ctaOnclick + '">' + _escapeHtml(opts.ctaLabel) + '</div>' +
+          '<div class="btn btn-secondary" onclick="' + opts.apriOnclick + '">' + _escapeHtml(opts.aprilLabel) + '</div>' +
+        '</div>' +
+      '</div>'
+    );
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -377,7 +352,11 @@ const UI = (() => {
     const el = document.getElementById(id);
     if (!el) return;
     let val = parseInt(el.textContent, 10) || 1;
-    val = Math.max(1, Math.min(8, val + delta));
+    const min = parseInt(el.dataset.min, 10);
+    const max = parseInt(el.dataset.max, 10);
+    const lo = Number.isFinite(min) ? min : 1;
+    const hi = Number.isFinite(max) ? max : 8;
+    val = Math.max(lo, Math.min(hi, val + delta));
     el.textContent = val;
   }
 
@@ -5107,7 +5086,6 @@ const UI = (() => {
     aggiornaStatusBar,
     mostraNotifica,
     apriModificaCliente,
-    _apriDaRecente,
     // Importa bilancio
     importaCambiaVoce,
     importaSalvaRegole,

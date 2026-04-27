@@ -996,6 +996,14 @@ const Projects = (() => {
     });
   }
 
+  /* ──────────────────────────────────────────────────────────
+     Stub Analisi Costi & Budget (implementazione completa: Step 2)
+     ────────────────────────────────────────────────────────── */
+  function creaAnalisi() {
+    UI.closeModal('modal-nuova-analisi');
+    UI.mostraNotifica('La creazione di analisi sarà attivata nel prossimo step di sviluppo.', 'info');
+  }
+
   /* ── API pubblica ────────────────────────────────────────── */
   return {
     creaProgetto,
@@ -1017,7 +1025,9 @@ const Projects = (() => {
     sincronizzaDriverDaCE,
     // Fase 4 — eventi
     creaEvento,
-    CATEGORIE_INVESTIMENTO
+    CATEGORIE_INVESTIMENTO,
+    // Modulo Analisi Costi & Budget
+    creaAnalisi
   };
 
 })();
