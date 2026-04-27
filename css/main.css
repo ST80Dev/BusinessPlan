@@ -2273,6 +2273,173 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   min-width: 220px;
 }
 
+.ab-stats-warn strong { color: var(--color-warning); }
+
+.ab-mappatura-selcount {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* ── Layout split: sidebar mini-CE + lista sottoconti ─────── */
+.ab-mappatura-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.ab-mini-ce {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.ab-mappatura-main {
+  min-width: 0;
+}
+
+.ab-mini-sezione {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-text-muted);
+  margin: 12px 0 6px 0;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+.ab-mini-sezione:first-child { margin-top: 0; }
+
+.ab-mini-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  cursor: default;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.ab-mini-box-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text);
+  line-height: 1.3;
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+.ab-mini-box-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: 10px;
+  padding: 1px 8px;
+  min-width: 28px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+
+.ab-mini-box-special {
+  border-style: dashed;
+}
+.ab-mini-box-empty {
+  opacity: 0.7;
+}
+.ab-mini-box-warn {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning);
+}
+.ab-mini-box-warn .ab-mini-box-count {
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
+.ab-mini-box-readonly {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--color-surface-alt),
+    var(--color-surface-alt) 6px,
+    var(--color-bg) 6px,
+    var(--color-bg) 12px
+  );
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.ab-mini-flag-var {
+  border-left: 3px solid var(--color-accent);
+}
+.ab-mini-flag-fix {
+  border-left: 3px solid var(--color-text-muted);
+}
+
+/* Hover/drop feedback su mini-box */
+.ab-mini-box[data-drop-macro] {
+  cursor: pointer;
+}
+.ab-mini-box[data-drop-macro]:hover:not(.ab-drop-hover) {
+  background: var(--color-surface-hover);
+}
+.ab-mini-box.ab-drop-hover {
+  background: var(--color-accent-light);
+  border-color: var(--color-accent);
+  transform: scale(1.02);
+}
+.ab-mini-box.ab-drop-hover .ab-mini-box-count {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+}
+
+/* Drop hover anche sui gruppi nella lista a destra */
+.ab-gruppo[data-drop-macro].ab-drop-hover {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  background: var(--color-accent-light);
+}
+
+/* Righe draggable nella lista */
+.ab-row-draggable {
+  cursor: grab;
+}
+.ab-row-draggable:active {
+  cursor: grabbing;
+}
+.ab-row-draggable .ab-cell-codice {
+  user-select: none;
+}
+.ab-row-dragging {
+  opacity: 0.45;
+}
+.ab-row-selected td {
+  background: var(--color-accent-light) !important;
+}
+.ab-row-selected .ab-cell-codice {
+  font-weight: 700;
+  color: var(--color-accent-hover);
+}
+
+/* Mentre un drag è in corso, attenuiamo i contenuti non target
+   per guidare l'occhio verso le aree di rilascio. */
+.ab-mappatura.ab-dnd-active .ab-mini-box[data-drop-macro] {
+  outline: 1px dashed var(--color-accent);
+  outline-offset: -3px;
+}
+
 /* ── Print ───────────────────────────────────────────────────── */
 @media print {
   #sidebar, #header, #footer { display: none; }
