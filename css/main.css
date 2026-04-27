@@ -1809,6 +1809,63 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   padding-bottom: 6px;
 }
 
+/* ── Modulo AB — Prospetto Storico ───────────────────────────── */
+.ab-storico-head h2 {
+  font-size: 22px;
+  margin: 0 0 8px 0;
+  color: var(--color-text);
+}
+.ab-storico-head p {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 18px 0;
+  max-width: 780px;
+}
+
+.ab-storico-prospetto td:first-child,
+.ab-storico-prospetto th:first-child {
+  width: 38%;
+}
+
+.ab-storico-prospetto tr.ab-prospetto-spacer td {
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  height: 4px;
+}
+
+.ab-storico-prospetto tr.ab-prospetto-tot td {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
+}
+.ab-storico-prospetto tr.ab-prospetto-tot td.num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+}
+
+/* Verde = risultato positivo / Fatturato / MdC / Utile */
+.ab-storico-prospetto tr.ab-prospetto-tot-verde td {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+.ab-storico-prospetto tr.ab-prospetto-tot-verde-forte td {
+  background: var(--color-success);
+  color: #FFFFFF;
+}
+
+/* Arancio = aggregati di costo (CdV, Tot. variabili, Tot. fissi) */
+.ab-storico-prospetto tr.ab-prospetto-tot-arancio td {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+.ab-storico-prospetto tr.ab-prospetto-tot-arancio-forte td {
+  background: var(--color-warning);
+  color: #FFFFFF;
+}
+
 /* ── Modulo AB — Mappatura sottoconti ────────────────────────── */
 .ab-mappatura { padding: 24px; max-width: 1280px; }
 

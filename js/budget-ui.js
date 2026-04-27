@@ -250,8 +250,103 @@ const BudgetUI = (() => {
   }
 
   /* ──────────────────────────────────────────────────────────
-     Storico — vista riepilogativa dell'import
+     STORICO & MEDIE
+
+     Riproduce il prospetto del template Excel dello studio:
+       RICAVI / FATTURATO
+       Costi materie prime + Altri var + Rim.Ini + Rim.Fin
+       COSTO DEL VENDUTO  (= mat_prime + altri_var + rim_ini − rim_fin)
+       TOTALE COSTI VARIABILI  (= CdV)
+       MARGINE DI CONTRIBUZIONE
+       [Costi fissi]
+       COSTI FISSI DI GESTIONE / TOTALE COSTI FISSI / TOTALE COSTI
+       [Sotto la linea]
+       UTILE ANTE IMPOSTE / IMPOSTE / UTILE NETTO
+
+     Per ogni macroarea variabile/fissa viene calcolata la "Media %"
+     sul fatturato — la base che il budget (Step 6) userà per
+     proiettare i costi sull'anno corrente.
      ────────────────────────────────────────────────────────── */
+
+  /**
+   * Calcola tutti i totali e i derivati del prospetto, anno per anno.
+   * @returns {Object<string, Object>} per anno → { fatturato, cdv, totVar, mdc, totFissi, totCosti, sottoLineaNetto, utileAnteImposte, imposte, utileNetto }
+   */
+  function _calcolaTotaliStorico(progetto) {
+    const anni = progetto.meta.anni_storici;
+    const out = {};
+    for (const a of anni) {
+      const sa = (progetto.storico && progetto.storico[a]) || {};
+      const fatturato = sa.ricavi || 0;
+      const matPrime  = sa.mat_prime || 0;
+      const altriVar  = sa.altri_var || 0;
+      const rimIni    = sa.rim_ini || 0;
+      const rimFin    = sa.rim_fin || 0;
+
+      const cdv    = matPrime + altriVar + rimIni - rimFin;
+      const totVar = cdv;
+      const mdc    = fatturato - totVar;
+
+      const fissi = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
+        .reduce((s, k) => s + (sa[k] || 0), 0);
+
+      const totCosti = totVar + fissi;
+
+      const straord    = sa.straordinari || 0;
+      const altriRic   = sa.altri_ric || 0;
+      const altriProvF = sa.altri_prov_f || 0;
+      const sottoLineaNetto = altriRic + altriProvF - straord;
+      const utileAnteImposte = mdc - fissi + sottoLineaNetto;
+      const imposte = sa.imposte || 0;
+      const utileNetto = utileAnteImposte - imposte;
+
+      out[a] = {
+        fatturato, matPrime, altriVar, rimIni, rimFin,
+        cdv, totVar, mdc, fissi, totCosti,
+        straord, altriRic, altriProvF, sottoLineaNetto,
+        utileAnteImposte, imposte, utileNetto
+      };
+    }
+    return out;
+  }
+
+  /**
+   * Restituisce l'incidenza % media sul fatturato per ogni macroarea
+   * variabile o fissa, calcolata come media (importo[anno]/ricavi[anno])
+   * sui soli anni con ricavi > 0.
+   *
+   * Esposta anche per ID derivati ('cdv','totVar','mdc','fissi',
+   * 'totCosti','utileAnteImposte','utileNetto') usando i totali.
+   */
+  function _calcolaMediePct(progetto, totali) {
+    const anni = progetto.meta.anni_storici.filter(a => totali[a].fatturato > 0);
+    if (anni.length === 0) return {};
+
+    const macroAree = progetto.macro_sezioni;
+    const out = {};
+
+    macroAree.forEach(m => {
+      const pcts = anni.map(a => {
+        const v = (progetto.storico[a] || {})[m.id] || 0;
+        return v / totali[a].fatturato;
+      });
+      out[m.id] = pcts.reduce((s, p) => s + p, 0) / pcts.length;
+    });
+
+    // Derivati
+    ['cdv','totVar','mdc','fissi','totCosti','utileAnteImposte','utileNetto','sottoLineaNetto'].forEach(k => {
+      const pcts = anni.map(a => totali[a][k] / totali[a].fatturato);
+      out[k] = pcts.reduce((s, p) => s + p, 0) / pcts.length;
+    });
+
+    return out;
+  }
+
+  function _fmtPct(p) {
+    if (typeof p !== 'number' || !isFinite(p)) return '';
+    return (p * 100).toFixed(1).replace('.', ',') + '%';
+  }
+
   function renderStorico() {
     const c = document.getElementById('content');
     if (!c) return;
@@ -262,34 +357,108 @@ const BudgetUI = (() => {
       return;
     }
 
-    const macroAree = progetto.macro_sezioni;
     const anni = progetto.meta.anni_storici;
-    const sezioni = [
-      { sez: 'ricavi',      titolo: 'Ricavi' },
-      { sez: 'variabili',   titolo: 'Costi variabili' },
-      { sez: 'fissi',       titolo: 'Costi fissi di gestione' },
-      { sez: 'sotto_linea', titolo: 'Voci sotto la linea' },
-      { sez: 'imposte',     titolo: 'Imposte' }
+    const totali = _calcolaTotaliStorico(progetto);
+    const mediePct = _calcolaMediePct(progetto, totali);
+
+    // Schema righe del prospetto (tipo, etichetta, formula/macroId)
+    const righe = [
+      { tipo: 'sezione', label: 'RICAVI' },
+      { tipo: 'macro',   id: 'ricavi',       label: 'Ricavi' },
+      { tipo: 'totale',  id: 'fatturato',    label: 'FATTURATO',                evidenza: 'verde' },
+      { tipo: 'spacer' },
+
+      { tipo: 'macro',   id: 'mat_prime',    label: 'Costi p/mat. prime, suss., cons., merci' },
+      { tipo: 'macro',   id: 'altri_var',    label: 'Altri costi variabili',    nascondiSeZero: true },
+      { tipo: 'macro',   id: 'rim_ini',      label: 'Rimanenze iniziali' },
+      { tipo: 'macro',   id: 'rim_fin',      label: 'Rimanenze finali',         segno: -1 },
+      { tipo: 'totale',  id: 'cdv',          label: 'COSTO DEL VENDUTO',        evidenza: 'arancio' },
+      { tipo: 'spacer' },
+      { tipo: 'totale',  id: 'totVar',       label: 'TOTALE COSTI VARIABILI',   evidenza: 'arancio' },
+      { tipo: 'totale',  id: 'mdc',          label: 'MARGINE DI CONTRIBUZIONE', evidenza: 'verde' },
+      { tipo: 'spacer' },
+
+      { tipo: 'macro',   id: 'servizi',      label: 'Costi per servizi' },
+      { tipo: 'macro',   id: 'godimento',    label: 'Costi p/godimento beni di terzi' },
+      { tipo: 'macro',   id: 'personale',    label: 'Costi per il personale' },
+      { tipo: 'macro',   id: 'ammortamenti', label: 'Ammortamenti' },
+      { tipo: 'macro',   id: 'oneri_gest',   label: 'Oneri diversi di gestione' },
+      { tipo: 'macro',   id: 'oneri_fin',    label: 'Int. pass. e altri oneri finanz.' },
+      { tipo: 'totale',  id: 'fissi',        label: 'COSTI FISSI DI GESTIONE',  evidenza: 'arancio' },
+      { tipo: 'spacer' },
+      { tipo: 'totale',  id: 'fissi',        label: 'TOTALE COSTI FISSI',       evidenza: 'arancio' },
+      { tipo: 'totale',  id: 'totCosti',     label: 'TOTALE COSTI',             evidenza: 'arancio-forte' },
+      { tipo: 'spacer' },
+
+      { tipo: 'macro',   id: 'straordinari', label: 'Oneri straordinari',       segno: -1 },
+      { tipo: 'macro',   id: 'altri_ric',    label: 'Altri ricavi e proventi' },
+      { tipo: 'macro',   id: 'altri_prov_f', label: 'Altri proventi finanziari' },
+      { tipo: 'totale',  id: 'utileAnteImposte', label: 'UTILE ANTE IMPOSTE',   evidenza: 'verde' },
+      { tipo: 'spacer' },
+
+      { tipo: 'macro',   id: 'imposte',      label: 'Imposte sul reddito' },
+      { tipo: 'totale',  id: 'utileNetto',   label: 'UTILE NETTO',              evidenza: 'verde-forte' }
     ];
 
-    let html = `<div class="ab-storico"><h2>Storico CE per macroarea</h2>`;
-    html += '<table class="ab-storico-tab"><thead><tr><th>Macroarea</th>';
-    anni.forEach(a => { html += `<th class="num">${a}</th>`; });
-    html += '</tr></thead><tbody>';
+    let html = `
+      <div class="ab-storico">
+        <div class="ab-storico-head">
+          <h2>Storico CE per macroarea</h2>
+          <p class="text-muted">
+            Importi per anno e incidenza media percentuale sul fatturato. La media % delle
+            macroaree variabili è la base che il budget userà per proiettare i costi
+            sull'anno in corso.
+          </p>
+        </div>
+        <table class="ab-storico-tab ab-storico-prospetto">
+          <thead>
+            <tr>
+              <th>Macroarea</th>
+              ${anni.map(a => `<th class="num">${a}</th>`).join('')}
+              <th class="num">Media %</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
 
-    sezioni.forEach(({ sez, titolo }) => {
-      const macroSez = macroAree.filter(m => m.sezione === sez);
-      if (macroSez.length === 0) return;
-      html += `<tr class="ab-sezione"><td colspan="${anni.length + 1}">${_escapeHtml(titolo)}</td></tr>`;
-      macroSez.forEach(m => {
-        html += `<tr><td>${_escapeHtml(m.label)}</td>`;
-        anni.forEach(a => {
-          const v = (progetto.storico[a] || {})[m.id];
-          html += `<td class="num">${_fmtEuro(v || 0)}</td>`;
-        });
-        html += '</tr>';
+    for (const r of righe) {
+      if (r.tipo === 'spacer') {
+        html += `<tr class="ab-prospetto-spacer"><td colspan="${anni.length + 2}">&nbsp;</td></tr>`;
+        continue;
+      }
+      if (r.tipo === 'sezione') {
+        html += `<tr class="ab-sezione"><td colspan="${anni.length + 2}">${_escapeHtml(r.label)}</td></tr>`;
+        continue;
+      }
+
+      const segno = r.segno || 1;
+      let valori, mediaPct;
+      if (r.tipo === 'macro') {
+        valori = anni.map(a => ((progetto.storico[a] || {})[r.id] || 0));
+      } else {
+        // totale: leggo dai totali calcolati
+        valori = anni.map(a => totali[a][r.id] || 0);
+      }
+
+      // Salta riga se nascondiSeZero e tutti i valori sono zero
+      if (r.nascondiSeZero && valori.every(v => Math.abs(v) < 0.005)) continue;
+
+      mediaPct = mediePct[r.id];
+
+      const cls = r.tipo === 'totale'
+        ? `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}`
+        : '';
+
+      html += `<tr class="${cls}"><td>${_escapeHtml(r.label)}</td>`;
+      valori.forEach(v => {
+        const display = v * segno;
+        html += `<td class="num">${_fmtEuro(display)}</td>`;
       });
-    });
+      // Media % — mostra solo se la macroarea/derivato ha un'incidenza significativa
+      const mostraPct = (r.tipo === 'totale' || r.id !== 'ricavi');
+      html += `<td class="num">${mostraPct && mediaPct != null ? _fmtPct(mediaPct * segno) : ''}</td>`;
+      html += '</tr>';
+    }
 
     html += '</tbody></table></div>';
     c.innerHTML = html;
