@@ -1187,6 +1187,44 @@ const Projects = (() => {
   }
 
   /**
+   * Aggiorna i campi del consuntivo:
+   *
+   *   field può essere:
+   *     'frequenza'              → value: 'mensile' | 'trimestrale'
+   *                                 (cambia anche reset del fatturato per periodo
+   *                                 perché gli indici cambiano significato)
+   *     'fatturato.<periodo>'    → value: number | null (€ fatturato nel periodo,
+   *                                 periodo è '01'..'12' per mensile o '1'..'4' per
+   *                                 trimestrale)
+   */
+  function aggiornaConsuntivo(field, value) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    if (!_progettoCorrente.consuntivo) {
+      _progettoCorrente.consuntivo = { frequenza: 'mensile', fatturato: {} };
+    }
+    const c = _progettoCorrente.consuntivo;
+    if (!c.fatturato) c.fatturato = {};
+
+    if (field === 'frequenza') {
+      if (value === 'mensile' || value === 'trimestrale') {
+        if (c.frequenza !== value) {
+          c.frequenza = value;
+          c.fatturato = {};
+        }
+      }
+    } else if (field.indexOf('fatturato.') === 0) {
+      const periodo = field.substring('fatturato.'.length);
+      const isVuoto = value == null || (typeof value === 'number' && (!isFinite(value) || value === 0));
+      if (isVuoto) delete c.fatturato[periodo];
+      else         c.fatturato[periodo] = Number(value);
+    } else {
+      return;
+    }
+
+    _modificato = true;
+  }
+
+  /**
    * Aggiorna la macroarea destinataria di un sottoconto e ricalcola
    * lo storico. Usato dalla UI di mappatura (Step 4).
    *
@@ -1233,7 +1271,8 @@ const Projects = (() => {
     creaAnalisi,
     applicaImportCE,
     aggiornaMappingSottoconto,
-    aggiornaBudget
+    aggiornaBudget,
+    aggiornaConsuntivo
   };
 
 })();

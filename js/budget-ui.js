@@ -959,10 +959,236 @@ const BudgetUI = (() => {
     }
   }
 
+  /* ──────────────────────────────────────────────────────────
+     CONSUNTIVO / PRECONSUNTIVO
+
+     L'utente sceglie la frequenza (mensile/trimestrale) e inserisce
+     il fatturato realmente fatturato nei periodi chiusi. La pagina
+     mostra:
+       - il fatturato consuntivato year-to-date
+       - la proiezione di fine anno (= fatt_cons / frazione_anno)
+       - la proiezione delle macroaree (variabili scalate, fissi
+         interi) confrontata col budget originale
+     ────────────────────────────────────────────────────────── */
+
+  const _MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const _TRIMESTRI = ['1° trimestre (gen-mar)','2° trimestre (apr-giu)','3° trimestre (lug-set)','4° trimestre (ott-dic)'];
+
+  function _delta(a, b) {
+    return { abs: a - b, pct: b !== 0 ? (a - b) / Math.abs(b) : null };
+  }
+
+  function _fmtDelta(d, segnoBuono) {
+    // segnoBuono: +1 se più alto è meglio (ricavi, utile), -1 se più alto è peggio (costi)
+    if (d == null || !isFinite(d.abs)) return '';
+    const cls = (d.abs * (segnoBuono || 0) >= 0) ? 'ab-delta-good' : 'ab-delta-bad';
+    const segno = d.abs > 0 ? '+' : '';
+    const eur = segno + _fmtEuro(d.abs);
+    const pct = d.pct != null ? ` (${segno}${(d.pct * 100).toFixed(1).replace('.', ',')}%)` : '';
+    return `<span class="${cls}">${eur}${pct}</span>`;
+  }
+
   function renderConsuntivo() {
     const c = document.getElementById('content');
     if (!c) return;
-    c.innerHTML = _placeholder('Consuntivo', 'Inserimento fatturato per periodo (mensile/trimestrale) e preconsuntivo. Disponibile nel prossimo step.');
+    const progetto = Projects.getProgetto();
+    if (!progetto || !progetto.sottoconti_ce || progetto.sottoconti_ce.length === 0) {
+      c.innerHTML = _placeholder('Consuntivo', 'Importa prima il CE da Excel per costruire il consuntivo.');
+      return;
+    }
+
+    const cons = progetto.consuntivo || { frequenza: 'mensile', fatturato: {} };
+    const pre = BudgetEngine.calcolaPreconsuntivo(progetto);
+    const annoCorrente = progetto.meta.anno_corrente;
+
+    const periodi = pre.frequenza === 'trimestrale' ? _TRIMESTRI : _MESI;
+    const periodiKeys = pre.frequenza === 'trimestrale'
+      ? ['1','2','3','4']
+      : ['01','02','03','04','05','06','07','08','09','10','11','12'];
+
+    let html = `
+      <div class="ab-consuntivo">
+
+        <div class="ab-consuntivo-head">
+          <h2>Consuntivo & preconsuntivo ${annoCorrente}</h2>
+          <p class="text-muted">
+            Inserisci il fatturato realmente fatturato nei periodi chiusi dell'anno.
+            Il sistema proietta a fine anno mantenendo lo stesso ritmo di fatturazione e
+            applica le percentuali di costo del budget per stimare i totali e i
+            risultati attesi.
+          </p>
+        </div>
+
+        <div class="ab-consuntivo-toolbar">
+          <div class="ab-freq-selector">
+            <span class="text-muted">Frequenza:</span>
+            <div class="ab-freq-toggle">
+              <div class="ab-freq-opt ${pre.frequenza === 'mensile' ? 'active' : ''}"
+                   onclick="BudgetUI.cambiaFrequenza('mensile')">Mensile</div>
+              <div class="ab-freq-opt ${pre.frequenza === 'trimestrale' ? 'active' : ''}"
+                   onclick="BudgetUI.cambiaFrequenza('trimestrale')">Trimestrale</div>
+            </div>
+          </div>
+          <div class="ab-consuntivo-stats text-muted">
+            <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
+            <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
+          </div>
+        </div>
+
+        <div class="ab-consuntivo-input">
+          <h3>Fatturato per periodo</h3>
+          <div class="ab-consuntivo-grid ab-consuntivo-grid-${pre.frequenza}">
+    `;
+
+    periodiKeys.forEach((k, i) => {
+      const valore = cons.fatturato && cons.fatturato[k];
+      const display = (typeof valore === 'number' && valore > 0) ? _fmtEuro(valore) : '';
+      html += `
+        <div class="ab-periodo-cell">
+          <div class="ab-periodo-label">${_escapeHtml(periodi[i])}</div>
+          <div class="amount-field ab-periodo-input"
+               contenteditable="true"
+               data-cons-field="fatturato.${k}"
+               data-input-type="euro"
+               data-placeholder="0"
+               onblur="BudgetUI.consuntivoBlur(this)"
+               onkeydown="BudgetUI.budgetKeyDown(event)">${display}</div>
+        </div>
+      `;
+    });
+
+    html += `
+          </div>
+          <div class="ab-consuntivo-totale">
+            Totale fatturato consuntivato: <strong>${_fmtEuro(pre.fatturato_consuntivato)}</strong>
+          </div>
+        </div>
+
+        <div class="ab-consuntivo-kpi">
+          <div class="ab-budget-kpi-card ab-kpi-verde">
+            <div class="ab-kpi-label">Fatturato proiettato fine anno</div>
+            <div class="ab-kpi-value">${_fmtKpi(pre.fatturato_proiettato)}</div>
+            <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.fatturato_proiettato, pre.budget.fatturato), +1)} vs budget</div>
+          </div>
+          <div class="ab-budget-kpi-card ${pre.proiezione.utileNetto >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}">
+            <div class="ab-kpi-label">Utile netto proiettato</div>
+            <div class="ab-kpi-value">${_fmtKpi(pre.proiezione.utileNetto)}</div>
+            <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.proiezione.utileNetto, pre.budget.utileNetto), +1)} vs budget</div>
+          </div>
+          <div class="ab-budget-kpi-card ab-kpi-arancio">
+            <div class="ab-kpi-label">MdC proiettato</div>
+            <div class="ab-kpi-value">${_fmtKpi(pre.proiezione.mdc)}</div>
+            <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.proiezione.mdc, pre.budget.mdc), +1)} vs budget</div>
+          </div>
+        </div>
+
+        <table class="ab-storico-tab ab-storico-prospetto ab-consuntivo-tab">
+          <thead>
+            <tr>
+              <th>Macroarea</th>
+              <th class="num">Budget €</th>
+              <th class="num">Proiezione fine anno</th>
+              <th class="num">Δ vs budget</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    const righe = [
+      { tipo: 'sezione', label: 'RICAVI' },
+      { tipo: 'macro',   id: 'ricavi',           label: 'Ricavi',                                 segnoBuono: +1 },
+      { tipo: 'totale',  id: 'fatturato',        label: 'FATTURATO',                              evidenza: 'verde', segnoBuono: +1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'mat_prime',        label: 'Costi p/mat. prime, suss., cons., merci', segnoBuono: -1 },
+      { tipo: 'macro',   id: 'altri_var',        label: 'Altri costi variabili',                  nascondiSeZero: true, segnoBuono: -1 },
+      { tipo: 'macro',   id: 'rim_ini',          label: 'Rimanenze iniziali',                     segnoBuono: -1 },
+      { tipo: 'macro',   id: 'rim_fin',          label: 'Rimanenze finali',                       segno: -1, segnoBuono: +1 },
+      { tipo: 'totale',  id: 'cdv',              label: 'COSTO DEL VENDUTO',                      evidenza: 'arancio', segnoBuono: -1 },
+      { tipo: 'totale',  id: 'mdc',              label: 'MARGINE DI CONTRIBUZIONE',               evidenza: 'verde', segnoBuono: +1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'servizi',          label: 'Costi per servizi',                      segnoBuono: -1 },
+      { tipo: 'macro',   id: 'godimento',        label: 'Costi p/godimento beni di terzi',        segnoBuono: -1 },
+      { tipo: 'macro',   id: 'personale',        label: 'Costi per il personale',                 segnoBuono: -1 },
+      { tipo: 'macro',   id: 'ammortamenti',     label: 'Ammortamenti',                           segnoBuono: -1 },
+      { tipo: 'macro',   id: 'oneri_gest',       label: 'Oneri diversi di gestione',              segnoBuono: -1 },
+      { tipo: 'macro',   id: 'oneri_fin',        label: 'Int. pass. e altri oneri finanz.',       segnoBuono: -1 },
+      { tipo: 'totale',  id: 'fissi',            label: 'TOTALE COSTI FISSI',                     evidenza: 'arancio', segnoBuono: -1 },
+      { tipo: 'totale',  id: 'totCosti',         label: 'TOTALE COSTI',                           evidenza: 'arancio-forte', segnoBuono: -1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'straordinari',     label: 'Oneri straordinari', segno: -1,          segnoBuono: +1 },
+      { tipo: 'macro',   id: 'altri_ric',        label: 'Altri ricavi e proventi',                segnoBuono: +1 },
+      { tipo: 'macro',   id: 'altri_prov_f',     label: 'Altri proventi finanziari',              segnoBuono: +1 },
+      { tipo: 'totale',  id: 'utileAnteImposte', label: 'UTILE ANTE IMPOSTE',                     evidenza: 'verde', segnoBuono: +1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'imposte',          label: 'Imposte sul reddito',                    segnoBuono: -1 },
+      { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde-forte', segnoBuono: +1 }
+    ];
+
+    for (const r of righe) {
+      if (r.tipo === 'spacer') {
+        html += `<tr class="ab-prospetto-spacer"><td colspan="4">&nbsp;</td></tr>`;
+        continue;
+      }
+      if (r.tipo === 'sezione') {
+        html += `<tr class="ab-sezione"><td colspan="4">${_escapeHtml(r.label)}</td></tr>`;
+        continue;
+      }
+
+      const segno = r.segno || 1;
+      let valBudget, valProiez;
+      if (r.tipo === 'totale') {
+        valBudget = pre.budget[r.id] || 0;
+        valProiez = pre.proiezione[r.id] || 0;
+      } else {
+        valBudget = (pre.budget.valori[r.id] && pre.budget.valori[r.id].valore) || 0;
+        valProiez = (pre.proiezione.valori[r.id] && pre.proiezione.valori[r.id].valore) || 0;
+      }
+
+      // Salta riga se nascondiSeZero e tutti i valori sono nulli
+      if (r.nascondiSeZero && Math.abs(valBudget) < 0.005 && Math.abs(valProiez) < 0.005) continue;
+
+      const cls = r.tipo === 'totale'
+        ? `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}`
+        : '';
+
+      const d = _delta(valProiez, valBudget);
+      html += `<tr class="${cls}">
+        <td>${_escapeHtml(r.label)}</td>
+        <td class="num">${_fmtEuro(valBudget * segno)}</td>
+        <td class="num">${_fmtEuro(valProiez * segno)}</td>
+        <td class="num">${_fmtDelta({ abs: d.abs * segno, pct: d.pct }, r.segnoBuono)}</td>
+      </tr>`;
+    }
+
+    html += '</tbody></table></div>';
+    c.innerHTML = html;
+  }
+
+  function consuntivoBlur(el) {
+    const field = el.dataset.consField;
+    const txt = (el.textContent || '').trim();
+    const parsed = _parseEuro(txt);
+    Projects.aggiornaConsuntivo(field, parsed);
+    UI.aggiornaStatusBar('modificato');
+    renderConsuntivo();
+  }
+
+  function cambiaFrequenza(freq) {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+    const cur = progetto.consuntivo && progetto.consuntivo.frequenza;
+    if (cur === freq) return;
+
+    // Conferma prima di azzerare i valori inseriti
+    const haDati = progetto.consuntivo && progetto.consuntivo.fatturato &&
+                   Object.values(progetto.consuntivo.fatturato).some(v => v > 0);
+    if (haDati) {
+      if (!confirm('Cambiando frequenza i valori già inseriti verranno azzerati. Procedere?')) return;
+    }
+
+    Projects.aggiornaConsuntivo('frequenza', freq);
+    UI.aggiornaStatusBar('modificato');
+    renderConsuntivo();
   }
 
   function _placeholder(titolo, descrizione) {
@@ -987,7 +1213,9 @@ const BudgetUI = (() => {
     applicaImport:      applicaImport,
     cambiaMacroarea:    cambiaMacroarea,
     budgetBlur:         budgetBlur,
-    budgetKeyDown:      budgetKeyDown
+    budgetKeyDown:      budgetKeyDown,
+    consuntivoBlur:     consuntivoBlur,
+    cambiaFrequenza:    cambiaFrequenza
   };
 
 })();
