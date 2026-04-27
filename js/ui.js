@@ -5099,6 +5099,10 @@ const UI = (() => {
   function _aggiornaIndicatoriSidebar() {
     var p = Projects.getProgetto();
     if (!p) return;
+    // Le sezioni indicizzate qui sono BP-specific. Per progetti AB le voci
+    // sidebar sono nascoste e non hanno semantica di completezza paragonabile:
+    // saltiamo per evitare di leggere `progetto.driver` che non esiste.
+    if (p.meta && p.meta.modulo === 'ab') return;
     var sezioni = ['dati-partenza', 'driver', 'eventi'];
     for (var i = 0; i < sezioni.length; i++) {
       var el = document.getElementById('nav-status-' + sezioni[i]);
