@@ -226,27 +226,20 @@ const ExcelImport = (() => {
       // Sottoconti 61 e 80: confluiscono nelle rimanenze, non vengono mappati
       if (MASTRI_VARIAZIONE_RIMANENZE.indexOf(s.mastro) >= 0) continue;
 
+      const sottomastroFull = s.mastro + '/' + s.sottomastro;
       let target = null;
+
       for (const m of macroAree) {
-        if (!m.mastri || m.mastri.indexOf(s.mastro) < 0) continue;
+        const inMastri  = m.mastri && m.mastri.indexOf(s.mastro) >= 0;
+        // includi_conto: macroarea che pesca selettivamente un sotto-mastro
+        // fuori dal proprio mastro principale (es. altri_prov_f include
+        // 64/15 oltre a 87/xx).
+        const inInclude = m.includi_conto && sottomastroFull === m.includi_conto;
+        if (!inMastri && !inInclude) continue;
 
-        // Override per "includi_conto": macroarea che pesca selettivamente
-        // un sottomastro fuori dal proprio mastro principale.
-        // Es. altri_prov_f include 64/15 oltre a 87/xx.
-        if (m.includi_conto) {
-          const sotto = s.mastro + '/' + s.sottomastro;
-          if (sotto === m.includi_conto || s.mastro === m.mastri[0]) {
-            target = m.id; break;
-          }
-          continue;
-        }
-
-        // Filtro per "filtro_conto": questa macroarea prende solo
-        // un sottomastro specifico (es. altri_ric prende 64/05).
-        if (m.filtro_conto) {
-          const sotto = s.mastro + '/' + s.sottomastro;
-          if (sotto !== m.filtro_conto) continue;
-        }
+        // filtro_conto: la macroarea prende solo uno specifico sotto-mastro
+        // tra quelli del proprio mastro (es. altri_ric prende solo 64/05).
+        if (m.filtro_conto && sottomastroFull !== m.filtro_conto) continue;
 
         target = m.id;
         break;
