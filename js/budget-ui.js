@@ -400,7 +400,7 @@ const BudgetUI = (() => {
     const righe = [
       { tipo: 'sezione', label: 'RICAVI' },
       { tipo: 'macro',   id: 'ricavi',       label: 'Ricavi' },
-      { tipo: 'totale',  id: 'fatturato',    label: 'FATTURATO',                evidenza: 'verde' },
+      { tipo: 'totale',  id: 'fatturato',    label: 'FATTURATO',                evidenza: 'verde-forte' },
       { tipo: 'spacer' },
 
       { tipo: 'macro',   id: 'mat_prime',    label: 'Costi p/mat. prime, suss., cons., merci' },
@@ -779,7 +779,7 @@ const BudgetUI = (() => {
     const righe = [
       { tipo: 'sezione', label: 'RICAVI' },
       { tipo: 'macro',   id: 'ricavi',       label: 'Ricavi',                                 inputType: 'euro_fatturato' },
-      { tipo: 'totale',  id: 'fatturato',    label: 'FATTURATO',                              evidenza: 'verde' },
+      { tipo: 'totale',  id: 'fatturato',    label: 'FATTURATO',                              evidenza: 'verde-forte' },
       { tipo: 'spacer' },
 
       { tipo: 'macro',   id: 'mat_prime',    label: 'Costi p/mat. prime, suss., cons., merci', inputType: 'pct' },
@@ -1110,7 +1110,7 @@ const BudgetUI = (() => {
     const righe = [
       { tipo: 'sezione', label: 'RICAVI' },
       { tipo: 'macro',   id: 'ricavi',           label: 'Ricavi',                                 segnoBuono: +1 },
-      { tipo: 'totale',  id: 'fatturato',        label: 'FATTURATO',                              evidenza: 'verde', segnoBuono: +1 },
+      { tipo: 'totale',  id: 'fatturato',        label: 'FATTURATO',                              evidenza: 'verde-forte', segnoBuono: +1 },
       { tipo: 'spacer' },
       { tipo: 'macro',   id: 'mat_prime',        label: 'Costi p/mat. prime, suss., cons., merci', segnoBuono: -1 },
       { tipo: 'macro',   id: 'altri_var',        label: 'Altri costi variabili',                  nascondiSeZero: true, segnoBuono: -1 },
