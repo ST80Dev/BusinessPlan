@@ -1866,6 +1866,137 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   color: #FFFFFF;
 }
 
+/* ── Modulo AB — Budget anno ─────────────────────────────────── */
+.ab-budget { padding: 24px; max-width: 1280px; }
+
+.ab-budget-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 28px;
+  align-items: stretch;
+}
+.ab-budget-fatturato {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.ab-budget-fatturato-label {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 6px;
+}
+.ab-budget-fatturato-input {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--color-accent);
+  background: var(--color-accent-light);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 2px solid var(--color-accent-light);
+  outline: none;
+  text-align: right;
+  transition: border-color 0.15s;
+}
+.ab-budget-fatturato-input:focus {
+  border-color: var(--color-accent);
+}
+.ab-budget-fatturato-sub {
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.ab-budget-kpi {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.ab-budget-kpi-card {
+  border-radius: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+}
+.ab-kpi-verde {
+  background: var(--color-success-bg);
+  border-color: var(--color-success);
+}
+.ab-kpi-verde .ab-kpi-value { color: var(--color-success); }
+.ab-kpi-rosso {
+  background: var(--color-error-bg);
+  border-color: var(--color-error);
+}
+.ab-kpi-rosso .ab-kpi-value { color: var(--color-error); }
+.ab-kpi-arancio {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning);
+}
+.ab-kpi-arancio .ab-kpi-value { color: var(--color-warning); }
+
+.ab-kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+.ab-kpi-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ab-kpi-sub {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.ab-budget-tab td:first-child,
+.ab-budget-tab th:first-child {
+  width: 30%;
+}
+
+.ab-budget-input {
+  display: inline-block;
+  min-width: 80px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+.ab-budget-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+.ab-budget-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.ab-budget-tab tr.ab-fonte-override td {
+  background: var(--color-accent-light);
+}
+.ab-budget-fonte {
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+}
+.ab-fonte-o {
+  color: var(--color-accent);
+}
+
 /* ── Modulo AB — Mappatura sottoconti ────────────────────────── */
 .ab-mappatura { padding: 24px; max-width: 1280px; }
 

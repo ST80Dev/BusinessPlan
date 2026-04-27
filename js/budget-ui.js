@@ -688,10 +688,275 @@ const BudgetUI = (() => {
     renderMacroSezioni();
   }
 
+  /* ──────────────────────────────────────────────────────────
+     BUDGET ANNO
+
+     Card prominente con:
+       - Fatturato ipotizzato (input editabile, default = media storica)
+       - 3 KPI: MdC, Utile netto, Fatturato di break-even
+
+     Tabella prospetto identica per layout allo Storico, ma con:
+       - una colonna "Override" per macroarea variabile (input %) o
+         fissa/sotto-linea (input €). Vuota = usa default storico.
+       - una colonna "Fonte" che indica se il valore viene da
+         storico (S) o override utente (O).
+
+     Tutti i totali sono ricalcolati al volo da BudgetEngine.calcolaBudget.
+     ────────────────────────────────────────────────────────── */
+
+  function _parseEuro(s) {
+    if (!s) return null;
+    const clean = String(s).replace(/[€\s.]/g, '').replace(',', '.').trim();
+    if (clean === '' || clean === '-') return null;
+    const n = parseFloat(clean);
+    return isFinite(n) ? n : null;
+  }
+  function _parsePct(s) {
+    if (!s) return null;
+    const clean = String(s).replace(/[%\s]/g, '').replace(',', '.').trim();
+    if (clean === '' || clean === '-') return null;
+    const n = parseFloat(clean);
+    return isFinite(n) ? n / 100 : null;
+  }
+  function _fmtKpi(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return '—';
+    return n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €';
+  }
+  function _fmtPctSigned(p) {
+    if (typeof p !== 'number' || !isFinite(p)) return '';
+    const s = (p * 100).toFixed(1).replace('.', ',');
+    return (p > 0 ? '+' : '') + s + '%';
+  }
+
   function renderBudget() {
     const c = document.getElementById('content');
     if (!c) return;
-    c.innerHTML = _placeholder('Budget anno', 'Fatturato ipotizzato, costi attesi, risultato e fatturato di break-even. Disponibile nel prossimo step.');
+    const progetto = Projects.getProgetto();
+    if (!progetto || !progetto.sottoconti_ce || progetto.sottoconti_ce.length === 0) {
+      c.innerHTML = _placeholder('Budget anno', 'Importa prima il CE da Excel per costruire il budget.');
+      return;
+    }
+
+    const b = BudgetEngine.calcolaBudget(progetto);
+    const annoCorrente = progetto.meta.anno_corrente;
+
+    // Schema righe del prospetto budget
+    const righe = [
+      { tipo: 'sezione', label: 'RICAVI' },
+      { tipo: 'macro',   id: 'ricavi',       label: 'Ricavi',                                 inputType: 'euro_fatturato' },
+      { tipo: 'totale',  id: 'fatturato',    label: 'FATTURATO',                              evidenza: 'verde' },
+      { tipo: 'spacer' },
+
+      { tipo: 'macro',   id: 'mat_prime',    label: 'Costi p/mat. prime, suss., cons., merci', inputType: 'pct' },
+      { tipo: 'macro',   id: 'altri_var',    label: 'Altri costi variabili',                  inputType: 'pct',  nascondiSeZero: true },
+      { tipo: 'macro',   id: 'rim_ini',      label: 'Rimanenze iniziali',                     inputType: 'euro' },
+      { tipo: 'macro',   id: 'rim_fin',      label: 'Rimanenze finali',                       inputType: 'euro', segno: -1 },
+      { tipo: 'totale',  id: 'cdv',          label: 'COSTO DEL VENDUTO',                      evidenza: 'arancio' },
+      { tipo: 'spacer' },
+      { tipo: 'totale',  id: 'totVar',       label: 'TOTALE COSTI VARIABILI',                 evidenza: 'arancio' },
+      { tipo: 'totale',  id: 'mdc',          label: 'MARGINE DI CONTRIBUZIONE',               evidenza: 'verde' },
+      { tipo: 'spacer' },
+
+      { tipo: 'macro',   id: 'servizi',      label: 'Costi per servizi',                      inputType: 'euro' },
+      { tipo: 'macro',   id: 'godimento',    label: 'Costi p/godimento beni di terzi',        inputType: 'euro' },
+      { tipo: 'macro',   id: 'personale',    label: 'Costi per il personale',                 inputType: 'euro' },
+      { tipo: 'macro',   id: 'ammortamenti', label: 'Ammortamenti',                           inputType: 'euro' },
+      { tipo: 'macro',   id: 'oneri_gest',   label: 'Oneri diversi di gestione',              inputType: 'euro' },
+      { tipo: 'macro',   id: 'oneri_fin',    label: 'Int. pass. e altri oneri finanz.',       inputType: 'euro' },
+      { tipo: 'totale',  id: 'fissi',        label: 'COSTI FISSI DI GESTIONE',                evidenza: 'arancio' },
+      { tipo: 'spacer' },
+      { tipo: 'totale',  id: 'fissi',        label: 'TOTALE COSTI FISSI',                     evidenza: 'arancio' },
+      { tipo: 'totale',  id: 'totCosti',     label: 'TOTALE COSTI',                           evidenza: 'arancio-forte' },
+      { tipo: 'spacer' },
+
+      { tipo: 'macro',   id: 'straordinari', label: 'Oneri straordinari',                     inputType: 'euro', segno: -1 },
+      { tipo: 'macro',   id: 'altri_ric',    label: 'Altri ricavi e proventi',                inputType: 'euro' },
+      { tipo: 'macro',   id: 'altri_prov_f', label: 'Altri proventi finanziari',              inputType: 'euro' },
+      { tipo: 'totale',  id: 'utileAnteImposte', label: 'UTILE ANTE IMPOSTE',                 evidenza: 'verde' },
+      { tipo: 'spacer' },
+
+      { tipo: 'macro',   id: 'imposte',      label: 'Imposte sul reddito',                    inputType: 'euro' },
+      { tipo: 'totale',  id: 'utileNetto',   label: 'UTILE NETTO',                            evidenza: 'verde-forte' }
+    ];
+
+    // KPI: differenze percentuali fatturato vs storico medio e fatturato vs BE
+    const fattStorico = b.fatturato_storico_medio;
+    const deltaFattStorico = fattStorico > 0 ? (b.fatturato - fattStorico) / fattStorico : 0;
+    const deltaFattBe = (b.break_even != null && b.break_even > 0)
+      ? (b.fatturato - b.break_even) / b.break_even : null;
+    const mdcPct = b.fatturato > 0 ? b.mdc / b.fatturato : 0;
+    const utileNettoPct = b.fatturato > 0 ? b.utileNetto / b.fatturato : 0;
+
+    let html = `
+      <div class="ab-budget">
+
+        <div class="ab-budget-card">
+          <div class="ab-budget-fatturato">
+            <div class="ab-budget-fatturato-label">Fatturato ipotizzato anno ${annoCorrente}</div>
+            <div class="amount-field ab-budget-fatturato-input"
+                 contenteditable="true"
+                 data-budget-field="fatturato_ipotizzato"
+                 onblur="BudgetUI.budgetBlur(this)"
+                 onkeydown="BudgetUI.budgetKeyDown(event)">${_fmtEuro(b.fatturato)}</div>
+            <div class="ab-budget-fatturato-sub text-muted">
+              Storico medio: ${_fmtEuro(fattStorico)} ${fattStorico > 0 ? `(${_fmtPctSigned(deltaFattStorico)} vs ipotizzato)` : ''}
+            </div>
+          </div>
+
+          <div class="ab-budget-kpi">
+            <div class="ab-budget-kpi-card ab-kpi-verde">
+              <div class="ab-kpi-label">Margine di contribuzione</div>
+              <div class="ab-kpi-value">${_fmtKpi(b.mdc)}</div>
+              <div class="ab-kpi-sub">${(mdcPct * 100).toFixed(1).replace('.', ',')}% sul fatturato</div>
+            </div>
+            <div class="ab-budget-kpi-card ${b.utileNetto >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}">
+              <div class="ab-kpi-label">Utile netto</div>
+              <div class="ab-kpi-value">${_fmtKpi(b.utileNetto)}</div>
+              <div class="ab-kpi-sub">${(utileNettoPct * 100).toFixed(1).replace('.', ',')}% sul fatturato</div>
+            </div>
+            <div class="ab-budget-kpi-card ab-kpi-arancio">
+              <div class="ab-kpi-label">Fatturato di break-even</div>
+              <div class="ab-kpi-value">${_fmtKpi(b.break_even)}</div>
+              <div class="ab-kpi-sub">
+                ${deltaFattBe != null
+                  ? (b.fatturato >= b.break_even
+                      ? `${_fmtPctSigned(deltaFattBe)} sopra il pareggio`
+                      : `${_fmtPctSigned(deltaFattBe)} dal pareggio`)
+                  : 'non calcolabile'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <table class="ab-storico-tab ab-storico-prospetto ab-budget-tab">
+          <thead>
+            <tr>
+              <th>Macroarea</th>
+              <th class="num">Storico medio</th>
+              <th class="num">% storica</th>
+              <th class="num">Override</th>
+              <th class="num">Budget €</th>
+              <th class="num">Budget %</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    const totaleColspan = 6;
+
+    for (const r of righe) {
+      if (r.tipo === 'spacer') {
+        html += `<tr class="ab-prospetto-spacer"><td colspan="${totaleColspan}">&nbsp;</td></tr>`;
+        continue;
+      }
+      if (r.tipo === 'sezione') {
+        html += `<tr class="ab-sezione"><td colspan="${totaleColspan}">${_escapeHtml(r.label)}</td></tr>`;
+        continue;
+      }
+
+      const segno = r.segno || 1;
+
+      if (r.tipo === 'totale') {
+        const valBudget = b[r.id] || 0;
+        const pctBudget = b.fatturato > 0 ? valBudget / b.fatturato : 0;
+        const cls = `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}`;
+        html += `<tr class="${cls}">
+          <td>${_escapeHtml(r.label)}</td>
+          <td class="num"></td>
+          <td class="num"></td>
+          <td class="num"></td>
+          <td class="num">${_fmtEuro(valBudget * segno)}</td>
+          <td class="num">${_fmtPct(pctBudget * segno)}</td>
+        </tr>`;
+        continue;
+      }
+
+      // riga macro
+      const m = (progetto.macro_sezioni || []).find(x => x.id === r.id);
+      const dato = b.valori[r.id] || { valore: 0, pct: 0, fonte: 'storico', media_euro: 0, media_pct: 0 };
+
+      // Salta riga se nascondiSeZero e tutti i valori (storico + budget) sono nulli
+      if (r.nascondiSeZero && Math.abs(dato.media_euro) < 0.005 && Math.abs(dato.valore) < 0.005) continue;
+
+      const fonteCls = dato.fonte === 'override' ? 'ab-fonte-override' : 'ab-fonte-storico';
+
+      html += `<tr class="${fonteCls}">
+        <td>${_escapeHtml(r.label)}</td>
+        <td class="num">${_fmtEuro(dato.media_euro)}</td>
+        <td class="num">${_fmtPct(dato.media_pct)}</td>
+        <td class="num">${_renderOverrideInput(r, dato, progetto)}</td>
+        <td class="num">${_fmtEuro(dato.valore * segno)}</td>
+        <td class="num">${_fmtPct(dato.pct * segno)}</td>
+      </tr>`;
+    }
+
+    html += '</tbody></table></div>';
+    c.innerHTML = html;
+  }
+
+  function _renderOverrideInput(r, dato, progetto) {
+    if (r.inputType === 'euro_fatturato') {
+      // Per la riga ricavi l'input principale è il fatturato, già nella card. Qui mostro solo l'indicatore.
+      return dato.fonte === 'override' ? '<span class="ab-budget-fonte ab-fonte-o">●</span>' : '';
+    }
+
+    const ovrPct = (progetto.budget && progetto.budget.override_pct) || {};
+    const ovrEur = (progetto.budget && progetto.budget.override_fissi) || {};
+
+    if (r.inputType === 'pct') {
+      const cur = ovrPct[r.id];
+      const display = (typeof cur === 'number') ? (cur * 100).toFixed(1).replace('.', ',') + '%' : '';
+      return `<div class="amount-field ab-budget-input"
+                   contenteditable="true"
+                   data-budget-field="override_pct.${_escapeHtml(r.id)}"
+                   data-input-type="pct"
+                   data-placeholder="auto"
+                   onblur="BudgetUI.budgetBlur(this)"
+                   onkeydown="BudgetUI.budgetKeyDown(event)">${display}</div>`;
+    }
+
+    if (r.inputType === 'euro') {
+      const cur = ovrEur[r.id];
+      const display = (typeof cur === 'number') ? _fmtEuro(cur) : '';
+      return `<div class="amount-field ab-budget-input"
+                   contenteditable="true"
+                   data-budget-field="override_fissi.${_escapeHtml(r.id)}"
+                   data-input-type="euro"
+                   data-placeholder="auto"
+                   onblur="BudgetUI.budgetBlur(this)"
+                   onkeydown="BudgetUI.budgetKeyDown(event)">${display}</div>`;
+    }
+    return '';
+  }
+
+  function budgetBlur(el) {
+    const field = el.dataset.budgetField;
+    const inputType = el.dataset.inputType;
+    const txt = (el.textContent || '').trim();
+
+    let parsed;
+    if (field === 'fatturato_ipotizzato') {
+      parsed = _parseEuro(txt);
+    } else if (inputType === 'pct') {
+      parsed = _parsePct(txt);
+    } else {
+      parsed = _parseEuro(txt);
+    }
+
+    Projects.aggiornaBudget(field, parsed);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+  }
+
+  function budgetKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.target.blur();
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.target.blur();
+    }
   }
 
   function renderConsuntivo() {
@@ -720,7 +985,9 @@ const BudgetUI = (() => {
     caricaFixture:      caricaFixture,
     annullaImport:      annullaImport,
     applicaImport:      applicaImport,
-    cambiaMacroarea:    cambiaMacroarea
+    cambiaMacroarea:    cambiaMacroarea,
+    budgetBlur:         budgetBlur,
+    budgetKeyDown:      budgetKeyDown
   };
 
 })();

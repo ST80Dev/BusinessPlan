@@ -117,66 +117,140 @@ const BudgetEngine = (() => {
   }
 
   /**
-   * Costruisce il budget previsionale dell'anno corrente.
+   * Costruisce il budget previsionale dell'anno corrente sullo
+   * schema fisso AB. Per ogni macroarea:
    *
-   * Per ogni macro:
-   *   - se variabile: costo = (override_pct ?? pct_media) * fatturato_ipotizzato
-   *   - se fisso:     costo = override_fisso ?? media_euro
+   *   ricavi:         valore = override fatturato_ipotizzato OR media €
+   *   variabili pure (mat_prime, altri_var):
+   *                    valore = (override_pct OR pct_media) × fatturato
+   *   variabili calcolate (rim_ini, rim_fin):
+   *                    valore = override_fissi[id] OR media €
+   *                    (le rimanenze in budget sono trattate come €
+   *                    perché non scalano linearmente col fatturato)
+   *   fissi e sotto_linea e imposte:
+   *                    valore = override_fissi[id] OR media €
+   *
+   * Calcola tutti i derivati del prospetto (CdV, MdC, Tot costi,
+   * Utile ante imposte, Utile netto) e il fatturato di break-even
+   * operativo:
+   *
+   *   F_be = (rim_ini − rim_fin + Σ fissi) / (1 − Σ pct_var)
+   *
+   * Le voci sotto la linea e le imposte non concorrono al BE
+   * operativo per definizione classica.
    *
    * @param {Object} progetto - progetto AB
-   * @returns {{
-   *   fatturato: number,
-   *   righe: Array<{id, label, var_fisso, pct, costo}>,
-   *   tot_variabili: number,
-   *   tot_fissi: number,
-   *   risultato: number,
-   *   break_even: number|null
-   * }}
+   * @returns {Object} prospetto budget completo
    */
   function calcolaBudget(progetto) {
-    const macro = progetto.macro_sezioni || [];
+    const macro   = progetto.macro_sezioni || [];
     const storico = progetto.storico || {};
     const budget  = progetto.budget   || {};
+    const anni    = (progetto.meta && progetto.meta.anni_storici) || Object.keys(storico).map(Number);
+    const ovrPct  = budget.override_pct   || {};
+    const ovrEur  = budget.override_fissi || {};
 
-    const pctMedie  = calcolaPctMedie(macro, storico);
-    const medieEuro = calcolaMedieEuro(macro, storico);
+    // Medie storiche per macroarea (€ e % sul fatturato)
+    const medieEuro = {};
+    macro.forEach(m => {
+      const valori = anni.map(a => Number((storico[a] || {})[m.id]) || 0);
+      medieEuro[m.id] = valori.length > 0 ? valori.reduce((s, v) => s + v, 0) / valori.length : 0;
+    });
 
-    const fatturato = Number(budget.fatturato_ipotizzato) || medieEuro[_idRicavi(macro)] || 0;
+    const fatturatoStoricoMedio = medieEuro['ricavi'] || 0;
+    const mediePct = {};
+    macro.forEach(m => {
+      const validi = anni
+        .map(a => ({ ric: Number((storico[a] || {}).ricavi) || 0, val: Number((storico[a] || {})[m.id]) || 0 }))
+        .filter(x => x.ric > 0);
+      mediePct[m.id] = validi.length > 0
+        ? validi.reduce((s, x) => s + x.val / x.ric, 0) / validi.length
+        : 0;
+    });
 
-    const righe = [];
-    let totVar = 0;
-    let totFis = 0;
+    // Fatturato budget
+    const fatturatoOvr = Number(budget.fatturato_ipotizzato);
+    const fatturato = (isFinite(fatturatoOvr) && fatturatoOvr > 0) ? fatturatoOvr : fatturatoStoricoMedio;
+
+    // Calcolo per ogni macroarea
+    const valori = {};
     let sommaPctVar = 0;
 
     for (const m of macro) {
-      if (m.tipo !== 'costo') continue;
-
-      if (m.var_fisso === 'variabile') {
-        const ovr = budget.override_pct ? budget.override_pct[m.id] : null;
-        const pct = (typeof ovr === 'number') ? ovr : (pctMedie[m.id] || 0);
-        const costo = pct * fatturato;
-        righe.push({ id: m.id, label: m.label, var_fisso: 'variabile', pct: pct, costo: costo });
-        totVar += costo;
-        sommaPctVar += pct;
-      } else {
-        const ovr = budget.override_fissi ? budget.override_fissi[m.id] : null;
-        const costo = (typeof ovr === 'number') ? ovr : (medieEuro[m.id] || 0);
-        righe.push({ id: m.id, label: m.label, var_fisso: 'fisso', pct: null, costo: costo });
-        totFis += costo;
+      if (m.id === 'ricavi') {
+        valori[m.id] = {
+          valore: fatturato,
+          pct: 1,
+          fonte_pct: null,
+          fonte: (isFinite(fatturatoOvr) && fatturatoOvr > 0) ? 'override' : 'storico',
+          media_euro: medieEuro[m.id],
+          media_pct:  mediePct[m.id]
+        };
+        continue;
       }
+
+      // Variabili pure (no calcolato): % override o % media × fatturato
+      if (m.var_fisso === 'variabile' && !m.calcolato) {
+        const pctOvr = ovrPct[m.id];
+        const pct    = (typeof pctOvr === 'number' && isFinite(pctOvr)) ? pctOvr : (mediePct[m.id] || 0);
+        const valore = pct * fatturato;
+        valori[m.id] = {
+          valore,
+          pct,
+          fonte_pct: 'pct',
+          fonte: (typeof pctOvr === 'number' && isFinite(pctOvr)) ? 'override' : 'storico',
+          media_euro: medieEuro[m.id],
+          media_pct:  mediePct[m.id]
+        };
+        // sommaPctVar: i costi variabili contribuiscono +pct,
+        // i ricavi variabili (rim_fin sarebbe stato qui ma è calcolato)
+        // contribuiscono -pct.
+        if (m.tipo === 'costo') sommaPctVar += pct;
+        else                    sommaPctVar -= pct;
+        continue;
+      }
+
+      // Tutti gli altri (calcolato, fissi, sotto_linea, imposte): € override o media €
+      const eurOvr = ovrEur[m.id];
+      const valore = (typeof eurOvr === 'number' && isFinite(eurOvr)) ? eurOvr : (medieEuro[m.id] || 0);
+      valori[m.id] = {
+        valore,
+        pct: fatturato > 0 ? valore / fatturato : 0,
+        fonte_pct: 'euro',
+        fonte: (typeof eurOvr === 'number' && isFinite(eurOvr)) ? 'override' : 'storico',
+        media_euro: medieEuro[m.id],
+        media_pct:  mediePct[m.id]
+      };
     }
 
-    const risultato = fatturato - totVar - totFis;
+    // Derivati del prospetto
+    const v = id => (valori[id] && valori[id].valore) || 0;
+    const cdv     = v('mat_prime') + v('altri_var') + v('rim_ini') - v('rim_fin');
+    const totVar  = cdv;
+    const mdc     = fatturato - totVar;
+    const fissi   = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
+                      .reduce((s, k) => s + v(k), 0);
+    const totCosti = totVar + fissi;
+    const sottoLineaNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
+    const utileAnteImposte = mdc - fissi + sottoLineaNetto;
+    const imposteVal = v('imposte');
+    const utileNetto = utileAnteImposte - imposteVal;
+
+    // Break-even operativo:
+    //   risultato_op = F * (1 - sommaPctVar) - (rim_ini - rim_fin) - fissi = 0
+    //   F_be = (rim_ini - rim_fin + fissi) / (1 - sommaPctVar)
     const denom = 1 - sommaPctVar;
-    const breakEven = (denom > 0) ? (totFis / denom) : null;
+    const kRim = v('rim_ini') - v('rim_fin');
+    const breakEven = (denom > 0 && (kRim + fissi) > 0) ? (kRim + fissi) / denom : null;
 
     return {
-      fatturato:     fatturato,
-      righe:         righe,
-      tot_variabili: totVar,
-      tot_fissi:     totFis,
-      risultato:     risultato,
-      break_even:    breakEven
+      fatturato,
+      fatturato_storico_medio: fatturatoStoricoMedio,
+      valori,
+      cdv, totVar, mdc, fissi, totCosti,
+      sottoLineaNetto, utileAnteImposte, imposte: imposteVal, utileNetto,
+      somma_pct_var: sommaPctVar,
+      break_even: breakEven
     };
   }
 

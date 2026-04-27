@@ -1149,6 +1149,44 @@ const Projects = (() => {
   }
 
   /**
+   * Aggiorna i campi del budget (fatturato ipotizzato e override).
+   *
+   *   field può essere:
+   *     'fatturato_ipotizzato'   → value: number | null
+   *     'override_pct.<id>'      → value: number (decimale, 0.12 = 12%) | null
+   *     'override_fissi.<id>'    → value: number (€) | null
+   *
+   *   Passare value null/NaN rimuove l'override (torna al default storico).
+   */
+  function aggiornaBudget(field, value) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    if (!_progettoCorrente.budget) {
+      _progettoCorrente.budget = { fatturato_ipotizzato: null, override_pct: {}, override_fissi: {} };
+    }
+    const b = _progettoCorrente.budget;
+    if (!b.override_pct)   b.override_pct   = {};
+    if (!b.override_fissi) b.override_fissi = {};
+
+    const isVuoto = value == null || (typeof value === 'number' && !isFinite(value));
+
+    if (field === 'fatturato_ipotizzato') {
+      b.fatturato_ipotizzato = isVuoto ? null : Number(value);
+    } else if (field.indexOf('override_pct.') === 0) {
+      const id = field.substring('override_pct.'.length);
+      if (isVuoto) delete b.override_pct[id];
+      else         b.override_pct[id] = Number(value);
+    } else if (field.indexOf('override_fissi.') === 0) {
+      const id = field.substring('override_fissi.'.length);
+      if (isVuoto) delete b.override_fissi[id];
+      else         b.override_fissi[id] = Number(value);
+    } else {
+      return;
+    }
+
+    _modificato = true;
+  }
+
+  /**
    * Aggiorna la macroarea destinataria di un sottoconto e ricalcola
    * lo storico. Usato dalla UI di mappatura (Step 4).
    *
@@ -1194,7 +1232,8 @@ const Projects = (() => {
     // Modulo Analisi Costi & Budget
     creaAnalisi,
     applicaImportCE,
-    aggiornaMappingSottoconto
+    aggiornaMappingSottoconto,
+    aggiornaBudget
   };
 
 })();
