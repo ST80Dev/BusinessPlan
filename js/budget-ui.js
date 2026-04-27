@@ -144,7 +144,24 @@ const BudgetUI = (() => {
       const { rows } = await XlsxMini.readXlsx(buf);
       const parsed = ExcelImport.parseBilancioVerifica(rows);
       const macroAree = BudgetEngine.MACROAREE_AB;
-      const mapping = ExcelImport.defaultMapping(parsed.sottoconti, macroAree);
+
+      // Mapping iniziale = default euristico per tutti i sottoconti.
+      // Se il file porta già la mappatura (colonne M/sM compilate),
+      // questa ha precedenza: i conti con sigla nota vengono assegnati
+      // alla relativa macroarea, i conti con sigla sconosciuta (null)
+      // restano esplicitamente non mappati. I conti senza sigla cadono
+      // nel default.
+      const def = ExcelImport.defaultMapping(parsed.sottoconti, macroAree);
+      let mapping = def;
+      if (parsed.mapping_da_file) {
+        mapping = Object.assign({}, def);
+        for (const codice in parsed.mapping_da_file) {
+          const v = parsed.mapping_da_file[codice];
+          if (v === null) delete mapping[codice];
+          else            mapping[codice] = v;
+        }
+      }
+
       const storico = ExcelImport.calcolaStorico(parsed, mapping, macroAree);
 
       _lastParsed = parsed;
@@ -200,6 +217,21 @@ const BudgetUI = (() => {
     tabHtml += '</tbody></table>';
 
     let warnHtml = '';
+
+    // Info: il file portava la mappatura M/sM (Caso B)
+    if (parsed.mapping_da_file) {
+      const daFile = Object.values(parsed.mapping_da_file).filter(v => v).length;
+      const nonRic = (parsed.sigle_sconosciute || []).length;
+      warnHtml += '<div class="ab-import-info">' +
+        '📄 Mappatura rilevata nel file (colonne M/sM): ' +
+        daFile + ' sottoconti classificati direttamente dal file. ' +
+        'I sottoconti senza sigla utilizzano la mappatura predefinita per mastro.' +
+        (nonRic > 0
+          ? ' <strong>Sigle non riconosciute:</strong> ' + _escapeHtml(parsed.sigle_sconosciute.join(', ')) + ' — i conti relativi restano da classificare.'
+          : '') +
+        '</div>';
+    }
+
     if (numNonMap > 0) {
       warnHtml += `<div class="ab-import-warn">⚠ ${numNonMap} sottoconti non sono stati mappati automaticamente. Sarà possibile mapparli a mano dalla sezione "Mappatura sottoconti".</div>`;
     }
