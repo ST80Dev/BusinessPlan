@@ -502,13 +502,26 @@ const BudgetUI = (() => {
   /* ──────────────────────────────────────────────────────────
      MAPPATURA SOTTOCONTI → MACROAREE
 
-     L'utente vede ogni sottoconto raggruppato sotto la macroarea
-     attualmente assegnata. Cambiando il dropdown il sottoconto si
-     sposta in un'altra macroarea, lo storico viene ricalcolato e
-     la pagina viene re-renderizzata. I sottoconti dei mastri di
-     variazione rimanenze (61, 80) sono read-only — confluiscono
-     nel calcolo automatico delle rim. iniziali/finali.
+     Layout a due colonne:
+       - Sidebar interna sx: mini-CE con tutte le macroaree
+         strutturate per sezione (Ricavi → Costi variabili →
+         Costi fissi → Sotto la linea → Imposte). Ogni box è un
+         drop target con contatore live.
+       - Main dx: lista dei sottoconti raggruppati per macroarea
+         attualmente assegnata. Ogni riga è draggable; il dropdown
+         resta come fallback. Multi-select via Shift/Ctrl-click sul
+         codice del sottoconto.
+
+     I sottoconti dei mastri di variazione rimanenze (61, 80)
+     sono read-only — confluiscono nel calcolo automatico delle
+     rim. iniziali/finali.
      ────────────────────────────────────────────────────────── */
+
+  // Set di codici sottoconto correntemente selezionati per multi-drop.
+  // Vive a livello di modulo per sopravvivere ai re-render parziali
+  // ma viene svuotato a ogni renderMacroSezioni completo.
+  let _selectedCodici = new Set();
+
   function renderMacroSezioni() {
     const c = document.getElementById('content');
     if (!c) return;
@@ -517,6 +530,8 @@ const BudgetUI = (() => {
       c.innerHTML = _placeholder('Mappatura sottoconti', 'Importa prima il CE da Excel per popolare i sottoconti.');
       return;
     }
+
+    _selectedCodici = new Set();
 
     const macroAree = progetto.macro_sezioni;
     const mapping   = progetto.mapping || {};
@@ -549,41 +564,6 @@ const BudgetUI = (() => {
     const totale = progetto.sottoconti_ce.length;
     const mappati = totale - nonMappati.length - inRimanenze.length;
 
-    let html = `
-      <div class="ab-mappatura">
-        <div class="ab-mappatura-head">
-          <h2>Mappatura sottoconti → macroaree</h2>
-          <p class="text-muted">
-            Per ciascun sottoconto puoi cambiare la macroarea di destinazione tramite il menu a tendina.
-            I sottoconti dei mastri 61 e 80 (variazione rimanenze) confluiscono automaticamente nelle
-            rimanenze iniziali/finali e non sono modificabili. Per "promuovere" un sottoconto dei
-            costi fissi a costo variabile (es. <em>Lavorazioni di terzi</em>), spostalo in
-            <strong>Altri costi variabili</strong>.
-          </p>
-          <div class="ab-mappatura-stats">
-            <span><strong>${totale}</strong> sottoconti CE totali</span>
-            <span><strong>${mappati}</strong> mappati</span>
-            <span><strong>${nonMappati.length}</strong> non mappati</span>
-            <span><strong>${inRimanenze.length}</strong> in rimanenze (calcolato)</span>
-          </div>
-        </div>
-    `;
-
-    // Sezione "Non mappato" in alto se non vuota
-    if (nonMappati.length > 0) {
-      html += _renderGruppoSottoconti({
-        id: '__non_mappati__',
-        label: 'Sottoconti non mappati',
-        descrizione: 'Da assegnare a una macroarea',
-        sottoconti: nonMappati,
-        macroAree: macroAree,
-        progetto: progetto,
-        readonly: false,
-        evidenza: 'warn'
-      });
-    }
-
-    // Sezioni di prospetto in ordine
     const sezioniProspetto = [
       { sez: 'ricavi',      titolo: 'Ricavi' },
       { sez: 'variabili',   titolo: 'Costi variabili' },
@@ -591,6 +571,48 @@ const BudgetUI = (() => {
       { sez: 'sotto_linea', titolo: 'Voci sotto la linea' },
       { sez: 'imposte',     titolo: 'Imposte' }
     ];
+
+    let html = `
+      <div class="ab-mappatura">
+        <div class="ab-mappatura-head">
+          <h2>Mappatura sottoconti → macroaree</h2>
+          <p class="text-muted">
+            <strong>Trascina</strong> uno o più sottoconti dalla lista a destra sui box della
+            <em>mini-CE</em> a sinistra per riassegnarli; in alternativa usa il menu a tendina
+            sulla riga. Per selezionare più sottoconti tieni premuto <kbd>Shift</kbd> o
+            <kbd>Ctrl</kbd> mentre clicchi sul codice. I sottoconti dei mastri 61 e 80
+            (variazione rimanenze) confluiscono automaticamente nelle rim. iniziali/finali.
+          </p>
+          <div class="ab-mappatura-stats">
+            <span><strong>${totale}</strong> sottoconti CE totali</span>
+            <span><strong>${mappati}</strong> mappati</span>
+            <span class="${nonMappati.length > 0 ? 'ab-stats-warn' : ''}"><strong>${nonMappati.length}</strong> non mappati</span>
+            <span><strong>${inRimanenze.length}</strong> in rimanenze (calcolato)</span>
+            <span class="ab-mappatura-selcount" data-sel-count></span>
+          </div>
+        </div>
+
+        <div class="ab-mappatura-layout">
+          <aside class="ab-mini-ce" aria-label="Mini conto economico — drop target">
+            ${_renderMiniCE(macroAree, gruppi, nonMappati, inRimanenze, sezioniProspetto)}
+          </aside>
+
+          <div class="ab-mappatura-main">
+    `;
+
+    // Sezione "Non mappato" in alto se non vuota
+    if (nonMappati.length > 0) {
+      html += _renderGruppoSottoconti({
+        id: '__non_mappati__',
+        label: 'Sottoconti non mappati',
+        descrizione: 'Trascinali su un box della mini-CE per assegnarli',
+        sottoconti: nonMappati,
+        macroAree: macroAree,
+        progetto: progetto,
+        readonly: false,
+        evidenza: 'warn'
+      });
+    }
 
     sezioniProspetto.forEach(({ sez, titolo }) => {
       const macroSez = macroAree.filter(m => m.sezione === sez && !m.calcolato);
@@ -623,8 +645,59 @@ const BudgetUI = (() => {
       });
     }
 
-    html += '</div>';
+    html += '</div></div></div>';
     c.innerHTML = html;
+
+    _setupMappaturaDnD();
+  }
+
+  /* Renderizza la sidebar mini-CE: una palette di drop target
+     organizzata come il prospetto budget/consuntivo, con contatore
+     live dei sottoconti già assegnati a ciascun box. */
+  function _renderMiniCE(macroAree, gruppi, nonMappati, inRimanenze, sezioniProspetto) {
+    let html = '';
+
+    // Box "Non mappati" sempre in cima (drop target che rimuove
+    // il mapping). Visibile sempre, evidenziato se non vuoto.
+    const nmCount = nonMappati.length;
+    const nmCls = nmCount > 0 ? ' ab-mini-box-warn' : ' ab-mini-box-empty';
+    html += `
+      <div class="ab-mini-box ab-mini-box-special${nmCls}" data-drop-macro="__non_mappati__" tabindex="0">
+        <div class="ab-mini-box-label">Non mappati</div>
+        <div class="ab-mini-box-count">${nmCount}</div>
+      </div>
+    `;
+
+    sezioniProspetto.forEach(({ sez, titolo }) => {
+      const macroSez = macroAree.filter(m => m.sezione === sez);
+      if (macroSez.length === 0) return;
+      html += `<div class="ab-mini-sezione">${_escapeHtml(titolo)}</div>`;
+      macroSez.forEach(m => {
+        if (m.calcolato) {
+          // Box readonly: rim. iniziali / rim. finali, hatch pattern
+          const inRim = inRimanenze.length;
+          html += `
+            <div class="ab-mini-box ab-mini-box-readonly" title="Calcolato dai mastri 61/80 (${inRim} sottoconti)">
+              <div class="ab-mini-box-label">${_escapeHtml(m.label)}</div>
+              <div class="ab-mini-box-count">=</div>
+            </div>
+          `;
+          return;
+        }
+        const count = (gruppi[m.id] || []).length;
+        const flagCls = m.var_fisso === 'variabile' ? ' ab-mini-flag-var'
+                      : m.var_fisso === 'fisso'     ? ' ab-mini-flag-fix' : '';
+        const tip = _descrizioneMacro(m).replace(/"/g, '&quot;');
+        html += `
+          <div class="ab-mini-box${flagCls}" data-drop-macro="${_escapeHtml(m.id)}" tabindex="0" title="${tip}">
+            <div class="ab-mini-box-label">${_escapeHtml(m.label)}</div>
+            <div class="ab-mini-box-count" data-mini-count="${_escapeHtml(m.id)}">${count}</div>
+          </div>
+        `;
+      });
+    });
+
+    return html;
   }
 
   function _descrizioneMacro(m) {
@@ -638,8 +711,13 @@ const BudgetUI = (() => {
     const evidenzaClass = evidenza === 'warn' ? ' ab-gruppo-warn' : '';
     const anni = progetto.meta.anni_storici;
 
+    // Anche i gruppi a destra fanno da drop target (utile per
+    // riassegnare al volo senza muovere il mouse fino alla sidebar).
+    // Esclusi: gruppo "in rimanenze" (readonly).
+    const dropAttr = readonly ? '' : ` data-drop-macro="${_escapeHtml(id)}"`;
+
     let html = `
-      <div class="ab-gruppo${evidenzaClass}" data-gruppo="${id}">
+      <div class="ab-gruppo${evidenzaClass}" data-gruppo="${id}"${dropAttr}>
         <div class="ab-gruppo-head">
           <div class="ab-gruppo-title">${_escapeHtml(label)} <span class="ab-gruppo-count">(${sottoconti.length})</span></div>
           ${descrizione ? `<div class="ab-gruppo-sub text-muted">${_escapeHtml(descrizione)}</div>` : ''}
@@ -664,9 +742,12 @@ const BudgetUI = (() => {
     html += `<th>Macroarea</th></tr></thead><tbody>`;
 
     for (const s of sottoconti) {
+      const dragAttr = readonly ? '' : ' draggable="true"';
+      const codAttr  = readonly ? '' : ` data-drag-codice="${_escapeHtml(s.codice)}"`;
+      const cls      = readonly ? '' : ' ab-row-draggable';
       html += `
-        <tr>
-          <td class="codice-conto">${_escapeHtml(s.codice)}</td>
+        <tr${dragAttr} class="${cls.trim()}"${codAttr}>
+          <td class="codice-conto ab-cell-codice">${_escapeHtml(s.codice)}</td>
           <td>${_escapeHtml(s.descrizione || '')}</td>
           <td class="num codice-conto">${_escapeHtml(s.mastro || '')}</td>
       `;
@@ -686,6 +767,121 @@ const BudgetUI = (() => {
 
     html += '</tbody></table></div>';
     return html;
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Drag & drop + multi-select per la mappatura sottoconti.
+     Single delegation su #content: un set di listener gestisce
+     tutte le righe e i drop target del DOM corrente. Va
+     re-installato dopo ogni renderMacroSezioni perché sostituisce
+     l'innerHTML del container.
+     ────────────────────────────────────────────────────────── */
+  function _setupMappaturaDnD() {
+    const root = document.querySelector('.ab-mappatura');
+    if (!root) return;
+
+    // Click sulla cella codice → toggle selezione (solo Shift/Ctrl)
+    root.addEventListener('click', (ev) => {
+      const cell = ev.target.closest('.ab-cell-codice');
+      if (!cell) return;
+      const tr = cell.closest('tr.ab-row-draggable');
+      if (!tr) return;
+      const codice = tr.dataset.dragCodice;
+      if (!codice) return;
+      if (ev.shiftKey || ev.ctrlKey || ev.metaKey) {
+        ev.preventDefault();
+        if (_selectedCodici.has(codice)) {
+          _selectedCodici.delete(codice);
+          tr.classList.remove('ab-row-selected');
+        } else {
+          _selectedCodici.add(codice);
+          tr.classList.add('ab-row-selected');
+        }
+        _aggiornaSelCount();
+      }
+    });
+
+    // Drag start: se la riga trascinata non è selezionata, il drag
+    // riguarda solo quella riga (la selezione esistente viene
+    // ignorata per il drop ma rimane visibile finché non si rilascia).
+    root.addEventListener('dragstart', (ev) => {
+      const tr = ev.target.closest('tr.ab-row-draggable');
+      if (!tr || !ev.dataTransfer) return;
+      const codice = tr.dataset.dragCodice;
+      let codici;
+      if (_selectedCodici.has(codice) && _selectedCodici.size > 1) {
+        codici = Array.from(_selectedCodici);
+      } else {
+        codici = [codice];
+      }
+      ev.dataTransfer.setData('application/x-ab-codici', JSON.stringify(codici));
+      ev.dataTransfer.effectAllowed = 'move';
+      // Visual feedback: tutte le righe coinvolte diventano "dragging"
+      codici.forEach(cd => {
+        const r = root.querySelector(`tr[data-drag-codice="${CSS.escape(cd)}"]`);
+        if (r) r.classList.add('ab-row-dragging');
+      });
+      root.classList.add('ab-dnd-active');
+    });
+
+    root.addEventListener('dragend', () => {
+      root.querySelectorAll('.ab-row-dragging').forEach(r => r.classList.remove('ab-row-dragging'));
+      root.querySelectorAll('.ab-drop-hover').forEach(t => t.classList.remove('ab-drop-hover'));
+      root.classList.remove('ab-dnd-active');
+    });
+
+    root.addEventListener('dragover', (ev) => {
+      const tgt = ev.target.closest('[data-drop-macro]');
+      if (!tgt) return;
+      ev.preventDefault();
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+      tgt.classList.add('ab-drop-hover');
+    });
+
+    root.addEventListener('dragleave', (ev) => {
+      const tgt = ev.target.closest('[data-drop-macro]');
+      if (!tgt) return;
+      // dragleave si attiva anche entrando nei figli — verifichiamo
+      // di stare davvero uscendo dal box
+      if (!tgt.contains(ev.relatedTarget)) {
+        tgt.classList.remove('ab-drop-hover');
+      }
+    });
+
+    root.addEventListener('drop', (ev) => {
+      const tgt = ev.target.closest('[data-drop-macro]');
+      if (!tgt || !ev.dataTransfer) return;
+      ev.preventDefault();
+      tgt.classList.remove('ab-drop-hover');
+
+      let codici = [];
+      try {
+        codici = JSON.parse(ev.dataTransfer.getData('application/x-ab-codici') || '[]');
+      } catch (e) { codici = []; }
+      if (codici.length === 0) return;
+
+      const macroId = tgt.dataset.dropMacro;
+      const finalId = (macroId === '__non_mappati__') ? '' : macroId;
+
+      let mosso = 0;
+      for (const cd of codici) {
+        const cur = (Projects.getProgetto().mapping || {})[cd] || '';
+        if (cur === finalId) continue;
+        Projects.aggiornaMappingSottoconto(cd, finalId);
+        mosso++;
+      }
+      if (mosso > 0) {
+        UI.aggiornaStatusBar('modificato');
+      }
+      renderMacroSezioni();
+    });
+  }
+
+  function _aggiornaSelCount() {
+    const span = document.querySelector('[data-sel-count]');
+    if (!span) return;
+    const n = _selectedCodici.size;
+    span.textContent = n > 0 ? `· ${n} selezionato${n === 1 ? '' : 'i'} (Shift+click per aggiungere/togliere)` : '';
   }
 
   function _dropdownMacroaree(codiceSottoconto, currentId, macroAree) {
