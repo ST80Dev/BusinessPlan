@@ -63,13 +63,18 @@ const UI = (() => {
 
     // Aggiorna header
     const titoli = {
-      'home':           'Home',
-      'importa':        'Importa bilancio',
-      'dati-partenza':  'Dati di partenza',
-      'driver':         'Driver & Parametri',
-      'eventi':         'Eventi',
-      'prospetti':      'Prospetti futuri',
-      'dashboard':      'Dashboard KPI'
+      'home':            'Home',
+      'importa':         'Importa bilancio',
+      'dati-partenza':   'Dati di partenza',
+      'driver':          'Driver & Parametri',
+      'eventi':          'Eventi',
+      'prospetti':       'Prospetti futuri',
+      'dashboard':       'Dashboard KPI',
+      'ab-importa-ce':   'Importa CE',
+      'ab-mappatura':    'Mappatura sottoconti',
+      'ab-storico':      'Storico & medie',
+      'ab-budget':       'Budget anno',
+      'ab-consuntivo':   'Consuntivo'
     };
     const headerTitle = document.getElementById('header-title');
     if (headerTitle) headerTitle.textContent = titoli[sezione] || sezione;
@@ -103,6 +108,21 @@ const UI = (() => {
       case 'dashboard':
         _renderDashboard();
         break;
+      case 'ab-importa-ce':
+        BudgetUI.renderImportaCE();
+        break;
+      case 'ab-mappatura':
+        BudgetUI.renderMacroSezioni();
+        break;
+      case 'ab-storico':
+        BudgetUI.renderStorico();
+        break;
+      case 'ab-budget':
+        BudgetUI.renderBudget();
+        break;
+      case 'ab-consuntivo':
+        BudgetUI.renderConsuntivo();
+        break;
       default:
         content.innerHTML = '';
     }
@@ -123,14 +143,19 @@ const UI = (() => {
     const progetto = Projects.getProgetto();
     if (!progetto) return;
 
-    // Badge scenario
-    const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
-    badges.innerHTML = `
-      <span class="header-badge header-badge-scenario">${scenarioLabels[progetto.meta.scenario] || progetto.meta.scenario}</span>
-      <span class="header-badge header-badge-anno">${progetto.meta.scenario === 'costituenda' ? 'Inizio' : 'Base'}: ${progetto.meta.anno_base}</span>
-    `;
+    if (progetto.meta.modulo === 'ab') {
+      badges.innerHTML = `
+        <span class="header-badge header-badge-scenario">Analisi Costi &amp; Budget</span>
+        <span class="header-badge header-badge-anno">Anno: ${progetto.meta.anno_corrente}</span>
+      `;
+    } else {
+      const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
+      badges.innerHTML = `
+        <span class="header-badge header-badge-scenario">${scenarioLabels[progetto.meta.scenario] || progetto.meta.scenario}</span>
+        <span class="header-badge header-badge-anno">${progetto.meta.scenario === 'costituenda' ? 'Inizio' : 'Base'}: ${progetto.meta.anno_base}</span>
+      `;
+    }
 
-    // Pulsanti salva
     actions.innerHTML = `
       <div class="btn btn-ghost btn-sm" onclick="UI.navigate('home')" title="Torna alla home">⌂ Home</div>
       <div class="btn btn-primary btn-sm" onclick="Projects.salvaProgetto()">Salva progetto</div>
@@ -222,6 +247,8 @@ const UI = (() => {
    * @param {Object} progetto
    */
   function onProgettoAperto(progetto) {
+    const modulo = progetto.meta.modulo || 'bp';
+
     // Aggiorna sidebar info progetto
     const nameEl = document.getElementById('sidebar-project-name');
     const metaEl = document.getElementById('sidebar-project-meta');
@@ -230,27 +257,36 @@ const UI = (() => {
       nameEl.classList.remove('text-muted');
     }
     if (metaEl) {
-      const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
-      metaEl.textContent = `${progetto.meta.anno_base} · ${scenarioLabels[progetto.meta.scenario] || progetto.meta.scenario}`;
+      if (modulo === 'ab') {
+        metaEl.textContent = `Analisi Costi · ${progetto.meta.anno_corrente}`;
+      } else {
+        const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
+        metaEl.textContent = `${progetto.meta.anno_base} · ${scenarioLabels[progetto.meta.scenario] || progetto.meta.scenario}`;
+      }
     }
 
-    // Mostra link modifica
+    // Mostra link modifica solo per BP (la modale modifica è BP-specific)
     const editEl = document.getElementById('sidebar-project-edit');
-    if (editEl) editEl.classList.remove('hidden');
+    if (editEl) {
+      if (modulo === 'bp') editEl.classList.remove('hidden');
+      else                 editEl.classList.add('hidden');
+    }
 
-    // Abilita voci navigazione
-    document.querySelectorAll('.sidebar-nav-item.disabled').forEach(el => {
-      el.classList.remove('disabled');
+    // Mostra solo le voci sidebar del modulo corrente, abilitate.
+    // data-modulo="*" → sempre visibile (Home).
+    document.querySelectorAll('.sidebar-nav-item').forEach(el => {
+      const m = el.dataset.modulo;
+      const visible = (m === '*' || m === modulo);
+      el.classList.toggle('hidden', !visible);
+      if (visible) el.classList.remove('disabled');
     });
 
-    // Aggiorna status bar
     aggiornaStatusBar('pronto');
-
-    // Aggiorna indicatori sidebar
     _aggiornaIndicatoriSidebar();
 
-    // Naviga alla sezione dati di partenza
-    navigate('dati-partenza');
+    // Naviga alla prima sezione del modulo
+    if (modulo === 'ab') navigate('ab-importa-ce');
+    else                 navigate('dati-partenza');
 
     mostraNotifica('Progetto "' + progetto.meta.cliente + '" aperto.', 'success');
   }

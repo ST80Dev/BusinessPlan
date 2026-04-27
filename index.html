@@ -37,45 +37,77 @@
     <div class="sidebar-nav">
       <div class="sidebar-nav-section">Navigazione</div>
 
-      <div class="sidebar-nav-item active" data-section="home" onclick="UI.navigate('home')">
+      <div class="sidebar-nav-item active" data-section="home" data-modulo="*" onclick="UI.navigate('home')">
         <span class="sidebar-nav-icon">⌂</span>
         <span>Home</span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="importa" onclick="UI.navigate('importa')">
+      <!-- ── Voci Business Plan (BP) ────────────────────────── -->
+      <div class="sidebar-nav-item disabled" data-section="importa" data-modulo="bp" onclick="UI.navigate('importa')">
         <span class="sidebar-nav-icon">⇪</span>
         <span>Importa bilancio</span>
         <span class="sidebar-nav-status" id="nav-status-importa"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="dati-partenza" onclick="UI.navigate('dati-partenza')">
+      <div class="sidebar-nav-item disabled" data-section="dati-partenza" data-modulo="bp" onclick="UI.navigate('dati-partenza')">
         <span class="sidebar-nav-icon">📋</span>
         <span>Dati di partenza</span>
         <span class="sidebar-nav-status" id="nav-status-dati-partenza"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="driver" onclick="UI.navigate('driver')">
+      <div class="sidebar-nav-item disabled" data-section="driver" data-modulo="bp" onclick="UI.navigate('driver')">
         <span class="sidebar-nav-icon">⚙</span>
         <span>Driver &amp; Parametri</span>
         <span class="sidebar-nav-status" id="nav-status-driver"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="eventi" onclick="UI.navigate('eventi')">
+      <div class="sidebar-nav-item disabled" data-section="eventi" data-modulo="bp" onclick="UI.navigate('eventi')">
         <span class="sidebar-nav-icon">📅</span>
         <span>Eventi</span>
         <span class="sidebar-nav-status" id="nav-status-eventi"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="prospetti" onclick="UI.navigate('prospetti')">
+      <div class="sidebar-nav-item disabled" data-section="prospetti" data-modulo="bp" onclick="UI.navigate('prospetti')">
         <span class="sidebar-nav-icon">📊</span>
         <span>Prospetti futuri</span>
         <span class="sidebar-nav-status" id="nav-status-prospetti"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="dashboard" onclick="UI.navigate('dashboard')">
+      <div class="sidebar-nav-item disabled" data-section="dashboard" data-modulo="bp" onclick="UI.navigate('dashboard')">
         <span class="sidebar-nav-icon">◈</span>
         <span>Dashboard KPI</span>
         <span class="sidebar-nav-status" id="nav-status-dashboard"></span>
+      </div>
+
+      <!-- ── Voci Analisi Costi & Budget (AB) ───────────────── -->
+      <div class="sidebar-nav-item disabled hidden" data-section="ab-importa-ce" data-modulo="ab" onclick="UI.navigate('ab-importa-ce')">
+        <span class="sidebar-nav-icon">⇪</span>
+        <span>Importa CE</span>
+        <span class="sidebar-nav-status" id="nav-status-ab-importa-ce"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="ab-mappatura" data-modulo="ab" onclick="UI.navigate('ab-mappatura')">
+        <span class="sidebar-nav-icon">🗂</span>
+        <span>Mappatura sottoconti</span>
+        <span class="sidebar-nav-status" id="nav-status-ab-mappatura"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="ab-storico" data-modulo="ab" onclick="UI.navigate('ab-storico')">
+        <span class="sidebar-nav-icon">📋</span>
+        <span>Storico &amp; medie</span>
+        <span class="sidebar-nav-status" id="nav-status-ab-storico"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="ab-budget" data-modulo="ab" onclick="UI.navigate('ab-budget')">
+        <span class="sidebar-nav-icon">📊</span>
+        <span>Budget anno</span>
+        <span class="sidebar-nav-status" id="nav-status-ab-budget"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="ab-consuntivo" data-modulo="ab" onclick="UI.navigate('ab-consuntivo')">
+        <span class="sidebar-nav-icon">📈</span>
+        <span>Consuntivo</span>
+        <span class="sidebar-nav-status" id="nav-status-ab-consuntivo"></span>
       </div>
     </div>
 

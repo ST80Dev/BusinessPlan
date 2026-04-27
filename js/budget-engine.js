@@ -15,6 +15,44 @@
 const BudgetEngine = (() => {
 
   /* ──────────────────────────────────────────────────────────
+     Schema macroaree CE — fisso per il modulo AB.
+
+     Ogni voce ha:
+       id        — chiave stabile usata in storico/budget/mapping
+       label     — etichetta visibile
+       sezione   — raggruppamento di prospetto (ricavi | variabili |
+                   fissi | sotto_linea | imposte)
+       tipo      — ricavo | costo
+       var_fisso — variabile | fisso (rilevante solo per costi sopra
+                   la linea; le voci sotto_linea/imposte non concorrono
+                   al break-even)
+       mastri    — codici mastro (XX) tipici del piano dei conti
+                   italiano da cui i sottoconti vengono pre-mappati a
+                   questa macroarea. L'utente può sempre spostare
+                   manualmente sottoconti tra macroaree.
+
+     Le righe RIM_INI / RIM_FIN non hanno un mastro proprio: il valore
+     viene calcolato come Σ saldi Dare (iniziali) e Σ saldi Avere
+     (finali) dei sottoconti dei mastri di variazione (61, 80).
+     ────────────────────────────────────────────────────────── */
+  const MACROAREE_AB = [
+    { id: 'ricavi',       label: 'Ricavi',                                 sezione: 'ricavi',     tipo: 'ricavo', var_fisso: null,        mastri: ['58'] },
+    { id: 'mat_prime',    label: 'Costi p/mat. prime, suss., cons., merci', sezione: 'variabili',  tipo: 'costo',  var_fisso: 'variabile', mastri: ['66'] },
+    { id: 'rim_ini',      label: 'Rimanenze iniziali',                     sezione: 'variabili',  tipo: 'costo',  var_fisso: 'variabile', mastri: [], calcolato: 'rim_iniziali' },
+    { id: 'rim_fin',      label: 'Rimanenze finali',                       sezione: 'variabili',  tipo: 'ricavo', var_fisso: 'variabile', mastri: [], calcolato: 'rim_finali' },
+    { id: 'servizi',      label: 'Costi per servizi',                      sezione: 'fissi',      tipo: 'costo',  var_fisso: 'fisso',     mastri: ['68'] },
+    { id: 'godimento',    label: 'Costi p/godimento beni di terzi',        sezione: 'fissi',      tipo: 'costo',  var_fisso: 'fisso',     mastri: ['70'] },
+    { id: 'personale',    label: 'Costi per il personale',                 sezione: 'fissi',      tipo: 'costo',  var_fisso: 'fisso',     mastri: ['72'] },
+    { id: 'ammortamenti', label: 'Ammortamenti',                           sezione: 'fissi',      tipo: 'costo',  var_fisso: 'fisso',     mastri: ['75'] },
+    { id: 'oneri_gest',   label: 'Oneri diversi di gestione',              sezione: 'fissi',      tipo: 'costo',  var_fisso: 'fisso',     mastri: ['84'] },
+    { id: 'oneri_fin',    label: 'Int. pass. e altri oneri finanz.',       sezione: 'fissi',      tipo: 'costo',  var_fisso: 'fisso',     mastri: ['88'] },
+    { id: 'straordinari', label: 'Oneri straordinari',                     sezione: 'sotto_linea',tipo: 'costo',  var_fisso: null,        mastri: ['95'] },
+    { id: 'altri_ric',    label: 'Altri ricavi e proventi',                sezione: 'sotto_linea',tipo: 'ricavo', var_fisso: null,        mastri: ['64'], filtro_conto: '64/05' },
+    { id: 'altri_prov_f', label: 'Altri proventi finanziari',              sezione: 'sotto_linea',tipo: 'ricavo', var_fisso: null,        mastri: ['87'], includi_conto: '64/15' },
+    { id: 'imposte',      label: 'Imposte sul reddito',                    sezione: 'imposte',    tipo: 'costo',  var_fisso: null,        mastri: ['96'] }
+  ];
+
+  /* ──────────────────────────────────────────────────────────
      Helper interni
      ────────────────────────────────────────────────────────── */
 
@@ -204,6 +242,7 @@ const BudgetEngine = (() => {
   }
 
   return {
+    MACROAREE_AB:       MACROAREE_AB,
     calcolaPctMedie:    calcolaPctMedie,
     calcolaMedieEuro:   calcolaMedieEuro,
     calcolaBudget:      calcolaBudget,

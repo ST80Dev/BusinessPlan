@@ -652,6 +652,9 @@ const Projects = (() => {
    */
   function _nomeFile(meta) {
     const nome = meta.cliente.replace(/[^a-zA-Z0-9À-ú\s_-]/g, '').replace(/\s+/g, '_');
+    if (meta.modulo === 'ab') {
+      return `AB_${nome}_${meta.anno_corrente}.json`;
+    }
     return `BP_${nome}_${meta.anno_base}.json`;
   }
 
@@ -716,11 +719,21 @@ const Projects = (() => {
    * @returns {boolean}
    */
   function _validaProgetto(dati) {
+    if (!dati || typeof dati !== 'object' || !dati.meta) return false;
+    if (typeof dati.meta.cliente !== 'string') return false;
+
+    // Modulo AB
+    if (dati.meta.modulo === 'ab') {
+      return (
+        typeof dati.meta.anno_corrente === 'number' &&
+        Array.isArray(dati.meta.anni_storici) &&
+        dati.macro_sezioni && dati.storico && dati.mapping !== undefined &&
+        dati.budget && dati.consuntivo
+      );
+    }
+
+    // Modulo BP (default per progetti senza meta.modulo, retrocompatibile)
     return (
-      dati &&
-      typeof dati === 'object' &&
-      dati.meta &&
-      typeof dati.meta.cliente === 'string' &&
       typeof dati.meta.anno_base === 'number' &&
       dati.storico &&
       dati.eventi !== undefined
@@ -746,10 +759,13 @@ const Projects = (() => {
     // Aggiungi in cima
     filtered.unshift({
       id,
+      modulo:          progetto.meta.modulo || 'bp',
       cliente:         progetto.meta.cliente,
       settore:         progetto.meta.settore || '',
       anno_base:       progetto.meta.anno_base,
       anni_previsione: progetto.meta.anni_previsione,
+      anno_corrente:   progetto.meta.anno_corrente,
+      anni_storici:    progetto.meta.anni_storici,
       scenario:        progetto.meta.scenario,
       modalita:        progetto.meta.modalita,
       creato:          progetto.meta.creato,
@@ -785,7 +801,8 @@ const Projects = (() => {
    * @returns {string}
    */
   function _idProgetto(meta) {
-    return `${meta.cliente}_${meta.anno_base}_${meta.creato}`.replace(/\s+/g, '_');
+    const anno = meta.anno_base != null ? meta.anno_base : meta.anno_corrente;
+    return `${meta.modulo || 'bp'}_${meta.cliente}_${anno}_${meta.creato}`.replace(/\s+/g, '_');
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -997,11 +1014,107 @@ const Projects = (() => {
   }
 
   /* ──────────────────────────────────────────────────────────
-     Stub Analisi Costi & Budget (implementazione completa: Step 2)
+     Modulo Analisi Costi & Budget — creazione progetto AB
      ────────────────────────────────────────────────────────── */
+
+  /**
+   * Costruisce la struttura dati di un progetto AB.
+   *
+   *   meta.modulo === 'ab' è il discriminatore usato in apri/salva
+   *   e dalla UI per scegliere sidebar e routing.
+   *
+   *   macro_sezioni è una copia profonda di MACROAREE_AB (schema fisso
+   *   da budget-engine.js). Si copia per consentire eventuali override
+   *   futuri specifici del progetto senza mutare la costante globale.
+   *
+   *   storico contiene una entry per ciascuno degli N anni precedenti
+   *   l'anno corrente, vuota: { 'YYYY': {} } in cui le chiavi saranno
+   *   gli id delle macroaree popolati dall'import CE (Step 3).
+   *
+   *   mapping è la tabella sottoconto_codice → macroarea_id, popolata
+   *   dalla UI di mappatura (Step 4). Vuoto alla creazione.
+   *
+   *   budget e consuntivo restano vuoti, popolati negli Step 6 e 7.
+   */
+  function _creaStrutturaAB(meta) {
+    const oggi = new Date().toISOString().split('T')[0];
+    const annoCorr = meta.anno_corrente;
+    const nAnni = meta.anni_storici;
+
+    const anniStorici = [];
+    for (let i = nAnni; i >= 1; i--) anniStorici.push(annoCorr - i);
+
+    const storico = {};
+    anniStorici.forEach(a => { storico[a] = {}; });
+
+    return {
+      meta: {
+        modulo:        'ab',
+        cliente:       meta.cliente,
+        settore:       meta.settore || '',
+        anno_corrente: annoCorr,
+        anni_storici:  anniStorici,
+        creato:        oggi,
+        modificato:    oggi,
+        stato:         'in_lavorazione'
+      },
+      macro_sezioni: JSON.parse(JSON.stringify(BudgetEngine.MACROAREE_AB)),
+      mapping:       {},          // { 'XX/XX/XXX': 'macroarea_id' }
+      storico:       storico,     // { 'YYYY': { macroarea_id: importo } }
+      budget:        {            // { fatturato_ipotizzato, override_pct: {}, override_fissi: {} }
+        fatturato_ipotizzato: null,
+        override_pct:    {},
+        override_fissi:  {}
+      },
+      consuntivo: {
+        frequenza: 'mensile',     // 'mensile' | 'trimestrale'
+        fatturato: {}             // { '01': 1234, '02': ... }
+      }
+    };
+  }
+
   function creaAnalisi() {
+    const dittaEl   = document.getElementById('na-ditta');
+    const settoreEl = document.getElementById('na-settore');
+    const annoEl    = document.getElementById('na-anno-corrente');
+    const anniEl    = document.getElementById('na-anni-storici');
+
+    const cliente   = (dittaEl   && dittaEl.textContent   || '').trim();
+    const settore   = (settoreEl && settoreEl.textContent || '').trim();
+    const annoCorr  = parseInt(((annoEl  && annoEl.textContent)  || '').trim(), 10);
+    const nAnni     = parseInt(((anniEl  && anniEl.textContent)  || '3').trim(), 10);
+
+    const errori = [];
+    if (!cliente) errori.push('Il nome ditta è obbligatorio.');
+    if (isNaN(annoCorr) || annoCorr < 1900 || annoCorr > 2100) errori.push('Anno corrente non valido.');
+    if (isNaN(nAnni) || nAnni < 1 || nAnni > 3) errori.push('Anni di storico deve essere tra 1 e 3.');
+
+    if (errori.length > 0) {
+      UI.mostraNotifica(errori.join(' '), 'error');
+      return;
+    }
+
+    const progetto = _creaStrutturaAB({
+      cliente, settore, anno_corrente: annoCorr, anni_storici: nAnni
+    });
+
+    _progettoCorrente = progetto;
+    _modificato = true;
+    _aggiungiRecente(progetto);
+
     UI.closeModal('modal-nuova-analisi');
-    UI.mostraNotifica('La creazione di analisi sarà attivata nel prossimo step di sviluppo.', 'info');
+    _resetFormNuovaAnalisi();
+    UI.onProgettoAperto(progetto);
+  }
+
+  function _resetFormNuovaAnalisi() {
+    const ids = ['na-ditta', 'na-settore', 'na-anno-corrente'];
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '';
+    });
+    const anni = document.getElementById('na-anni-storici');
+    if (anni) anni.textContent = '3';
   }
 
   /* ── API pubblica ────────────────────────────────────────── */
