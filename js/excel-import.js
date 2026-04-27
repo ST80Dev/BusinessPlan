@@ -37,6 +37,30 @@ const ExcelImport = (() => {
   const RX_LEAF      = /^(\d{2})\/(\d{2})\/(\d{3})$/;
   const RX_MASTRO_5  = /^(\d{2})\/00000$/;
 
+  /* Tabella di traduzione sigle file → id macroarea del modello tool.
+     Usata quando il file Excel ha già le colonne M/sM compilate
+     (es. file di analisi pre-mappato dello studio). Le sigle Mastro
+     (Ric/CVar/CFix/Tax) vengono ignorate ai fini della conversione:
+     l'identificatore è il sotto-Mastro (sM).
+     Le sigle Rim_I/Rim_F sono volutamente assenti: le rimanenze sono
+     calcolate via doppia entry D/A dei mastri 61 e 80
+     (vedi MASTRI_VARIAZIONE_RIMANENZE) e i sottoconti corrispondenti
+     non vengono mappati come righe normali. */
+  const SIGLA_TO_MACROAREA = {
+    RCV: 'ricavi',
+    CAV: 'mat_prime',
+    CSV: 'servizi',
+    CGT: 'godimento',
+    CPE: 'personale',
+    AMM: 'ammortamenti',
+    ODG: 'oneri_gest',
+    INT: 'oneri_fin',
+    OST: 'straordinari',
+    ARP: 'altri_ric',
+    APF: 'altri_prov_f',
+    IMP: 'imposte'
+  };
+
   function _classificaCodice(cod) {
     const m = RX_LEAF.exec(cod);
     if (m) {
@@ -67,7 +91,7 @@ const ExcelImport = (() => {
   function _trovaHeader(rows) {
     for (let r = 0; r < Math.min(rows.length, 30); r++) {
       const row = rows[r];
-      let colCodice = -1, colDescr = -1;
+      let colCodice = -1, colDescr = -1, colM = -1, colSM = -1;
       const colAnni = [];
 
       for (let c = 0; c < row.length; c++) {
@@ -75,12 +99,17 @@ const ExcelImport = (() => {
         if (/^codiceconto$/i.test(v) || /^codice\s*conto$/i.test(v)) colCodice = c;
         if (/^descrizione/i.test(v)) colDescr = c;
         if (/^(19|20)\d{2}$/.test(v)) colAnni.push({ col: c, anno: parseInt(v, 10) });
+        // Colonne opzionali di mappatura pre-compilata: header esattamente "M"
+        // (Mastro) e "sM" (sotto-Mastro), oppure varianti estese tipo
+        // "Macro"/"Macroarea" e "Sotto Macro"/"sotto-macroarea".
+        if (v === 'M' || /^macro(area)?$/i.test(v)) colM = c;
+        if (/^sm$/i.test(v) || /^sotto[\s_-]?macro(area)?$/i.test(v)) colSM = c;
       }
 
       if (colCodice >= 0 && colDescr >= 0 && colAnni.length > 0) {
         // Inferisci colonna D/A: prima colonna a sinistra di ciascun anno
         for (const a of colAnni) a.colDA = a.col - 1;
-        return { rigaHeader: r, colCodice, colDescr, anni: colAnni };
+        return { rigaHeader: r, colCodice, colDescr, colM, colSM, anni: colAnni };
       }
     }
     return null;
@@ -113,6 +142,10 @@ const ExcelImport = (() => {
   /**
    * Parsea il bilancio di verifica e restituisce la sezione CE.
    *
+   * Se il file ha le colonne opzionali "M" e "sM" (mappatura
+   * pre-compilata dallo studio), l'output include anche
+   * `mapping_da_file` e `sigle_sconosciute`.
+   *
    * @param {Array<Array>} rows - matrice celle dal lettore xlsx
    * @returns {{
    *   ditta: string,
@@ -125,7 +158,9 @@ const ExcelImport = (() => {
    *     valori: Object<string, {dare:number, avere:number, netto:number}>
    *   }>,
    *   rimanenze: Object<string, {iniziali:number, finali:number}>,
-   *   warnings: string[]
+   *   warnings: string[],
+   *   mapping_da_file?: Object<string, string|null>,
+   *   sigle_sconosciute?: string[]
    * }}
    */
   function parseBilancioVerifica(rows) {
@@ -152,6 +187,14 @@ const ExcelImport = (() => {
     const sottoconti = [];
     const rimanenzePerAnno = {};
     anni.forEach(a => { rimanenzePerAnno[a] = { iniziali: 0, finali: 0 }; });
+
+    // Mappatura pre-compilata dal file (Caso B). Popolata solo se il file
+    // ha la colonna sM. Valore = id macroarea valido, oppure null se la
+    // sigla letta non è riconosciuta (in tal caso il sottoconto resta
+    // non mappato e l'utente lo classificherà manualmente in Step 4).
+    const mappingDaFile     = {};
+    const sigleSconosciute  = new Set();
+    const haColMappatura    = (header.colSM >= 0);
 
     for (let r = pivotRiga + 1; r < rows.length; r++) {
       const row = rows[r];
@@ -187,13 +230,34 @@ const ExcelImport = (() => {
         sottomastro: cls.ss,
         valori
       });
+
+      // Estrazione sigla dal file (se la colonna sM esiste). Saltiamo i
+      // sottoconti dei mastri di variazione rimanenze: confluiscono nel
+      // blocco rimanenze calcolato e non vanno mappati come righe normali
+      // (anche se nel file portano sigla Rim_I/Rim_F).
+      if (haColMappatura && MASTRI_VARIAZIONE_RIMANENZE.indexOf(cls.mm) < 0) {
+        const sigla = String(row[header.colSM] || '').trim();
+        if (sigla) {
+          const macroId = SIGLA_TO_MACROAREA[sigla];
+          if (macroId) {
+            mappingDaFile[codice] = macroId;
+          } else {
+            // Sigla non riconosciuta: il sottoconto viene importato ma
+            // resta esplicitamente non mappato (null sovrascrive il
+            // default euristico durante il merge nella UI).
+            mappingDaFile[codice] = null;
+            sigleSconosciute.add(sigla);
+          }
+        }
+        // sigla vuota → niente nel mapping_da_file: fallback al default
+      }
     }
 
     if (sottoconti.length === 0) {
       warnings.push('Nessun sottoconto CE trovato dopo il pivot. Verificare il formato del file.');
     }
 
-    return {
+    const result = {
       ditta,
       anni,
       pivot_riga: pivotRiga,
@@ -201,6 +265,19 @@ const ExcelImport = (() => {
       rimanenze: rimanenzePerAnno,
       warnings
     };
+
+    if (haColMappatura) {
+      result.mapping_da_file    = mappingDaFile;
+      result.sigle_sconosciute  = Array.from(sigleSconosciute);
+      if (sigleSconosciute.size > 0) {
+        warnings.push(
+          'Sigle in colonna sM non riconosciute: ' + result.sigle_sconosciute.join(', ') +
+          '. I sottoconti corrispondenti restano non mappati.'
+        );
+      }
+    }
+
+    return result;
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -313,6 +390,7 @@ const ExcelImport = (() => {
   return {
     PIVOT_CE,
     MASTRI_VARIAZIONE_RIMANENZE,
+    SIGLA_TO_MACROAREA,
     parseBilancioVerifica,
     defaultMapping,
     calcolaStorico,
