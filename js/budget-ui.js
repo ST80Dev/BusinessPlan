@@ -296,12 +296,227 @@ const BudgetUI = (() => {
   }
 
   /* ──────────────────────────────────────────────────────────
-     Placeholder per le sezioni successive (Step 4, 6, 7)
+     MAPPATURA SOTTOCONTI → MACROAREE
+
+     L'utente vede ogni sottoconto raggruppato sotto la macroarea
+     attualmente assegnata. Cambiando il dropdown il sottoconto si
+     sposta in un'altra macroarea, lo storico viene ricalcolato e
+     la pagina viene re-renderizzata. I sottoconti dei mastri di
+     variazione rimanenze (61, 80) sono read-only — confluiscono
+     nel calcolo automatico delle rim. iniziali/finali.
      ────────────────────────────────────────────────────────── */
   function renderMacroSezioni() {
     const c = document.getElementById('content');
     if (!c) return;
-    c.innerHTML = _placeholder('Mappatura sottoconti', 'Editor mappatura sottoconto → macroarea con override variabile/fisso. Disponibile nel prossimo step.');
+    const progetto = Projects.getProgetto();
+    if (!progetto || !Array.isArray(progetto.sottoconti_ce) || progetto.sottoconti_ce.length === 0) {
+      c.innerHTML = _placeholder('Mappatura sottoconti', 'Importa prima il CE da Excel per popolare i sottoconti.');
+      return;
+    }
+
+    const macroAree = progetto.macro_sezioni;
+    const mapping   = progetto.mapping || {};
+
+    // Raggruppa: per ogni macroarea la lista dei sottoconti mappati;
+    // più due gruppi speciali "Non mappato" e "In rimanenze".
+    const gruppi = {};
+    macroAree.forEach(m => { if (!m.calcolato) gruppi[m.id] = []; });
+
+    const nonMappati = [];
+    const inRimanenze = [];
+
+    for (const s of progetto.sottoconti_ce) {
+      if (ExcelImport.MASTRI_VARIAZIONE_RIMANENZE.indexOf(s.mastro) >= 0) {
+        inRimanenze.push(s);
+        continue;
+      }
+      const macroId = mapping[s.codice];
+      if (macroId && gruppi[macroId]) gruppi[macroId].push(s);
+      else nonMappati.push(s);
+    }
+
+    // Ordina sottoconti dentro ciascun gruppo per codice
+    const sortByCod = (a, b) => a.codice.localeCompare(b.codice);
+    Object.values(gruppi).forEach(arr => arr.sort(sortByCod));
+    nonMappati.sort(sortByCod);
+    inRimanenze.sort(sortByCod);
+
+    // Stats header
+    const totale = progetto.sottoconti_ce.length;
+    const mappati = totale - nonMappati.length - inRimanenze.length;
+
+    let html = `
+      <div class="ab-mappatura">
+        <div class="ab-mappatura-head">
+          <h2>Mappatura sottoconti → macroaree</h2>
+          <p class="text-muted">
+            Per ciascun sottoconto puoi cambiare la macroarea di destinazione tramite il menu a tendina.
+            I sottoconti dei mastri 61 e 80 (variazione rimanenze) confluiscono automaticamente nelle
+            rimanenze iniziali/finali e non sono modificabili. Per "promuovere" un sottoconto dei
+            costi fissi a costo variabile (es. <em>Lavorazioni di terzi</em>), spostalo in
+            <strong>Altri costi variabili</strong>.
+          </p>
+          <div class="ab-mappatura-stats">
+            <span><strong>${totale}</strong> sottoconti CE totali</span>
+            <span><strong>${mappati}</strong> mappati</span>
+            <span><strong>${nonMappati.length}</strong> non mappati</span>
+            <span><strong>${inRimanenze.length}</strong> in rimanenze (calcolato)</span>
+          </div>
+        </div>
+    `;
+
+    // Sezione "Non mappato" in alto se non vuota
+    if (nonMappati.length > 0) {
+      html += _renderGruppoSottoconti({
+        id: '__non_mappati__',
+        label: 'Sottoconti non mappati',
+        descrizione: 'Da assegnare a una macroarea',
+        sottoconti: nonMappati,
+        macroAree: macroAree,
+        progetto: progetto,
+        readonly: false,
+        evidenza: 'warn'
+      });
+    }
+
+    // Sezioni di prospetto in ordine
+    const sezioniProspetto = [
+      { sez: 'ricavi',      titolo: 'Ricavi' },
+      { sez: 'variabili',   titolo: 'Costi variabili' },
+      { sez: 'fissi',       titolo: 'Costi fissi di gestione' },
+      { sez: 'sotto_linea', titolo: 'Voci sotto la linea' },
+      { sez: 'imposte',     titolo: 'Imposte' }
+    ];
+
+    sezioniProspetto.forEach(({ sez, titolo }) => {
+      const macroSez = macroAree.filter(m => m.sezione === sez && !m.calcolato);
+      if (macroSez.length === 0) return;
+      html += `<div class="ab-mappatura-sezione-titolo">${_escapeHtml(titolo)}</div>`;
+      macroSez.forEach(m => {
+        html += _renderGruppoSottoconti({
+          id: m.id,
+          label: m.label,
+          descrizione: _descrizioneMacro(m),
+          sottoconti: gruppi[m.id] || [],
+          macroAree: macroAree,
+          progetto: progetto,
+          readonly: false
+        });
+      });
+    });
+
+    // Sezione "In rimanenze" in fondo
+    if (inRimanenze.length > 0) {
+      html += `<div class="ab-mappatura-sezione-titolo">Confluiscono nelle rimanenze (calcolato)</div>`;
+      html += _renderGruppoSottoconti({
+        id: '__rimanenze__',
+        label: 'Mastri 61 e 80 — variazione rimanenze',
+        descrizione: 'Σ Dare → Rim. iniziali; Σ Avere → Rim. finali',
+        sottoconti: inRimanenze,
+        macroAree: macroAree,
+        progetto: progetto,
+        readonly: true
+      });
+    }
+
+    html += '</div>';
+    c.innerHTML = html;
+  }
+
+  function _descrizioneMacro(m) {
+    const flag = m.var_fisso ? (m.var_fisso === 'variabile' ? 'Variabile' : 'Fisso') : '';
+    const mastri = m.mastri && m.mastri.length > 0 ? `Mastri tipici: ${m.mastri.join(', ')}` : '';
+    return [flag, mastri].filter(Boolean).join(' · ');
+  }
+
+  function _renderGruppoSottoconti(opts) {
+    const { id, label, descrizione, sottoconti, macroAree, progetto, readonly, evidenza } = opts;
+    const evidenzaClass = evidenza === 'warn' ? ' ab-gruppo-warn' : '';
+    const anni = progetto.meta.anni_storici;
+
+    let html = `
+      <div class="ab-gruppo${evidenzaClass}" data-gruppo="${id}">
+        <div class="ab-gruppo-head">
+          <div class="ab-gruppo-title">${_escapeHtml(label)} <span class="ab-gruppo-count">(${sottoconti.length})</span></div>
+          ${descrizione ? `<div class="ab-gruppo-sub text-muted">${_escapeHtml(descrizione)}</div>` : ''}
+        </div>
+    `;
+
+    if (sottoconti.length === 0) {
+      html += '<div class="ab-gruppo-vuoto text-muted">— nessun sottoconto —</div>';
+      html += '</div>';
+      return html;
+    }
+
+    html += `
+      <table class="ab-mappatura-tab">
+        <thead>
+          <tr>
+            <th>Codice</th>
+            <th>Descrizione</th>
+            <th class="num">Mastro</th>
+    `;
+    anni.forEach(a => { html += `<th class="num">${a}</th>`; });
+    html += `<th>Macroarea</th></tr></thead><tbody>`;
+
+    for (const s of sottoconti) {
+      html += `
+        <tr>
+          <td class="codice-conto">${_escapeHtml(s.codice)}</td>
+          <td>${_escapeHtml(s.descrizione || '')}</td>
+          <td class="num codice-conto">${_escapeHtml(s.mastro || '')}</td>
+      `;
+      anni.forEach(a => {
+        const v = s.valori && s.valori[a];
+        const importo = v ? Math.max(v.dare, v.avere) : 0;
+        html += `<td class="num">${_fmtEuro(importo)}</td>`;
+      });
+      if (readonly) {
+        html += `<td class="ab-mappatura-readonly text-muted">— rimanenze —</td>`;
+      } else {
+        const cur = (progetto.mapping || {})[s.codice] || '';
+        html += `<td>${_dropdownMacroaree(s.codice, cur, macroAree)}</td>`;
+      }
+      html += '</tr>';
+    }
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  function _dropdownMacroaree(codiceSottoconto, currentId, macroAree) {
+    const sezioniProspetto = [
+      { sez: 'ricavi',      titolo: 'Ricavi' },
+      { sez: 'variabili',   titolo: 'Costi variabili' },
+      { sez: 'fissi',       titolo: 'Costi fissi' },
+      { sez: 'sotto_linea', titolo: 'Sotto la linea' },
+      { sez: 'imposte',     titolo: 'Imposte' }
+    ];
+
+    let html = `<select class="form-select form-select-sm ab-macro-select" data-codice="${_escapeHtml(codiceSottoconto)}" onchange="BudgetUI.cambiaMacroarea(this.dataset.codice, this.value)">`;
+    html += `<option value=""${currentId === '' ? ' selected' : ''}>— Non mappato —</option>`;
+    sezioniProspetto.forEach(({ sez, titolo }) => {
+      const macroSez = macroAree.filter(m => m.sezione === sez && !m.calcolato);
+      if (macroSez.length === 0) return;
+      html += `<optgroup label="${_escapeHtml(titolo)}">`;
+      macroSez.forEach(m => {
+        const sel = m.id === currentId ? ' selected' : '';
+        html += `<option value="${_escapeHtml(m.id)}"${sel}>${_escapeHtml(m.label)}</option>`;
+      });
+      html += '</optgroup>';
+    });
+    html += '</select>';
+    return html;
+  }
+
+  /**
+   * Handler chiamato dal dropdown: aggiorna mapping, ricalcola
+   * storico e re-renderizza la pagina.
+   */
+  function cambiaMacroarea(codice, macroareaId) {
+    Projects.aggiornaMappingSottoconto(codice, macroareaId);
+    UI.aggiornaStatusBar('modificato');
+    renderMacroSezioni();
   }
 
   function renderBudget() {
@@ -335,7 +550,8 @@ const BudgetUI = (() => {
     scegliFileXlsx:     scegliFileXlsx,
     caricaFixture:      caricaFixture,
     annullaImport:      annullaImport,
-    applicaImport:      applicaImport
+    applicaImport:      applicaImport,
+    cambiaMacroarea:    cambiaMacroarea
   };
 
 })();

@@ -1148,6 +1148,27 @@ const Projects = (() => {
     _modificato = true;
   }
 
+  /**
+   * Aggiorna la macroarea destinataria di un sottoconto e ricalcola
+   * lo storico. Usato dalla UI di mappatura (Step 4).
+   *
+   *   macroarea_id può essere null/'' per rimuovere la mappatura
+   *   (sottoconto "non mappato").
+   */
+  function aggiornaMappingSottoconto(codice, macroarea_id) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    if (!_progettoCorrente.mapping) _progettoCorrente.mapping = {};
+
+    if (macroarea_id) {
+      _progettoCorrente.mapping[codice] = macroarea_id;
+    } else {
+      delete _progettoCorrente.mapping[codice];
+    }
+
+    _progettoCorrente.storico = ExcelImport.ricalcolaStorico(_progettoCorrente);
+    _modificato = true;
+  }
+
   /* ── API pubblica ────────────────────────────────────────── */
   return {
     creaProgetto,
@@ -1172,7 +1193,8 @@ const Projects = (() => {
     CATEGORIE_INVESTIMENTO,
     // Modulo Analisi Costi & Budget
     creaAnalisi,
-    applicaImportCE
+    applicaImportCE,
+    aggiornaMappingSottoconto
   };
 
 })();

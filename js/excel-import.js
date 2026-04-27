@@ -300,12 +300,30 @@ const ExcelImport = (() => {
     return storico;
   }
 
+  /**
+   * Ricalcola lo storico dato un progetto AB già importato.
+   * Usato dopo modifiche al mapping (Step 4): ricostruisce gli
+   * importi per macroarea senza bisogno del file xlsx originale.
+   *
+   * @param {Object} progetto - progetto AB con sottoconti_ce, rimanenze, mapping, macro_sezioni
+   * @returns {Object} storico
+   */
+  function ricalcolaStorico(progetto) {
+    const fakeParsed = {
+      anni:       progetto.meta.anni_storici,
+      sottoconti: progetto.sottoconti_ce || [],
+      rimanenze:  progetto.rimanenze || {}
+    };
+    return calcolaStorico(fakeParsed, progetto.mapping || {}, progetto.macro_sezioni);
+  }
+
   return {
     PIVOT_CE,
     MASTRI_VARIAZIONE_RIMANENZE,
     parseBilancioVerifica,
     defaultMapping,
-    calcolaStorico
+    calcolaStorico,
+    ricalcolaStorico
   };
 
 })();
