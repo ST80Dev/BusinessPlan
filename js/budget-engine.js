@@ -335,6 +335,7 @@ const BudgetEngine = (() => {
 
       return {
         valori,
+        fatturato: fattAnnoCompleto,
         cdv, totVar, mdc, fissi, totCosti,
         sottoLineaNetto, utileAnteImposte, imposte: imposteVal, utileNetto
       };
@@ -343,15 +344,33 @@ const BudgetEngine = (() => {
     const consuntivato = _calcolaVista(fattConsuntivato, fattConsuntivato, frazione);
     const proiezione   = _calcolaVista(fattConsuntivato, fattProiettato, 1);
 
+    // Vista per periodo (mese o trimestre): variabili pro-quota sul fatturato
+    // del periodo, fissi pro-rata su 1/N dell'anno. Le righe sotto-linea e
+    // imposte seguono lo stesso pro-rata dei fissi (sono comunque stime).
+    const periodiKeys = cons.frequenza === 'trimestrale'
+      ? ['1', '2', '3', '4']
+      : ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    const fraz1Periodo = periodiTotali > 0 ? 1 / periodiTotali : 0;
+
+    const perPeriodo = {};
+    periodiKeys.forEach(k => {
+      const fattPeriodo = Number(fattPerPeriodo[k]) || 0;
+      perPeriodo[k] = _calcolaVista(fattPeriodo, fattPeriodo, fraz1Periodo);
+      perPeriodo[k].fatturato_periodo = fattPeriodo;
+      perPeriodo[k].inserito = fattPeriodo > 0;
+    });
+
     return {
       frequenza:              cons.frequenza,
       periodi_totali:         periodiTotali,
       periodi_chiusi:         periodiChiusi,
+      periodi_keys:           periodiKeys,
       frazione_anno:          frazione,
       fatturato_consuntivato: fattConsuntivato,
       fatturato_proiettato:   fattProiettato,
       consuntivato,
       proiezione,
+      per_periodo:            perPeriodo,
       budget
     };
   }
