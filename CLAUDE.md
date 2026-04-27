@@ -2,6 +2,10 @@
 
 File di riferimento per Claude Code e per chi sviluppa il tool.
 
+**Sigle ricorrenti:**
+- **BP** = sezione "Business Plan" (proiezioni pluriennali, motore mensile, prospetti previsionali)
+- **A&B** = sezione "Analisi & Budget" (analisi storica per aree e budget annuale, in arrivo)
+
 **Documenti correlati:**
 - `README.md` — guida all'uso per l'operatore di studio
 - `caratteristiche_funzionali_fiscali.txt` — cardini normativi e contabili (riferimento per la semantica di calcolo: ricavi, costi, mutui, ammortamenti, circolante, IRES/IRAP/IVA, PN, rendiconto, controlli). Da consultare e aggiornare quando cambia la logica funzionale o la normativa di riferimento
