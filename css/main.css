@@ -1809,6 +1809,121 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   padding-bottom: 6px;
 }
 
+/* ── Modulo AB — Mappatura sottoconti ────────────────────────── */
+.ab-mappatura { padding: 24px; max-width: 1280px; }
+
+.ab-mappatura-head h2 {
+  font-size: 22px;
+  margin: 0 0 8px 0;
+  color: var(--color-text);
+}
+.ab-mappatura-head p {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 14px 0;
+}
+.ab-mappatura-stats {
+  display: flex;
+  gap: 22px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.ab-mappatura-stats strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.ab-mappatura-sezione-titolo {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-text-muted);
+  margin: 28px 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ab-gruppo {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.ab-gruppo-warn {
+  border-color: var(--color-warning);
+  box-shadow: 0 0 0 2px var(--color-warning-bg);
+}
+.ab-gruppo-head {
+  padding: 10px 14px;
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+.ab-gruppo-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.ab-gruppo-count {
+  color: var(--color-text-muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.ab-gruppo-sub {
+  font-size: 12px;
+  margin-top: 2px;
+}
+.ab-gruppo-vuoto {
+  padding: 14px;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.ab-mappatura-tab {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ab-mappatura-tab th,
+.ab-mappatura-tab td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: middle;
+}
+.ab-mappatura-tab thead th {
+  background: var(--color-surface);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.ab-mappatura-tab td.codice-conto,
+.ab-mappatura-tab th.codice-conto {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+.ab-mappatura-tab td.num,
+.ab-mappatura-tab th.num {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.ab-mappatura-tab tr:hover td {
+  background: var(--color-surface-alt);
+}
+.ab-mappatura-readonly {
+  font-style: italic;
+  font-size: 12px;
+}
+.ab-macro-select {
+  min-width: 220px;
+}
+
 /* ── Print ───────────────────────────────────────────────────── */
 @media print {
   #sidebar, #header, #footer { display: none; }
