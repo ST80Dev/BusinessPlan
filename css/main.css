@@ -2059,78 +2059,6 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   font-weight: 600;
 }
 
-.ab-consuntivo-input {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 18px 20px;
-  margin-bottom: 18px;
-}
-.ab-consuntivo-input h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 14px 0;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.ab-consuntivo-grid {
-  display: grid;
-  gap: 8px;
-}
-.ab-consuntivo-grid-mensile {
-  grid-template-columns: repeat(6, 1fr);
-}
-.ab-consuntivo-grid-trimestrale {
-  grid-template-columns: repeat(4, 1fr);
-}
-.ab-periodo-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.ab-periodo-label {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-.ab-periodo-input {
-  padding: 8px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-surface);
-  text-align: right;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
-  min-height: 22px;
-}
-.ab-periodo-input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}
-.ab-periodo-input:empty::before {
-  content: attr(data-placeholder);
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-.ab-consuntivo-totale {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--color-border);
-  text-align: right;
-  font-size: 14px;
-  color: var(--color-text-muted);
-}
-.ab-consuntivo-totale strong {
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--color-text);
-  font-size: 16px;
-  margin-left: 8px;
-}
-
 .ab-consuntivo-kpi {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2138,9 +2066,93 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   margin-bottom: 22px;
 }
 
+/* Tabella consuntivo con prime 4 colonne fisse e mesi/trimestri scrollabili */
+.ab-consuntivo-tab-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  max-width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+.ab-consuntivo-tab-scroll-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.ab-consuntivo-tab-scroll-table th,
+.ab-consuntivo-tab-scroll-table td {
+  white-space: nowrap;
+}
+.ab-col-stick {
+  position: sticky;
+  background: var(--color-surface);
+  z-index: 1;
+}
+.ab-consuntivo-tab-scroll-table thead .ab-col-stick {
+  z-index: 3;
+}
+.ab-consuntivo-tab-scroll-table tbody .ab-col-stick {
+  z-index: 2;
+}
+.ab-col-stick-1 { left: 0;     min-width: 240px; max-width: 240px; }
+.ab-col-stick-2 { left: 240px; min-width: 130px; box-shadow: none; }
+.ab-col-stick-3 { left: 370px; min-width: 150px; }
+.ab-col-stick-4 {
+  left: 520px;
+  min-width: 160px;
+  box-shadow: 4px 0 6px -4px rgba(0,0,0,0.18);
+}
+.ab-col-periodo {
+  min-width: 110px;
+  text-align: right;
+}
+.ab-col-periodo-chiuso {
+  background: rgba(55,138,221,0.06);
+}
+
+/* Sfondi opachi per le righe speciali sulle celle sticky (necessario perché
+   position:sticky richiede un background non-trasparente per coprire le celle
+   sottostanti durante lo scroll) */
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-verde .ab-col-stick,
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-verde-forte .ab-col-stick,
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-arancio .ab-col-stick,
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-arancio-forte .ab-col-stick {
+  background: inherit;
+}
+.ab-consuntivo-tab-scroll-table thead tr .ab-col-stick {
+  background: var(--color-surface-alt, var(--color-surface));
+}
+
+/* Cella editabile fatturato dentro la tabella (riga FATTURATO) */
+.ab-periodo-input-cell {
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  min-height: 22px;
+  cursor: text;
+}
+.ab-periodo-input-cell:hover {
+  border-color: var(--color-border);
+}
+.ab-periodo-input-cell:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+}
+.ab-periodo-input-cell:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
 .ab-consuntivo-tab td:first-child,
 .ab-consuntivo-tab th:first-child {
-  width: 38%;
+  width: auto;
 }
 
 .ab-delta-good { color: var(--color-success); font-weight: 600; }

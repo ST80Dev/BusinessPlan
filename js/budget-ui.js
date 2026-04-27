@@ -1037,9 +1037,10 @@ const BudgetUI = (() => {
     const annoCorrente = progetto.meta.anno_corrente;
 
     const periodi = pre.frequenza === 'trimestrale' ? _TRIMESTRI : _MESI;
-    const periodiKeys = pre.frequenza === 'trimestrale'
-      ? ['1','2','3','4']
-      : ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    const periodiBrevi = pre.frequenza === 'trimestrale'
+      ? ['1° trim.','2° trim.','3° trim.','4° trim.']
+      : ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    const periodiKeys = pre.periodi_keys;
 
     let html = `
       <div class="ab-consuntivo">
@@ -1047,10 +1048,10 @@ const BudgetUI = (() => {
         <div class="ab-consuntivo-head">
           <h2>Consuntivo & preconsuntivo ${annoCorrente}</h2>
           <p class="text-muted">
-            Inserisci il fatturato realmente fatturato nei periodi chiusi dell'anno.
-            Il sistema proietta a fine anno mantenendo lo stesso ritmo di fatturazione e
-            applica le percentuali di costo del budget per stimare i totali e i
-            risultati attesi.
+            Inserisci il fatturato realmente fatturato nelle colonne ${pre.frequenza === 'trimestrale' ? 'trimestrali' : 'mensili'} a destra.
+            Il sistema proietta a fine anno mantenendo lo stesso ritmo di fatturazione,
+            applica le percentuali di costo del budget per stimare i risultati attesi e
+            distribuisce i costi fissi pro-rata sul periodo.
           </p>
         </div>
 
@@ -1067,35 +1068,7 @@ const BudgetUI = (() => {
           <div class="ab-consuntivo-stats text-muted">
             <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
             <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
-          </div>
-        </div>
-
-        <div class="ab-consuntivo-input">
-          <h3>Fatturato per periodo</h3>
-          <div class="ab-consuntivo-grid ab-consuntivo-grid-${pre.frequenza}">
-    `;
-
-    periodiKeys.forEach((k, i) => {
-      const valore = cons.fatturato && cons.fatturato[k];
-      const display = (typeof valore === 'number' && valore > 0) ? _fmtEuro(valore) : '';
-      html += `
-        <div class="ab-periodo-cell">
-          <div class="ab-periodo-label">${_escapeHtml(periodi[i])}</div>
-          <div class="amount-field ab-periodo-input"
-               contenteditable="true"
-               data-cons-field="fatturato.${k}"
-               data-input-type="euro"
-               data-placeholder="0"
-               onblur="BudgetUI.consuntivoBlur(this)"
-               onkeydown="BudgetUI.budgetKeyDown(event)">${display}</div>
-        </div>
-      `;
-    });
-
-    html += `
-          </div>
-          <div class="ab-consuntivo-totale">
-            Totale fatturato consuntivato: <strong>${_fmtEuro(pre.fatturato_consuntivato)}</strong>
+            <span>Consuntivato: <strong>${_fmtEuro(pre.fatturato_consuntivato)}</strong></span>
           </div>
         </div>
 
@@ -1117,13 +1090,18 @@ const BudgetUI = (() => {
           </div>
         </div>
 
-        <table class="ab-storico-tab ab-storico-prospetto ab-consuntivo-tab">
+        <div class="ab-consuntivo-tab-scroll">
+        <table class="ab-storico-tab ab-storico-prospetto ab-consuntivo-tab ab-consuntivo-tab-scroll-table">
           <thead>
             <tr>
-              <th>Macroarea</th>
-              <th class="num">Budget €</th>
-              <th class="num">Proiezione fine anno</th>
-              <th class="num">Δ vs budget</th>
+              <th class="ab-col-stick ab-col-stick-1">Macroarea</th>
+              <th class="num ab-col-stick ab-col-stick-2">Budget €</th>
+              <th class="num ab-col-stick ab-col-stick-3">Proiezione fine anno</th>
+              <th class="num ab-col-stick ab-col-stick-4">Δ vs budget</th>
+              ${periodiKeys.map((k, i) => {
+                const isChiuso = pre.per_periodo[k] && pre.per_periodo[k].inserito;
+                return `<th class="num ab-col-periodo ${isChiuso ? 'ab-col-periodo-chiuso' : ''}" title="${_escapeHtml(periodi[i])}">${_escapeHtml(periodiBrevi[i])}</th>`;
+              }).join('')}
             </tr>
           </thead>
           <tbody>
@@ -1159,13 +1137,21 @@ const BudgetUI = (() => {
       { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde-forte', segnoBuono: +1 }
     ];
 
+    const colspanTot = 4 + periodiKeys.length;
+    const valPerPeriodo = (rowDef, k) => {
+      const vp = pre.per_periodo[k];
+      if (!vp) return 0;
+      if (rowDef.tipo === 'totale') return vp[rowDef.id] || 0;
+      return (vp.valori[rowDef.id] && vp.valori[rowDef.id].valore) || 0;
+    };
+
     for (const r of righe) {
       if (r.tipo === 'spacer') {
-        html += `<tr class="ab-prospetto-spacer"><td colspan="4">&nbsp;</td></tr>`;
+        html += `<tr class="ab-prospetto-spacer"><td colspan="${colspanTot}">&nbsp;</td></tr>`;
         continue;
       }
       if (r.tipo === 'sezione') {
-        html += `<tr class="ab-sezione"><td colspan="4">${_escapeHtml(r.label)}</td></tr>`;
+        html += `<tr class="ab-sezione"><td colspan="${colspanTot}">${_escapeHtml(r.label)}</td></tr>`;
         continue;
       }
 
@@ -1187,15 +1173,40 @@ const BudgetUI = (() => {
         : '';
 
       const d = _delta(valProiez, valBudget);
+
+      // Celle dei periodi: editabili solo sulla riga FATTURATO (totale)
+      const isFatturato = r.tipo === 'totale' && r.id === 'fatturato';
+      const celleP = periodiKeys.map(k => {
+        const vp = pre.per_periodo[k] || {};
+        const isChiuso = vp.inserito;
+        const periodCls = `num ab-col-periodo ${isChiuso ? 'ab-col-periodo-chiuso' : ''}`;
+        if (isFatturato) {
+          const valore = cons.fatturato && cons.fatturato[k];
+          const display = (typeof valore === 'number' && valore > 0) ? _fmtEuro(valore) : '';
+          return `<td class="${periodCls}">
+            <div class="amount-field ab-periodo-input-cell"
+                 contenteditable="true"
+                 data-cons-field="fatturato.${k}"
+                 data-input-type="euro"
+                 data-placeholder="0"
+                 onblur="BudgetUI.consuntivoBlur(this)"
+                 onkeydown="BudgetUI.budgetKeyDown(event)">${display}</div>
+          </td>`;
+        }
+        const v = valPerPeriodo(r, k) * segno;
+        return `<td class="${periodCls}">${Math.abs(v) < 0.005 ? '' : _fmtEuro(v)}</td>`;
+      }).join('');
+
       html += `<tr class="${cls}">
-        <td>${_escapeHtml(r.label)}</td>
-        <td class="num">${_fmtEuro(valBudget * segno)}</td>
-        <td class="num">${_fmtEuro(valProiez * segno)}</td>
-        <td class="num">${_fmtDelta({ abs: d.abs * segno, pct: d.pct }, r.segnoBuono)}</td>
+        <td class="ab-col-stick ab-col-stick-1">${_escapeHtml(r.label)}</td>
+        <td class="num ab-col-stick ab-col-stick-2">${_fmtEuro(valBudget * segno)}</td>
+        <td class="num ab-col-stick ab-col-stick-3">${_fmtEuro(valProiez * segno)}</td>
+        <td class="num ab-col-stick ab-col-stick-4">${_fmtDelta({ abs: d.abs * segno, pct: d.pct }, r.segnoBuono)}</td>
+        ${celleP}
       </tr>`;
     }
 
-    html += '</tbody></table></div>';
+    html += '</tbody></table></div></div>';
     c.innerHTML = html;
   }
 
@@ -1205,7 +1216,14 @@ const BudgetUI = (() => {
     const parsed = _parseEuro(txt);
     Projects.aggiornaConsuntivo(field, parsed);
     UI.aggiornaStatusBar('modificato');
+    // Preserva la posizione di scroll orizzontale tra un re-render e l'altro
+    const scroller = document.querySelector('.ab-consuntivo-tab-scroll');
+    const scrollLeft = scroller ? scroller.scrollLeft : 0;
     renderConsuntivo();
+    if (scrollLeft) {
+      const newScroller = document.querySelector('.ab-consuntivo-tab-scroll');
+      if (newScroller) newScroller.scrollLeft = scrollLeft;
+    }
   }
 
   function cambiaFrequenza(freq) {
