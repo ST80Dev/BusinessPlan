@@ -165,10 +165,6 @@ const UI = (() => {
     const editEl = document.getElementById('sidebar-project-edit');
     if (editEl) editEl.classList.add('hidden');
 
-    const recenti = Projects.leggiRecenti();
-    const recentiBP = recenti.filter(r => (r.tipo || 'bp') === 'bp');
-    const recentiAB = recenti.filter(r => r.tipo === 'ab');
-
     let html = `
       <div class="home-welcome">
         <h1>Studio Commerciale</h1>
@@ -195,17 +191,6 @@ const UI = (() => {
           apriOnclick: "Projects.apriProgetto()"
         })}
       </div>
-
-      <div class="home-recenti-grid">
-        <div class="home-recenti-col">
-          <div class="projects-section-title">Business plan recenti</div>
-          ${_renderListaRecenti(recentiBP, 'bp')}
-        </div>
-        <div class="home-recenti-col">
-          <div class="projects-section-title">Analisi recenti</div>
-          ${_renderListaRecenti(recentiAB, 'ab')}
-        </div>
-      </div>
     `;
 
     content.innerHTML = html;
@@ -225,75 +210,6 @@ const UI = (() => {
         '</div>' +
       '</div>'
     );
-  }
-
-  /**
-   * Lista compatta di recenti, filtrata per tipo (bp o ab).
-   */
-  function _renderListaRecenti(recenti, tipo) {
-    if (!recenti || recenti.length === 0) {
-      return (
-        '<div class="projects-grid">' +
-          '<div class="projects-empty">' +
-            '<div class="projects-empty-icon">📂</div>' +
-            '<p>Nessun progetto recente.</p>' +
-          '</div>' +
-        '</div>'
-      );
-    }
-
-    const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
-    const scenarioClass  = { sp_ce: 'tag-sp-ce', sp_only: 'tag-sp-only', costituenda: 'tag-costituenda' };
-
-    let html = '<div class="projects-grid">';
-    for (const r of recenti) {
-      let metaInner = '';
-      let tagHtml = '';
-
-      if (tipo === 'ab') {
-        const anniSt = Array.isArray(r.anni_storici) ? r.anni_storici.join(', ') : (r.anni_storici || '—');
-        metaInner =
-          '<span>Anno corrente: ' + (r.anno_corrente || '—') + '</span>' +
-          '<span>Storico: ' + anniSt + '</span>' +
-          (r.settore ? '<span>' + _escapeHtml(r.settore) + '</span>' : '');
-        tagHtml = '<span class="project-card-tag tag-ab">Analisi</span>';
-      } else {
-        const anniPrev = Array.isArray(r.anni_previsione) ? r.anni_previsione.join(', ') : (r.anni_previsione || '—');
-        const tagLabel = scenarioLabels[r.scenario] || r.scenario || 'BP';
-        const tagClass = scenarioClass[r.scenario] || 'tag-sp-ce';
-        metaInner =
-          '<span>Anno base: ' + (r.anno_base || '—') + '</span>' +
-          '<span>Prev: ' + anniPrev + '</span>' +
-          (r.settore ? '<span>' + _escapeHtml(r.settore) + '</span>' : '');
-        tagHtml = '<span class="project-card-tag ' + tagClass + '">' + tagLabel + '</span>';
-      }
-
-      const nome = r.cliente || r.ditta || 'Senza nome';
-
-      html +=
-        '<div class="project-card" onclick="UI._apriDaRecente(\'' + _escapeAttr(r.id) + '\')">' +
-          '<div class="project-card-name">' + _escapeHtml(nome) + '</div>' +
-          '<div class="project-card-meta">' + metaInner + '</div>' +
-          '<div>' + tagHtml + '</div>' +
-          '<div class="project-card-date">Modificato: ' + (r.modificato || r.creato || '—') + '</div>' +
-          '<div class="project-card-actions" onclick="event.stopPropagation()">' +
-            '<div class="btn btn-ghost btn-sm" onclick="Projects.richiediElimina(\'' + _escapeAttr(r.id) + '\', \'' + _escapeAttr(nome) + '\')">Elimina</div>' +
-          '</div>' +
-        '</div>';
-    }
-    html += '</div>';
-    return html;
-  }
-
-  /**
-   * Apre un progetto dalla lista recenti.
-   * I recenti contengono solo metadata, quindi mostra un prompt per caricare il file.
-   * @param {string} id
-   */
-  function _apriDaRecente(id) {
-    // I recenti sono solo metadata — serve il file JSON completo
-    mostraNotifica('Per riaprire questo progetto, carica il file JSON corrispondente.', 'info');
-    Projects.apriProgetto();
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -5170,7 +5086,6 @@ const UI = (() => {
     aggiornaStatusBar,
     mostraNotifica,
     apriModificaCliente,
-    _apriDaRecente,
     // Importa bilancio
     importaCambiaVoce,
     importaSalvaRegole,

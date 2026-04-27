@@ -551,16 +551,6 @@ html, body {
   margin-top: 6px;
 }
 
-.home-recenti-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-  gap: 28px;
-}
-
-.home-recenti-col {
-  min-width: 0;
-}
-
 .tag-ab { background: var(--color-success-bg); color: var(--color-success); }
 
 /* ── Modali ─────────────────────────────────────────────────── */
