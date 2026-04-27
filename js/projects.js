@@ -1117,6 +1117,37 @@ const Projects = (() => {
     if (anni) anni.textContent = '3';
   }
 
+  /**
+   * Applica al progetto AB corrente l'import CE già parsato e
+   * mappato. Sovrascrive sottoconti_ce, mapping e storico.
+   *
+   *   - meta.cliente viene aggiornato con la ditta letta dal file
+   *     se nessuno era stato impostato in fase di creazione.
+   *   - meta.anni_storici viene riscritto con gli anni del file (può
+   *     accadere che differisca dal valore ipotizzato in creazione,
+   *     in tal caso il file vince perché è la fonte autoritativa).
+   *   - storico viene rigenerato dalle aggregazioni.
+   *
+   * @param {Object} parsed   - output di ExcelImport.parseBilancioVerifica
+   * @param {Object} mapping  - { codice_sottoconto: macroarea_id }
+   * @param {Object} storico  - output di ExcelImport.calcolaStorico
+   */
+  function applicaImportCE(parsed, mapping, storico) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+
+    if (!_progettoCorrente.meta.cliente && parsed.ditta) {
+      _progettoCorrente.meta.cliente = parsed.ditta;
+    }
+    _progettoCorrente.meta.anni_storici = parsed.anni.slice();
+
+    _progettoCorrente.sottoconti_ce = parsed.sottoconti;
+    _progettoCorrente.rimanenze     = parsed.rimanenze;
+    _progettoCorrente.mapping       = mapping;
+    _progettoCorrente.storico       = storico;
+
+    _modificato = true;
+  }
+
   /* ── API pubblica ────────────────────────────────────────── */
   return {
     creaProgetto,
@@ -1140,7 +1171,8 @@ const Projects = (() => {
     creaEvento,
     CATEGORIE_INVESTIMENTO,
     // Modulo Analisi Costi & Budget
-    creaAnalisi
+    creaAnalisi,
+    applicaImportCE
   };
 
 })();
