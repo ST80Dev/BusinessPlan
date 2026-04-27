@@ -25,7 +25,10 @@ const BudgetUI = (() => {
      ────────────────────────────────────────────────────────── */
   function _fmtEuro(n) {
     if (typeof n !== 'number' || !isFinite(n)) return '—';
-    return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // useGrouping: 'always' forza il separatore migliaia anche per
+    // numeri 4 cifre (default it-IT con minimumGroupingDigits=2 li
+    // lascia non raggruppati: "5000" invece di "5.000")
+    return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
   }
 
   function _escapeHtml(s) {
@@ -720,7 +723,7 @@ const BudgetUI = (() => {
   }
   function _fmtKpi(n) {
     if (typeof n !== 'number' || !isFinite(n)) return '—';
-    return n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' €';
+    return n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: 'always' }) + ' €';
   }
   function _fmtPctSigned(p) {
     if (typeof p !== 'number' || !isFinite(p)) return '';
