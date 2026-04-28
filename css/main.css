@@ -1922,22 +1922,56 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 
 /* ── Modulo AB — Budget anno ─────────────────────────────────── */
-.ab-budget { padding: 24px; max-width: 1280px; }
+.ab-budget {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-rows: auto;
+  gap: 20px;
+  align-items: start;
+}
+.ab-budget > .ab-budget-card {
+  grid-column: 2;
+  grid-row: 1;
+}
+.ab-budget > table {
+  grid-column: 1;
+  grid-row: 1;
+}
+@media (max-width: 1100px) {
+  .ab-budget {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ab-budget > .ab-budget-card,
+  .ab-budget > table {
+    grid-column: 1;
+  }
+  .ab-budget > .ab-budget-card { grid-row: 1; }
+  .ab-budget > table           { grid-row: 2; }
+}
 
 .ab-budget-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  padding: 10px 14px;
-  margin-bottom: 16px;
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) 2fr;
-  gap: 14px;
-  align-items: center;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   position: sticky;
-  top: 0;
+  top: var(--ab-head-h, 16px);
   z-index: 5;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+@media (max-width: 1100px) {
+  /* In layout stacked, riprende l'aspetto orizzontale storico per non
+     sprecare verticalità su schermi stretti. */
+  .ab-budget-card {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 2fr;
+    gap: 14px;
+    align-items: center;
+  }
 }
 .ab-budget-fatturato {
   display: flex;
@@ -1974,9 +2008,15 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 
 .ab-budget-kpi {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+}
+@media (max-width: 1100px) {
+  .ab-budget-kpi {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 .ab-budget-kpi-card {
   border-radius: 8px;
@@ -1986,7 +2026,7 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 /* Versione compatta KPI dentro l'header del Budget anno */
 .ab-budget-card .ab-budget-kpi-card {
   border-radius: 5px;
-  padding: 6px 10px;
+  padding: 8px 10px;
 }
 .ab-kpi-verde {
   background: var(--color-success-bg);
@@ -2023,23 +2063,60 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   color: var(--color-text-muted);
   margin-top: 4px;
 }
-/* Versione compatta dei testi KPI dentro l'header del Budget anno */
+/* Testi KPI nella sidebar Budget anno — compatti ma leggibili */
 .ab-budget-card .ab-kpi-label {
-  font-size: 9px;
-  letter-spacing: 0.4px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
   margin-bottom: 2px;
 }
 .ab-budget-card .ab-kpi-value {
-  font-size: 14px;
+  font-size: 16px;
 }
 .ab-budget-card .ab-kpi-sub {
-  font-size: 10px;
-  margin-top: 1px;
+  font-size: 11px;
+  margin-top: 2px;
+}
+@media (max-width: 1100px) {
+  /* Layout stacked: torna alla versione molto compatta dell'header
+     orizzontale per non sprecare verticalità su schermi stretti. */
+  .ab-budget-card .ab-kpi-label { font-size: 9px; margin-bottom: 1px; }
+  .ab-budget-card .ab-kpi-value { font-size: 14px; }
+  .ab-budget-card .ab-kpi-sub   { font-size: 10px; margin-top: 1px; }
 }
 
 .ab-budget-tab td:first-child,
 .ab-budget-tab th:first-child {
   width: 30%;
+}
+
+/* Budget anno: stessa compattazione verticale dello Storico CE per
+   permettere la lettura dell'intero prospetto senza scroll. */
+.ab-budget .ab-storico-tab {
+  font-size: 13px;
+}
+.ab-budget .ab-storico-tab th,
+.ab-budget .ab-storico-tab td {
+  padding: 4px 10px;
+}
+.ab-budget .ab-storico-tab thead th {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  font-size: 12px;
+}
+.ab-budget .ab-storico-prospetto tr.ab-prospetto-spacer td {
+  padding: 2px 0;
+  height: 2px;
+}
+.ab-budget .ab-storico-prospetto tr.ab-sezione td {
+  padding-top: 7px;
+  padding-bottom: 4px;
+  font-size: 12px;
+}
+.ab-budget .ab-storico-prospetto tr.ab-prospetto-tot td {
+  font-size: 12px;
+}
+.ab-budget .ab-storico-prospetto tr.ab-prospetto-tot td.num {
+  font-size: 13px;
 }
 
 .ab-budget-input {
