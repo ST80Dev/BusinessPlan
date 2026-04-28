@@ -2089,18 +2089,18 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   width: 30%;
 }
 
-/* Budget anno: stessa compattazione verticale dello Storico CE per
+/* Budget anno: compattazione verticale allineata al Consuntivo per
    permettere la lettura dell'intero prospetto senza scroll. */
 .ab-budget .ab-storico-tab {
   font-size: 13px;
 }
 .ab-budget .ab-storico-tab th,
 .ab-budget .ab-storico-tab td {
-  padding: 4px 10px;
+  padding: 3px 10px;
 }
 .ab-budget .ab-storico-tab thead th {
-  padding-top: 7px;
-  padding-bottom: 7px;
+  padding-top: 6px;
+  padding-bottom: 6px;
   font-size: 12px;
 }
 .ab-budget .ab-storico-prospetto tr.ab-prospetto-spacer td {
@@ -2108,12 +2108,14 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   height: 2px;
 }
 .ab-budget .ab-storico-prospetto tr.ab-sezione td {
-  padding-top: 7px;
-  padding-bottom: 4px;
+  padding-top: 6px;
+  padding-bottom: 3px;
   font-size: 12px;
 }
 .ab-budget .ab-storico-prospetto tr.ab-prospetto-tot td {
   font-size: 12px;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 .ab-budget .ab-storico-prospetto tr.ab-prospetto-tot td.num {
   font-size: 13px;
@@ -2138,6 +2140,19 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   content: attr(data-placeholder);
   color: var(--color-text-muted);
   font-style: italic;
+}
+
+/* Input cardine del budget: il fatturato ipotizzato che fa da driver di
+   tutti i costi variabili calcolati a percentuale. Evidenziato con
+   bordo accentato per segnalarne il ruolo centrale nel prospetto. */
+.ab-budget-input-cardine {
+  border-color: var(--color-accent);
+  border-width: 2px;
+  font-weight: 700;
+  background: var(--color-accent-light);
+}
+.ab-budget-input-cardine:focus {
+  border-color: var(--color-accent);
 }
 
 .ab-budget-tab tr.ab-fonte-override td {
