@@ -67,6 +67,9 @@ const UI = (() => {
     // Aggiorna header actions
     _renderHeaderActions(sezione);
 
+    // Aggiorna azioni di pagina nel footer (es. Esporta PDF)
+    _renderFooterActions(sezione);
+
     // Render contenuto
     const content = document.getElementById('content');
     if (!content) return;
@@ -198,6 +201,26 @@ const UI = (() => {
       <div class="btn btn-ghost btn-sm" onclick="UI.navigate('home')" title="Torna alla home">⌂ Home</div>
       <div class="btn btn-primary btn-sm" onclick="Projects.salvaProgetto()">Salva progetto</div>
     `;
+  }
+
+  /* Azioni di pagina nel footer: per ora un singolo "Esporta PDF" che
+     vale per la sezione corrente (Budget AB, Consuntivo AB). Mantiene
+     i pulsanti fuori dal contenuto, dove rubavano spazio al prospetto.
+     Estendibile aggiungendo case per altre sezioni che vogliano un
+     pulsante di azione contestuale. */
+  function _renderFooterActions(sezione) {
+    const c = document.getElementById('footer-actions');
+    if (!c) return;
+    let html = '';
+    switch (sezione) {
+      case 'ab-budget':
+        html = `<div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfBudget()" title="Esporta il prospetto budget in PDF">📄 Esporta PDF</div>`;
+        break;
+      case 'ab-consuntivo':
+        html = `<div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfConsuntivo()" title="Esporta il consuntivo in PDF">📄 Esporta PDF</div>`;
+        break;
+    }
+    c.innerHTML = html;
   }
 
   /* ──────────────────────────────────────────────────────────

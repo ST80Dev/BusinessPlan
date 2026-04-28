@@ -946,6 +946,41 @@ const BudgetUI = (() => {
     return (p > 0 ? '+' : '') + s + '%';
   }
 
+  /**
+   * Valore "Base storica" della singola macroarea, coerente con la cella
+   * mostrata nel prospetto: media triennale € per ricavi, costi variabili
+   * e rimanenze; ultimo anno arrotondato al centinaio per fissi,
+   * sotto-linea e imposte.
+   */
+  function _baseStoricaVoce(macroSezioni, b, id) {
+    const m = (macroSezioni || []).find(x => x.id === id);
+    const dato = b.valori[id];
+    if (!dato) return 0;
+    const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato && id !== 'ricavi';
+    return isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0);
+  }
+
+  /**
+   * Aggregati di prospetto sulla "Base storica": stessa logica del
+   * BudgetEngine ma usando come valore per voce la cella Base storica.
+   * Restituisce gli stessi id usati per le righe-totale (fatturato, cdv,
+   * mdc, fissi, totCosti, utileAnteImposte, utileNetto).
+   */
+  function _calcolaBaseStoricaTotali(progetto, b) {
+    const macroSez = progetto.macro_sezioni || [];
+    const v = id => _baseStoricaVoce(macroSez, b, id);
+    const fatturato = v('ricavi');
+    const cdv = v('mat_prime') + v('altri_var') + v('rim_ini') - v('rim_fin');
+    const fissi = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
+      .reduce((s, k) => s + v(k), 0);
+    const mdc = fatturato - cdv;
+    const totCosti = cdv + fissi;
+    const sottoLineaNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
+    const utileAnteImposte = mdc - fissi + sottoLineaNetto;
+    const utileNetto = utileAnteImposte - v('imposte');
+    return { fatturato, cdv, mdc, fissi, totCosti, utileAnteImposte, utileNetto };
+  }
+
   function renderBudget() {
     const c = document.getElementById('content');
     if (!c) return;
@@ -1008,10 +1043,6 @@ const BudgetUI = (() => {
     let html = `
       <div class="ab-budget">
 
-        <div class="ab-pdf-toolbar ab-no-print">
-          <div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfBudget()" title="Esporta il prospetto budget in PDF (apre la finestra di stampa del browser)">📄 Esporta PDF</div>
-        </div>
-
         <div class="ab-budget-card">
           <div class="ab-budget-fatturato">
             <div class="ab-budget-fatturato-label">Fatturato ipotizzato anno ${annoCorrente}</div>
@@ -1066,6 +1097,14 @@ const BudgetUI = (() => {
 
     const totaleColspan = 6;
 
+    // Totali "Base storica": ricalcoliamo gli aggregati con la stessa
+    // logica del budget, ma usando come valore di partenza per ogni voce
+    // la cella "Base storica" (media € per variabili/calcolati e ricavi,
+    // ultimo anno arrotondato per fissi/sotto-linea/imposte). Così i
+    // totali mostrati nella colonna Base storica sono coerenti col valore
+    // teorico che il budget partirebbe a usare in assenza di override.
+    const baseTot = _calcolaBaseStoricaTotali(progetto, b);
+
     for (const r of righe) {
       if (r.tipo === 'spacer') {
         html += `<tr class="ab-prospetto-spacer"><td colspan="${totaleColspan}">&nbsp;</td></tr>`;
@@ -1081,11 +1120,13 @@ const BudgetUI = (() => {
       if (r.tipo === 'totale') {
         const valBudget = b[r.id] || 0;
         const pctBudget = b.fatturato > 0 ? valBudget / b.fatturato : 0;
+        const valBase = baseTot[r.id] || 0;
+        const pctBase = baseTot.fatturato > 0 ? valBase / baseTot.fatturato : 0;
         const cls = `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}`;
         html += `<tr class="${cls}">
           <td>${_escapeHtml(r.label)}</td>
-          <td class="num"></td>
-          <td class="num"></td>
+          <td class="num">${_fmtEuroInt(valBase * segno)}</td>
+          <td class="num">${_fmtPct(pctBase * segno)}</td>
           <td class="num"></td>
           <td class="num">${_fmtEuroInt(valBudget * segno)}</td>
           <td class="num">${_fmtPct(pctBudget * segno)}</td>
@@ -1361,10 +1402,6 @@ const BudgetUI = (() => {
     let html = `
       <div class="ab-consuntivo">
 
-        <div class="ab-pdf-toolbar ab-no-print">
-          <div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfConsuntivo()" title="Esporta il consuntivo in PDF (apre la finestra di stampa del browser)">📄 Esporta PDF</div>
-        </div>
-
         <div class="ab-consuntivo-head">
           <div class="ab-consuntivo-head-left">
             <div class="ab-consuntivo-controls">
@@ -1578,11 +1615,12 @@ const BudgetUI = (() => {
        4) si chiama window.print(); l'evento `afterprint` ripulisce
           il DOM e rimuove la classe.
 
-     Il bottone in pagina è dentro `.ab-pdf-toolbar.ab-no-print`, che
-     è nascosto in stampa (vedi css/main.css).
+     Il bottone "Esporta PDF" vive nel footer (`#footer-actions`,
+     popolato dal router `UI.navigate()` in core/ui.js). Il footer è
+     già nascosto in @media print, quindi nessuna classe ad-hoc.
      ────────────────────────────────────────────────────────── */
 
-  function _printPdf(html, title) {
+  function _printPdf(html, title, orientation) {
     if (document.activeElement && typeof document.activeElement.blur === 'function') {
       document.activeElement.blur();
     }
@@ -1595,12 +1633,18 @@ const BudgetUI = (() => {
     cont.innerHTML = html;
     document.body.appendChild(cont);
     document.body.classList.add('ab-pdf-mode');
+    // Default landscape (consuntivo: molte colonne periodo). Per il
+    // budget passiamo 'portrait' perché 5 colonne stanno comode in
+    // verticale e il layout risulta più leggibile su A4.
+    const portrait = orientation === 'portrait';
+    if (portrait) document.body.classList.add('ab-pdf-portrait');
 
     const oldTitle = document.title;
     if (title) document.title = title;
 
     function cleanup() {
       document.body.classList.remove('ab-pdf-mode');
+      document.body.classList.remove('ab-pdf-portrait');
       const c = document.getElementById('ab-pdf-print');
       if (c && c.parentNode) c.parentNode.removeChild(c);
       document.title = oldTitle;
@@ -1683,6 +1727,9 @@ const BudgetUI = (() => {
     const colspanTot = 5;
     let body = '';
 
+    // Totali "Base storica" (stessa logica della vista a video).
+    const baseTot = _calcolaBaseStoricaTotali(progetto, b);
+
     // Numerazione note utente: assegniamo l'indice nell'ordine in cui le voci
     // compaiono nel prospetto (più leggibile in piè di pagina).
     const noteUtente = [];
@@ -1702,11 +1749,13 @@ const BudgetUI = (() => {
       if (r.tipo === 'totale') {
         const valBudget = b[r.id] || 0;
         const pctBudget = b.fatturato > 0 ? valBudget / b.fatturato : 0;
+        const valBase = baseTot[r.id] || 0;
+        const pctBase = baseTot.fatturato > 0 ? valBase / baseTot.fatturato : 0;
         const cls = `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}`;
         body += `<tr class="${cls}">
           <td>${_escapeHtml(r.label)}</td>
-          <td class="num"></td>
-          <td class="num"></td>
+          <td class="num">${_fmtEuroInt(valBase * segno)}</td>
+          <td class="num">${_fmtPct(pctBase * segno)}</td>
           <td class="num">${_fmtEuroInt(valBudget * segno)}</td>
           <td class="num">${_fmtPct(pctBudget * segno)}</td>
         </tr>`;
@@ -1806,7 +1855,7 @@ const BudgetUI = (() => {
     const cliente = (progetto.meta && progetto.meta.cliente) || 'progetto';
     const anno = (progetto.meta && progetto.meta.anno_corrente) || '';
     const html = _renderBudgetPdfHtml(progetto);
-    _printPdf(html, `Budget ${anno} — ${cliente}`);
+    _printPdf(html, `Budget ${anno} — ${cliente}`, 'portrait');
   }
 
   /* ── Consuntivo: PDF ─────────────────────────────────────── */
