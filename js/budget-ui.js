@@ -1214,12 +1214,12 @@ const BudgetUI = (() => {
     return { abs: a - b, pct: b !== 0 ? (a - b) / Math.abs(b) : null };
   }
 
-  function _fmtDelta(d, segnoBuono) {
+  function _fmtDelta(d, segnoBuono, intero) {
     // segnoBuono: +1 se più alto è meglio (ricavi, utile), -1 se più alto è peggio (costi)
     if (d == null || !isFinite(d.abs)) return '';
     const cls = (d.abs * (segnoBuono || 0) >= 0) ? 'ab-delta-good' : 'ab-delta-bad';
     const segno = d.abs > 0 ? '+' : '';
-    const eur = segno + _fmtEuro(d.abs);
+    const eur = segno + (intero ? _fmtEuroInt(d.abs) : _fmtEuro(d.abs));
     const pct = d.pct != null ? ` (${segno}${(d.pct * 100).toFixed(1).replace('.', ',')}%)` : '';
     return `<span class="${cls}">${eur}${pct}</span>`;
   }
@@ -1263,7 +1263,7 @@ const BudgetUI = (() => {
                 <div class="ab-consuntivo-stats text-muted">
                   <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
                   <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
-                  <span>Consuntivato: <strong>${_fmtEuro(pre.fatturato_consuntivato)}</strong></span>
+                  <span>Consuntivato: <strong>${_fmtEuroInt(pre.fatturato_consuntivato)}</strong></span>
                 </div>
               </div>
             </div>
@@ -1333,10 +1333,10 @@ const BudgetUI = (() => {
       { tipo: 'macro',   id: 'straordinari',     label: 'Oneri straordinari', segno: -1,          segnoBuono: +1 },
       { tipo: 'macro',   id: 'altri_ric',        label: 'Altri ricavi e proventi',                segnoBuono: +1 },
       { tipo: 'macro',   id: 'altri_prov_f',     label: 'Altri proventi finanziari',              segnoBuono: +1 },
-      { tipo: 'totale',  id: 'utileAnteImposte', label: 'UTILE ANTE IMPOSTE',                     evidenza: 'verde', segnoBuono: +1 },
+      { tipo: 'totale',  id: 'utileAnteImposte', label: 'UTILE ANTE IMPOSTE',                     evidenza: 'verde-forte', segnoBuono: +1 },
       { tipo: 'spacer' },
       { tipo: 'macro',   id: 'imposte',          label: 'Imposte sul reddito',                    segnoBuono: -1 },
-      { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde-forte', segnoBuono: +1 }
+      { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde', segnoBuono: +1 }
     ];
 
     const colspanTot = 4 + periodiKeys.length;
@@ -1384,7 +1384,7 @@ const BudgetUI = (() => {
         const periodCls = `num ab-col-periodo ${isChiuso ? 'ab-col-periodo-chiuso' : ''}`;
         if (isFatturato) {
           const valore = cons.fatturato && cons.fatturato[k];
-          const display = (typeof valore === 'number' && valore > 0) ? _fmtEuro(valore) : '';
+          const display = (typeof valore === 'number' && valore > 0) ? _fmtEuroInt(valore) : '';
           return `<td class="${periodCls}">
             <div class="amount-field ab-periodo-input-cell"
                  contenteditable="true"
@@ -1396,14 +1396,14 @@ const BudgetUI = (() => {
           </td>`;
         }
         const v = valPerPeriodo(r, k) * segno;
-        return `<td class="${periodCls}">${Math.abs(v) < 0.005 ? '' : _fmtEuro(v)}</td>`;
+        return `<td class="${periodCls}">${Math.abs(v) < 0.5 ? '' : _fmtEuroInt(v)}</td>`;
       }).join('');
 
       html += `<tr class="${cls}">
         <td class="ab-col-stick ab-col-stick-1">${_escapeHtml(r.label)}</td>
-        <td class="num ab-col-stick ab-col-stick-2">${_fmtEuro(valBudget * segno)}</td>
-        <td class="num ab-col-stick ab-col-stick-3">${_fmtEuro(valProiez * segno)}</td>
-        <td class="num ab-col-stick ab-col-stick-4">${_fmtDelta({ abs: d.abs * segno, pct: d.pct }, r.segnoBuono)}</td>
+        <td class="num ab-col-stick ab-col-stick-2">${_fmtEuroInt(valBudget * segno)}</td>
+        <td class="num ab-col-stick ab-col-stick-3">${_fmtEuroInt(valProiez * segno)}</td>
+        <td class="num ab-col-stick ab-col-stick-4">${_fmtDelta({ abs: d.abs * segno, pct: d.pct }, r.segnoBuono, true)}</td>
         ${celleP}
       </tr>`;
     }
