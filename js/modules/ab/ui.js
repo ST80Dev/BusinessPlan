@@ -1008,6 +1008,10 @@ const BudgetUI = (() => {
     let html = `
       <div class="ab-budget">
 
+        <div class="ab-pdf-toolbar ab-no-print">
+          <div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfBudget()" title="Esporta il prospetto budget in PDF (apre la finestra di stampa del browser)">📄 Esporta PDF</div>
+        </div>
+
         <div class="ab-budget-card">
           <div class="ab-budget-fatturato">
             <div class="ab-budget-fatturato-label">Fatturato ipotizzato anno ${annoCorrente}</div>
@@ -1357,6 +1361,10 @@ const BudgetUI = (() => {
     let html = `
       <div class="ab-consuntivo">
 
+        <div class="ab-pdf-toolbar ab-no-print">
+          <div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfConsuntivo()" title="Esporta il consuntivo in PDF (apre la finestra di stampa del browser)">📄 Esporta PDF</div>
+        </div>
+
         <div class="ab-consuntivo-head">
           <div class="ab-consuntivo-head-left">
             <div class="ab-consuntivo-controls">
@@ -1553,6 +1561,526 @@ const BudgetUI = (() => {
     renderConsuntivo();
   }
 
+  /* ──────────────────────────────────────────────────────────
+     EXPORT PDF (Budget e Consuntivo)
+
+     Il PDF viene prodotto via window.print() del browser, su un
+     layout dedicato ad alta compatibilità: nessuna libreria esterna,
+     nessun build step. Il flusso è:
+
+       1) si forza il blur dell'eventuale campo attivo (regola UI
+          generale del progetto: evita valori stale);
+       2) si costruisce un container <div id="ab-pdf-print"> con il
+          markup del report;
+       3) si applica al body la classe `ab-pdf-mode` che — via CSS
+          @media print — nasconde tutto il resto e mostra solo il
+          report;
+       4) si chiama window.print(); l'evento `afterprint` ripulisce
+          il DOM e rimuove la classe.
+
+     Il bottone in pagina è dentro `.ab-pdf-toolbar.ab-no-print`, che
+     è nascosto in stampa (vedi css/main.css).
+     ────────────────────────────────────────────────────────── */
+
+  function _printPdf(html, title) {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    // Rimuovi un eventuale container precedente (es. due click rapidi)
+    const old = document.getElementById('ab-pdf-print');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+
+    const cont = document.createElement('div');
+    cont.id = 'ab-pdf-print';
+    cont.innerHTML = html;
+    document.body.appendChild(cont);
+    document.body.classList.add('ab-pdf-mode');
+
+    const oldTitle = document.title;
+    if (title) document.title = title;
+
+    function cleanup() {
+      document.body.classList.remove('ab-pdf-mode');
+      const c = document.getElementById('ab-pdf-print');
+      if (c && c.parentNode) c.parentNode.removeChild(c);
+      document.title = oldTitle;
+      window.removeEventListener('afterprint', cleanup);
+    }
+    window.addEventListener('afterprint', cleanup);
+
+    // Lasciamo al browser un tick per applicare i nuovi stili prima del print
+    setTimeout(function () { window.print(); }, 50);
+  }
+
+  function _oggi() {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${d.getFullYear()}`;
+  }
+
+  function _pdfHeader(progetto, sottotitolo) {
+    const cliente = (progetto.meta && progetto.meta.cliente) || '—';
+    const anno = (progetto.meta && progetto.meta.anno_corrente) || '';
+    return `
+      <div class="ab-pdf-head">
+        <div class="ab-pdf-head-title">
+          <div class="ab-pdf-head-cliente">${_escapeHtml(cliente)}</div>
+          <div class="ab-pdf-head-sub">${_escapeHtml(sottotitolo)}${anno ? ' — anno ' + _escapeHtml(String(anno)) : ''}</div>
+        </div>
+        <div class="ab-pdf-head-meta text-muted">
+          <div>Studio AnaBil · Modulo A&amp;B</div>
+          <div>Data stampa: ${_oggi()}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ── Budget: PDF ─────────────────────────────────────────── */
+
+  function _renderBudgetPdfHtml(progetto) {
+    const b = BudgetEngine.calcolaBudget(progetto);
+    const note = (progetto.budget && progetto.budget.note) || {};
+
+    // KPI riepilogativi (stessi che vedo a video)
+    const fattStorico = b.fatturato_storico_medio;
+    const deltaFattStorico = fattStorico > 0 ? (b.fatturato - fattStorico) / fattStorico : 0;
+    const deltaFattBe = (b.break_even != null && b.break_even > 0)
+      ? (b.fatturato - b.break_even) / b.break_even : null;
+    const mdcPct = b.fatturato > 0 ? b.mdc / b.fatturato : 0;
+    const utileNettoPct = b.fatturato > 0 ? b.utileNetto / b.fatturato : 0;
+
+    const righe = [
+      { tipo: 'sezione', label: 'RICAVI' },
+      { tipo: 'macro',   id: 'ricavi',           label: 'Ricavi' },
+      { tipo: 'totale',  id: 'fatturato',        label: 'FATTURATO',                              evidenza: 'verde-forte' },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'mat_prime',        label: 'Costi p/mat. prime, suss., cons., merci' },
+      { tipo: 'macro',   id: 'altri_var',        label: 'Altri costi variabili',                  nascondiSeZero: true },
+      { tipo: 'macro',   id: 'rim_ini',          label: 'Rimanenze iniziali' },
+      { tipo: 'macro',   id: 'rim_fin',          label: 'Rimanenze finali',                       segno: -1 },
+      { tipo: 'totale',  id: 'cdv',              label: 'COSTO DEL VENDUTO',                      evidenza: 'arancio' },
+      { tipo: 'totale',  id: 'mdc',              label: 'MARGINE DI CONTRIBUZIONE',               evidenza: 'verde' },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'servizi',          label: 'Costi per servizi' },
+      { tipo: 'macro',   id: 'godimento',        label: 'Costi p/godimento beni di terzi' },
+      { tipo: 'macro',   id: 'personale',        label: 'Costi per il personale' },
+      { tipo: 'macro',   id: 'ammortamenti',     label: 'Ammortamenti' },
+      { tipo: 'macro',   id: 'oneri_gest',       label: 'Oneri diversi di gestione' },
+      { tipo: 'macro',   id: 'oneri_fin',        label: 'Int. pass. e altri oneri finanz.' },
+      { tipo: 'totale',  id: 'fissi',            label: 'TOTALE COSTI FISSI',                     evidenza: 'arancio' },
+      { tipo: 'totale',  id: 'totCosti',         label: 'TOTALE COSTI',                           evidenza: 'arancio-forte' },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'straordinari',     label: 'Oneri straordinari', segno: -1 },
+      { tipo: 'macro',   id: 'altri_ric',        label: 'Altri ricavi e proventi' },
+      { tipo: 'macro',   id: 'altri_prov_f',     label: 'Altri proventi finanziari' },
+      { tipo: 'totale',  id: 'utileAnteImposte', label: 'UTILE ANTE IMPOSTE',                     evidenza: 'verde' },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'imposte',          label: 'Imposte sul reddito' },
+      { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde-forte' }
+    ];
+
+    const colspanTot = 5;
+    let body = '';
+
+    // Numerazione note utente: assegniamo l'indice nell'ordine in cui le voci
+    // compaiono nel prospetto (più leggibile in piè di pagina).
+    const noteUtente = [];
+
+    for (const r of righe) {
+      if (r.tipo === 'spacer') {
+        body += `<tr class="ab-prospetto-spacer"><td colspan="${colspanTot}">&nbsp;</td></tr>`;
+        continue;
+      }
+      if (r.tipo === 'sezione') {
+        body += `<tr class="ab-sezione"><td colspan="${colspanTot}">${_escapeHtml(r.label)}</td></tr>`;
+        continue;
+      }
+
+      const segno = r.segno || 1;
+
+      if (r.tipo === 'totale') {
+        const valBudget = b[r.id] || 0;
+        const pctBudget = b.fatturato > 0 ? valBudget / b.fatturato : 0;
+        const cls = `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}`;
+        body += `<tr class="${cls}">
+          <td>${_escapeHtml(r.label)}</td>
+          <td class="num"></td>
+          <td class="num"></td>
+          <td class="num">${_fmtEuroInt(valBudget * segno)}</td>
+          <td class="num">${_fmtPct(pctBudget * segno)}</td>
+        </tr>`;
+        continue;
+      }
+
+      const m = (progetto.macro_sezioni || []).find(x => x.id === r.id);
+      const dato = b.valori[r.id] || { valore: 0, pct: 0, media_euro: 0, media_pct: 0 };
+      if (r.nascondiSeZero && Math.abs(dato.media_euro) < 0.005 && Math.abs(dato.valore) < 0.005) continue;
+
+      const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato && r.id !== 'ricavi';
+      const baseDisplay = isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0);
+
+      // Nota utente: se presente, assegna numero progressivo e lo mostra come [n]
+      const notaTesto = (note[r.id] || '').trim();
+      let notaMark = '';
+      if (notaTesto.length > 0) {
+        const n = noteUtente.length + 1;
+        noteUtente.push({ n, label: r.label, testo: notaTesto });
+        notaMark = ` <sup class="ab-pdf-noteref">[${n}]</sup>`;
+      }
+
+      body += `<tr>
+        <td>${_escapeHtml(r.label)}${notaMark}</td>
+        <td class="num">${_fmtEuroInt(baseDisplay)}</td>
+        <td class="num">${_fmtPct(dato.media_pct)}</td>
+        <td class="num">${_fmtEuroInt(dato.valore * segno)}</td>
+        <td class="num">${_fmtPct(dato.pct * segno)}</td>
+      </tr>`;
+    }
+
+    // KPI block
+    const kpiHtml = `
+      <div class="ab-pdf-kpi">
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Fatturato ipotizzato</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(b.fatturato)} €</div>
+          <div class="ab-pdf-kpi-sub">Storico medio: ${_fmtEuroInt(fattStorico)} € ${fattStorico > 0 ? '(' + _fmtPctSigned(deltaFattStorico) + ' vs ipotizzato)' : ''}</div>
+        </div>
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Margine di contribuzione</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(b.mdc)} €</div>
+          <div class="ab-pdf-kpi-sub">${(mdcPct * 100).toFixed(1).replace('.', ',')}% sul fatturato</div>
+        </div>
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Utile netto</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(b.utileNetto)} €</div>
+          <div class="ab-pdf-kpi-sub">${(utileNettoPct * 100).toFixed(1).replace('.', ',')}% sul fatturato</div>
+        </div>
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Fatturato di break-even</div>
+          <div class="ab-pdf-kpi-value">${b.break_even != null ? _fmtEuroInt(b.break_even) + ' €' : '—'}</div>
+          <div class="ab-pdf-kpi-sub">${deltaFattBe != null ? (b.fatturato >= b.break_even ? _fmtPctSigned(deltaFattBe) + ' sopra il pareggio' : _fmtPctSigned(deltaFattBe) + ' dal pareggio') : 'non calcolabile'}</div>
+        </div>
+      </div>
+    `;
+
+    // Note metodologiche fisse (riprendono i tooltip a video)
+    const noteMetodo = [
+      '<strong>Base storica</strong> — per costi variabili (mat. prime, altri costi variabili) e rimanenze: media triennale degli importi storici. Per costi fissi, sotto-linea e imposte: ultimo anno arrotondato al centinaio (default del budget teorico).',
+      '<strong>% storica</strong> — incidenza media sul fatturato calcolata come media delle incidenze % di ciascun anno storico (non come media degli importi diviso media del fatturato).',
+      '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi, sotto-linea e imposte: importo di partenza (ultimo anno) o override utente. Rimanenze: media € storica o override €.',
+      '<strong>Costo del venduto</strong> = Mat. prime + Altri costi variabili + Rimanenze iniziali − Rimanenze finali.',
+      `<strong>Fatturato di break-even</strong> = (Rim. iniziali − Rim. finali + Σ costi fissi) / (1 − Σ % costi variabili). ${b.break_even != null ? 'Differenza vs ipotizzato: ' + _fmtPctSigned(deltaFattBe || 0) : 'Non calcolabile (denominatore non positivo o costi fissi nulli).'}`
+    ];
+
+    // HTML completo
+    let html = '';
+    html += _pdfHeader(progetto, 'Budget anno');
+    html += kpiHtml;
+    html += '<table class="ab-pdf-tab"><thead><tr>'
+         +    '<th>Macroarea</th>'
+         +    '<th class="num">Base storica</th>'
+         +    '<th class="num">% storica</th>'
+         +    '<th class="num">Budget €</th>'
+         +    '<th class="num">Budget %</th>'
+         +  '</tr></thead><tbody>' + body + '</tbody></table>';
+
+    html += '<div class="ab-pdf-notes"><div class="ab-pdf-notes-title">Note di metodo</div><ol>';
+    for (const t of noteMetodo) html += '<li>' + t + '</li>';
+    html += '</ol></div>';
+
+    if (noteUtente.length > 0) {
+      html += '<div class="ab-pdf-notes"><div class="ab-pdf-notes-title">Annotazioni per voce</div><ol>';
+      for (const nu of noteUtente) {
+        html += '<li><strong>[' + nu.n + '] ' + _escapeHtml(nu.label) + '</strong> — ' + _escapeHtml(nu.testo) + '</li>';
+      }
+      html += '</ol></div>';
+    }
+
+    return html;
+  }
+
+  function esportaPdfBudget() {
+    const progetto = Projects.getProgetto();
+    if (!progetto || !progetto.sottoconti_ce || progetto.sottoconti_ce.length === 0) return;
+    const cliente = (progetto.meta && progetto.meta.cliente) || 'progetto';
+    const anno = (progetto.meta && progetto.meta.anno_corrente) || '';
+    const html = _renderBudgetPdfHtml(progetto);
+    _printPdf(html, `Budget ${anno} — ${cliente}`);
+  }
+
+  /* ── Consuntivo: PDF ─────────────────────────────────────── */
+
+  /**
+   * Per il PDF consuntivo costruiamo le colonne periodo come segue:
+   *
+   *   - frequenza TRIMESTRALE: 4 colonne fisse Q1..Q4 (anche se non
+   *     compilate). Ogni colonna mostra il singolo trimestre isolato
+   *     (non cumulato).
+   *
+   *   - frequenza MENSILE: 1 sola colonna "Cumulato gen→<ultimo mese
+   *     compilato>" che somma i valori da gennaio fino all'ultimo
+   *     mese effettivamente chiuso. Se nessun mese è compilato, la
+   *     colonna mostra zero (e la testata indica "Nessun mese
+   *     compilato").
+   *
+   * In entrambi i casi la colonna "Budget €" rimane il budget
+   * annuale completo, come riferimento.
+   */
+  function _buildPdfPeriodCols(pre) {
+    if (pre.frequenza === 'trimestrale') {
+      const labels = ['1° trim. (gen-mar)','2° trim. (apr-giu)','3° trim. (lug-set)','4° trim. (ott-dic)'];
+      return pre.periodi_keys.map((k, i) => ({
+        key: k,
+        label: labels[i],
+        chiuso: !!(pre.per_periodo[k] && pre.per_periodo[k].inserito),
+        valori: pre.per_periodo[k] ? pre.per_periodo[k].valori : {},
+        totali: pre.per_periodo[k] || {}
+      }));
+    }
+
+    // Mensile: cumulato gen→ultimo mese compilato
+    const meseLabels = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+    let lastIdx = -1;
+    pre.periodi_keys.forEach((k, i) => {
+      if (pre.per_periodo[k] && pre.per_periodo[k].inserito) lastIdx = i;
+    });
+
+    const valoriCum = {};
+    const totaliCum = { fatturato: 0, cdv: 0, totVar: 0, mdc: 0, fissi: 0, totCosti: 0, sottoLineaNetto: 0, utileAnteImposte: 0, imposte: 0, utileNetto: 0 };
+
+    if (lastIdx >= 0) {
+      for (let i = 0; i <= lastIdx; i++) {
+        const k = pre.periodi_keys[i];
+        const vp = pre.per_periodo[k];
+        if (!vp) continue;
+        for (const id in vp.valori) {
+          const v = vp.valori[id].valore || 0;
+          if (!valoriCum[id]) valoriCum[id] = { valore: 0 };
+          valoriCum[id].valore += v;
+        }
+        for (const k2 in totaliCum) {
+          totaliCum[k2] += vp[k2] || 0;
+        }
+      }
+    }
+
+    const label = lastIdx >= 0
+      ? `Cumulato gen-${meseLabels[lastIdx].slice(0, 3).toLowerCase()} (${lastIdx + 1} mes${lastIdx === 0 ? 'e' : 'i'})`
+      : 'Cumulato (nessun mese compilato)';
+
+    return [{
+      key: 'cumul',
+      label,
+      chiuso: lastIdx >= 0,
+      valori: valoriCum,
+      totali: totaliCum,
+      isCumulMensile: true,
+      ultimoMeseLabel: lastIdx >= 0 ? meseLabels[lastIdx] : null
+    }];
+  }
+
+  function _renderConsuntivoPdfHtml(progetto) {
+    const pre = BudgetEngine.calcolaPreconsuntivo(progetto);
+    const note = (progetto.budget && progetto.budget.note) || {};
+    const cols = _buildPdfPeriodCols(pre);
+
+    // segnoBuono: +1 se "più alto = meglio" (ricavi, utile, MdC, rim. finali)
+    //             -1 se "più alto = peggio" (costi, oneri, imposte)
+    const righe = [
+      { tipo: 'sezione', label: 'RICAVI' },
+      { tipo: 'macro',   id: 'ricavi',           label: 'Ricavi',                                 segnoBuono: +1 },
+      { tipo: 'totale',  id: 'fatturato',        label: 'FATTURATO',                              evidenza: 'verde-forte', segnoBuono: +1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'mat_prime',        label: 'Costi p/mat. prime, suss., cons., merci', segnoBuono: -1 },
+      { tipo: 'macro',   id: 'altri_var',        label: 'Altri costi variabili',                  nascondiSeZero: true, segnoBuono: -1 },
+      { tipo: 'macro',   id: 'rim_ini',          label: 'Rimanenze iniziali',                     segnoBuono: -1 },
+      { tipo: 'macro',   id: 'rim_fin',          label: 'Rimanenze finali',                       segno: -1, segnoBuono: +1 },
+      { tipo: 'totale',  id: 'cdv',              label: 'COSTO DEL VENDUTO',                      evidenza: 'arancio', segnoBuono: -1 },
+      { tipo: 'totale',  id: 'mdc',              label: 'MARGINE DI CONTRIBUZIONE',               evidenza: 'verde', segnoBuono: +1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'servizi',          label: 'Costi per servizi',                      segnoBuono: -1 },
+      { tipo: 'macro',   id: 'godimento',        label: 'Costi p/godimento beni di terzi',        segnoBuono: -1 },
+      { tipo: 'macro',   id: 'personale',        label: 'Costi per il personale',                 segnoBuono: -1 },
+      { tipo: 'macro',   id: 'ammortamenti',     label: 'Ammortamenti',                           segnoBuono: -1 },
+      { tipo: 'macro',   id: 'oneri_gest',       label: 'Oneri diversi di gestione',              segnoBuono: -1 },
+      { tipo: 'macro',   id: 'oneri_fin',        label: 'Int. pass. e altri oneri finanz.',       segnoBuono: -1 },
+      { tipo: 'totale',  id: 'fissi',            label: 'TOTALE COSTI FISSI',                     evidenza: 'arancio', segnoBuono: -1 },
+      { tipo: 'totale',  id: 'totCosti',         label: 'TOTALE COSTI',                           evidenza: 'arancio-forte', segnoBuono: -1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'straordinari',     label: 'Oneri straordinari', segno: -1,          segnoBuono: +1 },
+      { tipo: 'macro',   id: 'altri_ric',        label: 'Altri ricavi e proventi',                segnoBuono: +1 },
+      { tipo: 'macro',   id: 'altri_prov_f',     label: 'Altri proventi finanziari',              segnoBuono: +1 },
+      { tipo: 'totale',  id: 'utileAnteImposte', label: 'UTILE ANTE IMPOSTE',                     evidenza: 'verde-forte', segnoBuono: +1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'imposte',          label: 'Imposte sul reddito',                    segnoBuono: -1 },
+      { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde', segnoBuono: +1 }
+    ];
+
+    const colspanTot = 4 + cols.length;
+    let body = '';
+    const noteUtente = [];
+
+    function valColPeriodo(rowDef, col) {
+      if (rowDef.tipo === 'totale') return col.totali[rowDef.id] || 0;
+      return (col.valori[rowDef.id] && col.valori[rowDef.id].valore) || 0;
+    }
+
+    for (const r of righe) {
+      if (r.tipo === 'spacer') {
+        body += `<tr class="ab-prospetto-spacer"><td colspan="${colspanTot}">&nbsp;</td></tr>`;
+        continue;
+      }
+      if (r.tipo === 'sezione') {
+        body += `<tr class="ab-sezione"><td colspan="${colspanTot}">${_escapeHtml(r.label)}</td></tr>`;
+        continue;
+      }
+
+      const segno = r.segno || 1;
+      let valBudget, valProiez;
+      if (r.tipo === 'totale') {
+        valBudget = pre.budget[r.id] || 0;
+        valProiez = pre.proiezione[r.id] || 0;
+      } else {
+        valBudget = (pre.budget.valori[r.id] && pre.budget.valori[r.id].valore) || 0;
+        valProiez = (pre.proiezione.valori[r.id] && pre.proiezione.valori[r.id].valore) || 0;
+      }
+      if (r.nascondiSeZero && Math.abs(valBudget) < 0.005 && Math.abs(valProiez) < 0.005) continue;
+
+      const cls = r.tipo === 'totale' ? `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}` : '';
+
+      // Δ vs budget: signed con classe per il colore (good/bad)
+      const dAbs = (valProiez - valBudget) * segno;
+      const dPct = valBudget !== 0 ? (valProiez - valBudget) / Math.abs(valBudget) : null;
+      let deltaCell = '';
+      if (Math.abs(dAbs) >= 0.5) {
+        const sb = r.segnoBuono || 0;
+        const buono = (dAbs * sb) >= 0;
+        const segnoTxt = dAbs > 0 ? '+' : '';
+        const pctTxt = dPct != null ? ` (${segnoTxt}${(dPct * 100).toFixed(1).replace('.', ',')}%)` : '';
+        deltaCell = `<span class="${buono ? 'ab-pdf-delta-good' : 'ab-pdf-delta-bad'}">${segnoTxt}${_fmtEuroInt(dAbs)}${pctTxt}</span>`;
+      }
+
+      // Nota utente (segna solo macro, non i totali derivati)
+      let notaMark = '';
+      if (r.tipo === 'macro') {
+        const t = (note[r.id] || '').trim();
+        if (t.length > 0) {
+          const n = noteUtente.length + 1;
+          noteUtente.push({ n, label: r.label, testo: t });
+          notaMark = ` <sup class="ab-pdf-noteref">[${n}]</sup>`;
+        }
+      }
+
+      const celleP = cols.map(col => {
+        const v = valColPeriodo(r, col) * segno;
+        const cellCls = 'num' + (col.chiuso ? '' : ' ab-pdf-col-vuoto');
+        return `<td class="${cellCls}">${Math.abs(v) < 0.5 ? '' : _fmtEuroInt(v)}</td>`;
+      }).join('');
+
+      body += `<tr class="${cls}">
+        <td>${_escapeHtml(r.label)}${notaMark}</td>
+        <td class="num">${_fmtEuroInt(valBudget * segno)}</td>
+        <td class="num">${_fmtEuroInt(valProiez * segno)}</td>
+        <td class="num">${deltaCell}</td>
+        ${celleP}
+      </tr>`;
+    }
+
+    // KPI di testa (proiezione vs budget) — riprende i 3 KPI a video
+    const dFatt = pre.fatturato_proiettato - pre.budget.fatturato;
+    const dFattPct = pre.budget.fatturato !== 0 ? dFatt / Math.abs(pre.budget.fatturato) : null;
+    const dUtile = pre.proiezione.utileNetto - pre.budget.utileNetto;
+    const dUtilePct = pre.budget.utileNetto !== 0 ? dUtile / Math.abs(pre.budget.utileNetto) : null;
+    const dMdc = pre.proiezione.mdc - pre.budget.mdc;
+    const dMdcPct = pre.budget.mdc !== 0 ? dMdc / Math.abs(pre.budget.mdc) : null;
+    function _kpiSub(d, dpct) {
+      const segno = d > 0 ? '+' : '';
+      return `${segno}${_fmtEuroInt(d)} €${dpct != null ? ' (' + segno + (dpct * 100).toFixed(1).replace('.', ',') + '%)' : ''} vs budget`;
+    }
+
+    const kpiHtml = `
+      <div class="ab-pdf-kpi">
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Fatturato consuntivato</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(pre.fatturato_consuntivato)} €</div>
+          <div class="ab-pdf-kpi-sub">${pre.periodi_chiusi}/${pre.periodi_totali} periodi · ${(pre.frazione_anno * 100).toFixed(0)}% dell'anno</div>
+        </div>
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Fatturato proiettato fine anno</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(pre.fatturato_proiettato)} €</div>
+          <div class="ab-pdf-kpi-sub">${_kpiSub(dFatt, dFattPct)}</div>
+        </div>
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Utile netto proiettato</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(pre.proiezione.utileNetto)} €</div>
+          <div class="ab-pdf-kpi-sub">${_kpiSub(dUtile, dUtilePct)}</div>
+        </div>
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">MdC proiettato</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(pre.proiezione.mdc)} €</div>
+          <div class="ab-pdf-kpi-sub">${_kpiSub(dMdc, dMdcPct)}</div>
+        </div>
+      </div>
+    `;
+
+    // Costruzione testata della tabella periodi
+    const periodHeaders = cols.map(col => {
+      const stato = col.chiuso ? '' : '<div class="ab-pdf-col-stato">non compilato</div>';
+      return `<th class="num">${_escapeHtml(col.label)}${stato}</th>`;
+    }).join('');
+
+    const sottotitolo = pre.frequenza === 'trimestrale'
+      ? 'Consuntivo trimestrale'
+      : (cols[0] && cols[0].ultimoMeseLabel
+          ? `Consuntivo mensile · cumulato gennaio-${cols[0].ultimoMeseLabel.toLowerCase()}`
+          : 'Consuntivo mensile · nessun mese compilato');
+
+    // Note metodologiche
+    const noteMetodo = [
+      pre.frequenza === 'trimestrale'
+        ? '<strong>Colonne trimestrali</strong> — ogni colonna mostra il singolo trimestre <em>isolato</em>: i costi variabili sono % budget × fatturato del trimestre, i fissi/sotto-linea/imposte sono pro-quota 1/4 del budget annuale. I trimestri non compilati sono indicati come tali e mostrano i soli costi pro-quota (fatturato 0).'
+        : '<strong>Colonna cumulato</strong> — somma da gennaio all\'ultimo mese compilato. I costi variabili scalano col fatturato effettivo cumulato, i costi fissi/sotto-linea/imposte sono pro-quota in dodicesimi.',
+      '<strong>Budget €</strong> — è sempre il budget <em>annuale</em> completo, come riferimento. Non viene proporzionato al periodo: il confronto utile è quello della colonna "Proiezione fine anno", che ribalta sul totale anno il ritmo di fatturazione osservato.',
+      '<strong>Proiezione fine anno</strong> — fatturato proiettato = fatturato consuntivato / frazione di anno chiusa. Costi variabili = % budget × fatturato proiettato. Costi fissi/sotto-linea/imposte = budget annuale intero. Le rimanenze sono assunte stabili al budget.',
+      '<strong>Δ vs budget</strong> — differenza Proiezione − Budget annuale. Verde = scostamento favorevole (più ricavi/utile o meno costi); rosso = sfavorevole.'
+    ];
+
+    let html = '';
+    html += _pdfHeader(progetto, sottotitolo);
+    html += kpiHtml;
+    html += '<table class="ab-pdf-tab ab-pdf-tab-consuntivo"><thead><tr>'
+         +    '<th>Macroarea</th>'
+         +    '<th class="num">Budget €</th>'
+         +    '<th class="num">Proiezione fine anno</th>'
+         +    '<th class="num">Δ vs budget</th>'
+         +    periodHeaders
+         +  '</tr></thead><tbody>' + body + '</tbody></table>';
+
+    html += '<div class="ab-pdf-notes"><div class="ab-pdf-notes-title">Note di metodo</div><ol>';
+    for (const t of noteMetodo) html += '<li>' + t + '</li>';
+    html += '</ol></div>';
+
+    if (noteUtente.length > 0) {
+      html += '<div class="ab-pdf-notes"><div class="ab-pdf-notes-title">Annotazioni per voce</div><ol>';
+      for (const nu of noteUtente) {
+        html += '<li><strong>[' + nu.n + '] ' + _escapeHtml(nu.label) + '</strong> — ' + _escapeHtml(nu.testo) + '</li>';
+      }
+      html += '</ol></div>';
+    }
+
+    return html;
+  }
+
+  function esportaPdfConsuntivo() {
+    const progetto = Projects.getProgetto();
+    if (!progetto || !progetto.sottoconti_ce || progetto.sottoconti_ce.length === 0) return;
+    const cliente = (progetto.meta && progetto.meta.cliente) || 'progetto';
+    const anno = (progetto.meta && progetto.meta.anno_corrente) || '';
+    const html = _renderConsuntivoPdfHtml(progetto);
+    _printPdf(html, `Consuntivo ${anno} — ${cliente}`);
+  }
+
   function _placeholder(titolo, descrizione) {
     return (
       '<div class="tab-disabled-notice">' +
@@ -1581,7 +2109,9 @@ const BudgetUI = (() => {
     notaBlur:           notaBlur,
     notaKeyDown:        notaKeyDown,
     consuntivoBlur:     consuntivoBlur,
-    cambiaFrequenza:    cambiaFrequenza
+    cambiaFrequenza:    cambiaFrequenza,
+    esportaPdfBudget:   esportaPdfBudget,
+    esportaPdfConsuntivo: esportaPdfConsuntivo
   };
 
 })();
