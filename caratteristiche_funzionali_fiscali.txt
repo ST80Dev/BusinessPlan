@@ -1,4 +1,4 @@
-# Business Plan Tool — Caratteristiche funzionali, dinamiche e fiscali
+# Studio AnaBil / Modulo Business Plan — Caratteristiche funzionali, dinamiche e fiscali
 **Versione 1.2 | Studio Commerciale | 2026-04**
 
 > Aggiornamento v1.2 rispetto alla v1.1: margine di contribuzione + Costo del venduto con flag `costo_venduto`, driver magazzino (tasso utilizzo acquisti + scostamento % sui ricavi), IVA progressiva mensile con carry-forward e credito IVA su investimenti, debiti tributari (IVA dicembre, acconti imposte, contributi INPS), smobilizzo crediti/debiti storici, operazioni soci puntuali, pro-rata primo anno costituenda, var. rimanenze in B.11 (art. 2425 c.c.), rendiconto finanziario con imposte esplicite e nuovi finanziamenti visualizzati solo nell'anno di erogazione. Nessuna modifica agli aspetti IRES/IRAP descritti nel §5.
