@@ -976,7 +976,11 @@ const BudgetUI = (() => {
     const b = BudgetEngine.calcolaBudget(progetto);
     const annoCorrente = progetto.meta.anno_corrente;
 
-    // Schema righe del prospetto budget
+    // Schema righe del prospetto budget — layout compatto allineato al
+    // Consuntivo: rimosse le righe-totale ridondanti (TOTALE COSTI VARIABILI =
+    // CdV per costruzione; COSTI FISSI DI GESTIONE = TOTALE COSTI FISSI in
+    // assenza di ulteriori sotto-aggregati) e gli spacer relativi, per far
+    // stare l'intero prospetto a video senza scroll verticale.
     const righe = [
       { tipo: 'sezione', label: 'RICAVI' },
       { tipo: 'macro',   id: 'ricavi',       label: 'Ricavi',                                 inputType: 'euro_fatturato' },
@@ -988,8 +992,6 @@ const BudgetUI = (() => {
       { tipo: 'macro',   id: 'rim_ini',      label: 'Rimanenze iniziali',                     inputType: 'euro' },
       { tipo: 'macro',   id: 'rim_fin',      label: 'Rimanenze finali',                       inputType: 'euro', segno: -1 },
       { tipo: 'totale',  id: 'cdv',          label: 'COSTO DEL VENDUTO',                      evidenza: 'arancio' },
-      { tipo: 'spacer' },
-      { tipo: 'totale',  id: 'totVar',       label: 'TOTALE COSTI VARIABILI',                 evidenza: 'arancio' },
       { tipo: 'totale',  id: 'mdc',          label: 'MARGINE DI CONTRIBUZIONE',               evidenza: 'verde' },
       { tipo: 'spacer' },
 
@@ -999,8 +1001,6 @@ const BudgetUI = (() => {
       { tipo: 'macro',   id: 'ammortamenti', label: 'Ammortamenti',                           inputType: 'euro' },
       { tipo: 'macro',   id: 'oneri_gest',   label: 'Oneri diversi di gestione',              inputType: 'euro' },
       { tipo: 'macro',   id: 'oneri_fin',    label: 'Int. pass. e altri oneri finanz.',       inputType: 'euro' },
-      { tipo: 'totale',  id: 'fissi',        label: 'COSTI FISSI DI GESTIONE',                evidenza: 'arancio' },
-      { tipo: 'spacer' },
       { tipo: 'totale',  id: 'fissi',        label: 'TOTALE COSTI FISSI',                     evidenza: 'arancio' },
       { tipo: 'totale',  id: 'totCosti',     label: 'TOTALE COSTI',                           evidenza: 'arancio-forte' },
       { tipo: 'spacer' },
@@ -1132,8 +1132,20 @@ const BudgetUI = (() => {
 
   function _renderOverrideInput(r, dato, progetto) {
     if (r.inputType === 'euro_fatturato') {
-      // Per la riga ricavi l'input principale è il fatturato, già nella card. Qui mostro solo l'indicatore.
-      return dato.fonte === 'override' ? '<span class="ab-budget-fonte ab-fonte-o">●</span>' : '';
+      // Riga Ricavi: campo cardine. Scrive sullo stesso fatturato_ipotizzato
+      // della card in alto (rimangono sincronizzati via re-render). Reso
+      // visibilmente come input principale del prospetto perché è il valore
+      // da cui dipendono tutti i costi variabili calcolati a percentuale.
+      const cur = (progetto.budget && progetto.budget.fatturato_ipotizzato);
+      const display = (typeof cur === 'number' && isFinite(cur)) ? _fmtEuroInt(cur) : '';
+      return `<div class="amount-field ab-budget-input ab-budget-input-cardine"
+                   contenteditable="true"
+                   data-budget-field="fatturato_ipotizzato"
+                   data-input-type="euro"
+                   data-placeholder="auto"
+                   title="Fatturato ipotizzato — campo cardine del budget"
+                   onblur="BudgetUI.budgetBlur(this)"
+                   onkeydown="BudgetUI.budgetKeyDown(event)">${display}</div>`;
     }
 
     const ovrPct = (progetto.budget && progetto.budget.override_pct) || {};
