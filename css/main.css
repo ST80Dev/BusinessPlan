@@ -46,6 +46,12 @@
   --color-totale-bg:       #D6E8F8;
   --color-totale-text:     #1A2535;
 
+  /* Intestazione colonne prospetti (uniforme su tutte le schermate):
+     stesso blu scuro usato per le sezioni della mini-CE in mappatura. */
+  --color-prospetto-th-bg:     var(--color-sidebar-bg);
+  --color-prospetto-th-text:   #FFFFFF;
+  --color-prospetto-th-shadow: 0 1px 2px rgba(27, 58, 92, 0.18);
+
   /* Alias semantici (riferiti dai moduli) */
   --color-text:            var(--color-text-primary);
   --color-primary:         var(--color-accent);
@@ -1116,21 +1122,27 @@ html, body {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: var(--color-mastro-bg);
-  box-shadow: inset 0 -2px 0 var(--color-border);
+  background: var(--color-prospetto-th-bg);
+  color: var(--color-prospetto-th-text);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-top: none;
+  box-shadow: var(--color-prospetto-th-shadow);
 }
 
 /* ── Cruscotto: intestazioni di sezione più evidenti ─────── */
 .cruscotto-table .row-cruscotto-header > td.cruscotto-header-cell {
-  background: var(--color-accent);
-  color: #FFFFFF;
+  background: var(--color-prospetto-th-bg);
+  color: var(--color-prospetto-th-text);
   font-weight: 700;
-  border-top: 2px solid var(--color-accent-hover);
-  border-bottom: 2px solid var(--color-accent-hover);
+  border-top: none;
+  border-bottom: none;
+  box-shadow: var(--color-prospetto-th-shadow);
 }
 .cruscotto-table .row-cruscotto-header > td.cruscotto-header-title {
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.6px;
   font-size: 13px;
 }
 
@@ -1522,15 +1534,17 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .import-table thead th {
   position: sticky;
   top: 0;
-  background: var(--color-surface-alt);
-  color: var(--color-text-primary);
+  background: var(--color-prospetto-th-bg);
+  color: var(--color-prospetto-th-text);
   text-align: left;
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.6px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: none;
+  box-shadow: var(--color-prospetto-th-shadow);
+  z-index: 2;
 }
 .import-table thead th.num {
   text-align: right;
@@ -1790,12 +1804,17 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 .ab-storico-tab thead th {
   font-family: 'DM Sans', sans-serif;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 13px;
-  color: var(--color-text-muted);
-  background: var(--color-surface-alt);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--color-prospetto-th-text);
+  background: var(--color-prospetto-th-bg);
+  border-bottom: none;
+  box-shadow: var(--color-prospetto-th-shadow);
   position: sticky;
   top: 0;
+  z-index: 2;
 }
 .ab-storico-tab td.num,
 .ab-storico-tab th.num {
@@ -1816,14 +1835,14 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 
 /* ── Modulo AB — Prospetto Storico ───────────────────────────── */
 .ab-storico-head h2 {
-  font-size: 22px;
-  margin: 0 0 8px 0;
+  font-size: 20px;
+  margin: 0 0 6px 0;
   color: var(--color-text);
 }
 .ab-storico-head p {
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0 0 18px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0 0 12px 0;
   max-width: 780px;
 }
 
@@ -1849,6 +1868,37 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-storico-prospetto tr.ab-prospetto-tot td.num {
   font-family: 'JetBrains Mono', monospace;
   font-size: 14px;
+}
+
+/* Storico CE: compattazione verticale per mostrare il prospetto intero senza
+   scroll della pagina, senza toccare il rendering del Budget anno che riusa
+   le stesse classi. */
+.ab-storico .ab-storico-tab {
+  font-size: 13px;
+}
+.ab-storico .ab-storico-tab th,
+.ab-storico .ab-storico-tab td {
+  padding: 4px 10px;
+}
+.ab-storico .ab-storico-tab thead th {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  font-size: 12px;
+}
+.ab-storico .ab-storico-prospetto tr.ab-prospetto-spacer td {
+  padding: 2px 0;
+  height: 2px;
+}
+.ab-storico .ab-storico-prospetto tr.ab-sezione td {
+  padding-top: 7px;
+  padding-bottom: 4px;
+  font-size: 12px;
+}
+.ab-storico .ab-storico-prospetto tr.ab-prospetto-tot td {
+  font-size: 12px;
+}
+.ab-storico .ab-storico-prospetto tr.ab-prospetto-tot td.num {
+  font-size: 13px;
 }
 
 /* Verde = risultato positivo / Fatturato / MdC / Utile */
@@ -2188,7 +2238,17 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   background: inherit;
 }
 .ab-consuntivo-tab-scroll-table thead tr .ab-col-stick {
-  background: var(--color-surface-alt, var(--color-surface));
+  background: var(--color-prospetto-th-bg);
+  color: var(--color-prospetto-th-text);
+}
+.ab-consuntivo-tab-scroll-table thead th {
+  background: var(--color-prospetto-th-bg);
+  color: var(--color-prospetto-th-text);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: none;
+  box-shadow: var(--color-prospetto-th-shadow);
 }
 
 /* Cella editabile fatturato dentro la tabella (riga FATTURATO) */
@@ -2371,12 +2431,14 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   vertical-align: middle;
 }
 .ab-mappatura-tab thead th {
-  background: var(--color-surface);
-  font-weight: 600;
-  color: var(--color-text-muted);
+  background: var(--color-prospetto-th-bg);
+  color: var(--color-prospetto-th-text);
+  font-weight: 700;
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.6px;
+  border-bottom: none;
+  box-shadow: var(--color-prospetto-th-shadow);
 }
 .ab-mappatura-tab td.codice-conto,
 .ab-mappatura-tab th.codice-conto {
