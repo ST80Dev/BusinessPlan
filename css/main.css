@@ -3083,4 +3083,17 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
     size: A4 landscape;
     margin: 8mm;
   }
+
+  /* Budget PDF: orientamento verticale.
+     `@page` non eredita dai selettori ordinari, ma supporta le "named
+     pages" (CSS Paged Media): assegniamo al container del budget la
+     pagina nominata `ab-portrait` quando il body è in modalità portrait,
+     e definiamo per quella pagina dimensione/margini A4 portrait. */
+  body.ab-pdf-portrait #ab-pdf-print {
+    page: ab-portrait;
+  }
+  @page ab-portrait {
+    size: A4 portrait;
+    margin: 10mm;
+  }
 }
