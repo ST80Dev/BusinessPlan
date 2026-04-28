@@ -1834,7 +1834,7 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 
 /* Tabella storico/anteprima per macroarea */
-.ab-storico { padding: 24px; max-width: 1100px; }
+.ab-storico { padding: 8px 24px 24px; max-width: 1100px; }
 .ab-storico h2 { font-size: 20px; margin: 0 0 16px 0; }
 
 .ab-storico-tab {
@@ -1958,7 +1958,7 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 
 /* ── Modulo AB — Budget anno ─────────────────────────────────── */
 .ab-budget {
-  padding: 24px;
+  padding: 8px 24px 24px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
   grid-template-rows: auto;
@@ -2158,13 +2158,14 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-budget-input {
   display: inline-block;
   min-width: 80px;
-  padding: 4px 8px;
+  padding: 0 8px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: var(--color-surface);
   text-align: right;
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
+  line-height: 18px;
 }
 .ab-budget-input:focus {
   outline: none;
@@ -2202,7 +2203,7 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 
 /* ── Modulo AB — Consuntivo / Preconsuntivo ──────────────────── */
-.ab-consuntivo { padding: 16px 20px; }
+.ab-consuntivo { padding: 8px 20px 16px; }
 
 .ab-consuntivo-head {
   display: grid;
