@@ -410,6 +410,22 @@ html, body {
 .footer-quadratura.ok    { color: var(--color-success); }
 .footer-quadratura.error { color: var(--color-error); }
 
+/* Azioni di pagina nel footer (es. Esporta PDF): popolato dal router
+   navigate() in base alla sezione attiva. Mantiene libero lo spazio
+   utile in pagina. Il footer è già nascosto in stampa. */
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.footer-actions:empty {
+  display: none;
+}
+.footer-actions .btn {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
 /* ── Pulsanti (div, mai button) ─────────────────────────────── */
 .btn {
   display: inline-flex;
@@ -2465,6 +2481,21 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-arancio-forte .ab-col-stick {
   background: var(--color-warning);
 }
+
+/* Δ vs budget: nelle righe-totale lo sfondo colorato (verde/arancio
+   forte) rendeva illeggibile sia il testo verde (delta-good) sia il
+   rosso (delta-bad). Imponiamo per la 4ª colonna sticky uno sfondo
+   bianco neutro su tutte le righe totale, così i +% in verde e i −%
+   in rosso restano sempre leggibili con stile coerente in colonna.
+   Bordo laterale soft per separare visivamente la colonna dalla
+   testata colorata della riga. */
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-verde .ab-col-stick-4,
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-verde-forte .ab-col-stick-4,
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-arancio .ab-col-stick-4,
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-arancio-forte .ab-col-stick-4 {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
 .ab-consuntivo-tab-scroll-table thead tr .ab-col-stick {
   background: var(--color-prospetto-th-bg);
   color: var(--color-prospetto-th-text);
@@ -2871,12 +2902,6 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 
 /* ── Toolbar pulsante "Esporta PDF" sopra Budget e Consuntivo AB ─── */
-.ab-pdf-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin: 0 0 12px 0;
-}
-
 /* ── PDF: layout dedicato per stampa Budget / Consuntivo AB ──────── */
 /* Container nascosto a video, mostrato solo in @media print quando
    il body ha la classe ab-pdf-mode (vedi sotto). */
@@ -3041,9 +3066,6 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   #sidebar, #header, #footer { display: none; }
   #app { display: block; }
   #content { padding: 0; overflow: visible; }
-
-  /* Pulsanti/toolbar che non devono comparire in stampa */
-  .ab-no-print { display: none !important; }
 
   /* Modalità PDF AB: nasconde tutto fuorché il container dedicato */
   body.ab-pdf-mode #app { display: none !important; }

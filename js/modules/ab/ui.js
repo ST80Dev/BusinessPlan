@@ -1043,10 +1043,6 @@ const BudgetUI = (() => {
     let html = `
       <div class="ab-budget">
 
-        <div class="ab-pdf-toolbar ab-no-print">
-          <div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfBudget()" title="Esporta il prospetto budget in PDF (apre la finestra di stampa del browser)">📄 Esporta PDF</div>
-        </div>
-
         <div class="ab-budget-card">
           <div class="ab-budget-fatturato">
             <div class="ab-budget-fatturato-label">Fatturato ipotizzato anno ${annoCorrente}</div>
@@ -1406,10 +1402,6 @@ const BudgetUI = (() => {
     let html = `
       <div class="ab-consuntivo">
 
-        <div class="ab-pdf-toolbar ab-no-print">
-          <div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfConsuntivo()" title="Esporta il consuntivo in PDF (apre la finestra di stampa del browser)">📄 Esporta PDF</div>
-        </div>
-
         <div class="ab-consuntivo-head">
           <div class="ab-consuntivo-head-left">
             <div class="ab-consuntivo-controls">
@@ -1623,8 +1615,9 @@ const BudgetUI = (() => {
        4) si chiama window.print(); l'evento `afterprint` ripulisce
           il DOM e rimuove la classe.
 
-     Il bottone in pagina è dentro `.ab-pdf-toolbar.ab-no-print`, che
-     è nascosto in stampa (vedi css/main.css).
+     Il bottone "Esporta PDF" vive nel footer (`#footer-actions`,
+     popolato dal router `UI.navigate()` in core/ui.js). Il footer è
+     già nascosto in @media print, quindi nessuna classe ad-hoc.
      ────────────────────────────────────────────────────────── */
 
   function _printPdf(html, title, orientation) {
