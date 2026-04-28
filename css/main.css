@@ -303,7 +303,12 @@ html, body {
   overflow-y: auto;
   overflow-x: auto;
   background: var(--color-bg);
-  padding: 24px;
+  /* Niente padding-top: le pagine forniscono il proprio padding interno
+     (es. .ab-mappatura, .ab-storico, .ab-budget, .ab-consuntivo, .ab-import
+     hanno già padding: 24px). Eliminare il padding-top qui evita lo
+     "strip" tra header globale e header interno della pagina, dove
+     altrimenti si vede scorrere il contenuto sotto un header sticky. */
+  padding: 0 24px 24px;
 }
 
 /* ── Footer status bar ──────────────────────────────────────── */
