@@ -442,15 +442,22 @@
 <!-- =====================================================
      SCRIPT — ordine di caricamento importante
      ===================================================== -->
+<!-- Librerie vendored -->
 <script src="lib/chart.umd.js"></script>
-<script src="js/schema.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/budget-engine.js"></script>
-<script src="js/xlsx-mini.js"></script>
-<script src="js/excel-import.js"></script>
-<script src="js/projects.js"></script>
-<script src="js/budget-ui.js"></script>
-<script src="js/ui.js"></script>
+<script src="lib/xlsx-mini.js"></script>
+
+<!-- Modulo BP (Business Plan) -->
+<script src="js/modules/bp/schema.js"></script>
+<script src="js/modules/bp/engine.js"></script>
+
+<!-- Modulo AB (Analisi Costi & Budget) -->
+<script src="js/modules/ab/engine.js"></script>
+<script src="js/modules/ab/excel-import.js"></script>
+<script src="js/modules/ab/ui.js"></script>
+
+<!-- Core (shell e gestione progetti) -->
+<script src="js/core/projects.js"></script>
+<script src="js/core/ui.js"></script>
 
 <script>
   // Avvio applicazione

@@ -704,20 +704,20 @@ const UI = (() => {
     regoleGlobali: null,          // dizionario dal file repo (lazy load)
     regoleLocali: null,           // dizionario da localStorage
     statusMsg: 'Carica un PDF di bilancio per iniziare.',
-    pdfModule: null,              // modulo js/pdf-import.js (lazy load)
+    pdfModule: null,              // modulo js/modules/bp/pdf-import.js (lazy load)
     pdfjsLib: null,               // libreria PDF.js (lazy load)
     loading: false
   };
 
-  const _IMPORT_REGOLE_PATH = 'data/regole-import-conti.json';
+  const _IMPORT_REGOLE_PATH = 'data/bp/regole-import-conti.json';
   const _IMPORT_REGOLE_LOCAL_KEY = 'bp_pdf_mapping';
 
   async function _importLoadModuli() {
     if (!_importState.pdfModule) {
-      _importState.pdfModule = await import('./pdf-import.js');
+      _importState.pdfModule = await import('../modules/bp/pdf-import.js');
     }
     if (!_importState.pdfjsLib) {
-      _importState.pdfjsLib = await import('../lib/pdf.min.mjs');
+      _importState.pdfjsLib = await import('../../lib/pdf.min.mjs');
       _importState.pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.mjs';
     }
   }
