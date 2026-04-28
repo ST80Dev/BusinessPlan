@@ -171,7 +171,12 @@ const ExcelImport = (() => {
     }
 
     const ditta = _trovaDitta(rows, header);
-    const anni  = header.anni.map(a => a.anno);
+    // Ordine cronologico ascendente: alcuni template hanno le colonne
+    // anno disposte dalla più recente alla più vecchia; le viste a valle
+    // iterano questo array per intestazioni e celle e devono presentare
+    // -3/-2/-1 rispetto all'anno di budget. I dizionari valori/storico/
+    // rimanenze sono keyed by anno, quindi il sort non sposta dati.
+    const anni  = header.anni.map(a => a.anno).sort((a, b) => a - b);
 
     // Trova il pivot CE
     let pivotRiga = -1;
