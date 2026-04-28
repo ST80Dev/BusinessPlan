@@ -38,6 +38,7 @@ Regole pratiche:
   2. Dopo la PR, **non pushare altri commit sullo stesso branch**
   3. Se servono ulteriori modifiche dopo il merge, crea un **nuovo branch** da `origin/main`
   4. Non riutilizzare mai un branch di una PR già mergiata
+  5. **Check proattivo all'inizio di ogni nuova richiesta nella stessa sessione**: prima di toccare il codice, eseguire `git fetch origin main` e verificare se il branch corrente è già stato mergiato in `main` (es. `git log origin/main --grep="<nome-branch>"` o controllo PR via GitHub MCP). Se sì: fermarsi, creare un nuovo branch da `origin/main` e portare lì i nuovi commit, che andranno in una PR distinta. Non riprendere mai a committare sul branch della PR mergiata, anche se ancora "aperto" localmente
 - Il merge su main viene fatto manualmente dal proprietario dopo review
 - Non fare mai merge autonomamente su main
 - Ogni PR deve includere: titolo chiaro, sommario delle modifiche, test plan
