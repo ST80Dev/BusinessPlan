@@ -2124,18 +2124,19 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   width: 30%;
 }
 
-/* Budget anno: compattazione verticale allineata al Consuntivo per
-   permettere la lettura dell'intero prospetto senza scroll. */
+/* Budget anno: stessa scala compatta della Storico per uniformità grafica
+   tra Storico / Budget / Consuntivo (font, padding celle, intestazioni,
+   sezioni e righe-totale identici). */
 .ab-budget .ab-storico-tab {
   font-size: 13px;
 }
 .ab-budget .ab-storico-tab th,
 .ab-budget .ab-storico-tab td {
-  padding: 3px 10px;
+  padding: 4px 10px;
 }
 .ab-budget .ab-storico-tab thead th {
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 7px;
+  padding-bottom: 7px;
   font-size: 12px;
 }
 .ab-budget .ab-storico-prospetto tr.ab-prospetto-spacer td {
@@ -2143,14 +2144,12 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   height: 2px;
 }
 .ab-budget .ab-storico-prospetto tr.ab-sezione td {
-  padding-top: 6px;
-  padding-bottom: 3px;
+  padding-top: 7px;
+  padding-bottom: 4px;
   font-size: 12px;
 }
 .ab-budget .ab-storico-prospetto tr.ab-prospetto-tot td {
   font-size: 12px;
-  padding-top: 4px;
-  padding-bottom: 4px;
 }
 .ab-budget .ab-storico-prospetto tr.ab-prospetto-tot td.num {
   font-size: 13px;
@@ -2411,20 +2410,20 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   width: auto;
 }
 
-/* Consuntivo: tabella più compatta verticalmente per far stare il prospetto
-   intero senza scroll della pagina */
+/* Consuntivo: stessa scala compatta della Storico per uniformità grafica
+   tra Storico / Budget / Consuntivo. */
 .ab-consuntivo-tab th,
 .ab-consuntivo-tab td {
   padding: 4px 10px;
   font-size: 13px;
 }
 .ab-consuntivo-tab thead th {
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 7px;
+  padding-bottom: 7px;
   font-size: 12px;
 }
 .ab-consuntivo-tab tr.ab-sezione td {
-  padding-top: 6px;
+  padding-top: 7px;
   padding-bottom: 4px;
   font-size: 12px;
 }
