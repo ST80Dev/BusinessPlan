@@ -239,8 +239,9 @@ const UI = (() => {
 
     let html = `
       <div class="home-welcome">
+        <div class="home-eyebrow">Strumenti di analisi bilancio</div>
         <h1>Studio AnaBil</h1>
-        <p>Suite di analisi economico-finanziarie. Scegli lo strumento: ogni modulo ha proprio formato di progetto e propria interfaccia operativa.</p>
+        <p>Scegli lo strumento. Ogni modulo ha proprio formato di progetto e propria interfaccia operativa.</p>
       </div>
 
       <div class="home-modules">
