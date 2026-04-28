@@ -1168,6 +1168,19 @@ const BudgetUI = (() => {
       </tr>`;
 
       if (notaAperta) {
+        const idEsc = _escapeHtml(r.id);
+        // Azioni esplicite dentro la riga aperta: "Elimina" cancella il
+        // testo e chiude la riga; "Chiudi" la nasconde lasciando il
+        // contenuto invariato. Senza questi link, l'utente che apriva
+        // il pannello per sbaglio non aveva un modo evidente di
+        // chiuderlo o ripulirlo.
+        const azioneElimina = notaPresente
+          ? `<span class="ab-budget-nota-action ab-budget-nota-action-delete"
+                   role="button" tabindex="0"
+                   title="Cancella il testo della nota e chiudi la riga"
+                   onclick="BudgetUI.eliminaNota('${idEsc}')"
+                   onkeydown="BudgetUI.eliminaNotaKeyDown(event, '${idEsc}')">🗑 Elimina nota</span>`
+          : '';
         html += `<tr class="ab-budget-nota-row${notaPresente ? ' ab-budget-nota-row-piena' : ''}">
           <td colspan="${totaleColspan}">
             <div class="ab-budget-nota-wrap">
@@ -1175,9 +1188,17 @@ const BudgetUI = (() => {
               <textarea class="ab-budget-nota-input"
                         rows="2"
                         placeholder="Annotazione libera per questa voce (visibile nei report)…"
-                        data-macro-id="${_escapeHtml(r.id)}"
+                        data-macro-id="${idEsc}"
                         onblur="BudgetUI.notaBlur(this)"
                         onkeydown="BudgetUI.notaKeyDown(event)">${_escapeHtml(notaTesto)}</textarea>
+              <div class="ab-budget-nota-actions">
+                ${azioneElimina}
+                <span class="ab-budget-nota-action"
+                      role="button" tabindex="0"
+                      title="Chiudi la riga nota (il testo resta salvato)"
+                      onclick="BudgetUI.toggleNota('${idEsc}')"
+                      onkeydown="BudgetUI.notaToggleKeyDown(event, '${idEsc}')">Chiudi</span>
+              </div>
             </div>
           </td>
         </tr>`;
@@ -1190,21 +1211,27 @@ const BudgetUI = (() => {
 
   /**
    * Cella "Override" con input editabile + icona-toggle per la nota
-   * di voce. L'icona cambia stato visivo se è presente una nota
-   * (alert evidenziato vs. matita muted) ed è cliccabile per aprire
-   * la riga-textarea di sotto.
+   * di voce. L'icona ha tre stati visivi distinti:
+   *   - "+"  riga chiusa, nessuna nota → click per aggiungere
+   *   - "!"  riga chiusa, nota presente → click per visualizzare
+   *   - "✕"  riga aperta (con o senza nota) → click per chiudere
+   * Per cancellare il testo della nota c'è un link "Elimina" dentro
+   * la riga aperta (vedi renderBudget).
    */
   function _renderOverrideCell(r, dato, progetto, notaPresente, notaAperta) {
     const inputHtml = _renderOverrideInput(r, dato, progetto);
     const cls = 'ab-budget-nota-toggle'
       + (notaPresente ? ' ab-budget-nota-toggle-piena' : '')
       + (notaAperta   ? ' ab-budget-nota-toggle-aperta' : '');
-    const titolo = notaPresente
-      ? 'Nota presente — clicca per leggere/modificare'
-      : 'Aggiungi una nota a questa voce';
-    const aria = notaPresente
-      ? 'Nota presente: ' + (notaAperta ? 'chiudi' : 'apri')
-      : (notaAperta ? 'Chiudi nota' : 'Aggiungi nota');
+    const icona = notaAperta ? '✕' : (notaPresente ? '!' : '+');
+    const titolo = notaAperta
+      ? 'Chiudi la riga nota'
+      : (notaPresente
+          ? 'Nota presente — clicca per leggere/modificare'
+          : 'Aggiungi una nota a questa voce');
+    const aria = notaAperta
+      ? 'Chiudi nota'
+      : (notaPresente ? 'Apri nota presente' : 'Aggiungi nota');
     return `<div class="ab-budget-override-wrap">
       ${inputHtml}
       <span class="${cls}"
@@ -1213,7 +1240,7 @@ const BudgetUI = (() => {
             title="${titolo}"
             aria-label="${aria}"
             onclick="BudgetUI.toggleNota('${_escapeHtml(r.id)}')"
-            onkeydown="BudgetUI.notaToggleKeyDown(event, '${_escapeHtml(r.id)}')">${notaPresente ? '!' : '+'}</span>
+            onkeydown="BudgetUI.notaToggleKeyDown(event, '${_escapeHtml(r.id)}')">${icona}</span>
     </div>`;
   }
 
@@ -1322,6 +1349,29 @@ const BudgetUI = (() => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       toggleNota(macroId);
+    }
+  }
+
+  /**
+   * Cancella il testo della nota della voce e chiude la riga.
+   * Il blur dell'eventuale textarea attiva viene forzato prima così
+   * che il salvataggio "su null" non venga sovrascritto dal blur
+   * della textarea che salverebbe il testo digitato in pancia.
+   */
+  function eliminaNota(macroId) {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    Projects.aggiornaBudget('note.' + macroId, null);
+    _budgetNoteAperte.delete(macroId);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+  }
+
+  function eliminaNotaKeyDown(e, macroId) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      eliminaNota(macroId);
     }
   }
 
@@ -1620,7 +1670,7 @@ const BudgetUI = (() => {
      già nascosto in @media print, quindi nessuna classe ad-hoc.
      ────────────────────────────────────────────────────────── */
 
-  function _printPdf(html, title, orientation) {
+  function _printPdf(html, title) {
     if (document.activeElement && typeof document.activeElement.blur === 'function') {
       document.activeElement.blur();
     }
@@ -1633,18 +1683,12 @@ const BudgetUI = (() => {
     cont.innerHTML = html;
     document.body.appendChild(cont);
     document.body.classList.add('ab-pdf-mode');
-    // Default landscape (consuntivo: molte colonne periodo). Per il
-    // budget passiamo 'portrait' perché 5 colonne stanno comode in
-    // verticale e il layout risulta più leggibile su A4.
-    const portrait = orientation === 'portrait';
-    if (portrait) document.body.classList.add('ab-pdf-portrait');
 
     const oldTitle = document.title;
     if (title) document.title = title;
 
     function cleanup() {
       document.body.classList.remove('ab-pdf-mode');
-      document.body.classList.remove('ab-pdf-portrait');
       const c = document.getElementById('ab-pdf-print');
       if (c && c.parentNode) c.parentNode.removeChild(c);
       document.title = oldTitle;
@@ -1855,7 +1899,7 @@ const BudgetUI = (() => {
     const cliente = (progetto.meta && progetto.meta.cliente) || 'progetto';
     const anno = (progetto.meta && progetto.meta.anno_corrente) || '';
     const html = _renderBudgetPdfHtml(progetto);
-    _printPdf(html, `Budget ${anno} — ${cliente}`, 'portrait');
+    _printPdf(html, `Budget ${anno} — ${cliente}`);
   }
 
   /* ── Consuntivo: PDF ─────────────────────────────────────── */
@@ -2157,6 +2201,8 @@ const BudgetUI = (() => {
     notaToggleKeyDown:  notaToggleKeyDown,
     notaBlur:           notaBlur,
     notaKeyDown:        notaKeyDown,
+    eliminaNota:        eliminaNota,
+    eliminaNotaKeyDown: eliminaNotaKeyDown,
     consuntivoBlur:     consuntivoBlur,
     cambiaFrequenza:    cambiaFrequenza,
     esportaPdfBudget:   esportaPdfBudget,
