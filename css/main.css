@@ -2336,11 +2336,17 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   box-shadow: var(--color-prospetto-th-shadow);
 }
 
-/* Cella editabile fatturato dentro la tabella (riga FATTURATO) */
+/* Cella editabile fatturato dentro la tabella (riga FATTURATO).
+   La riga ha sfondo verde pieno con testo bianco: forziamo qui sfondo
+   bianco, testo scuro e bordo visibile per segnalare chiaramente che la
+   cella è compilabile manualmente. */
 .ab-periodo-input-cell {
   padding: 4px 8px;
-  border: 1px solid transparent;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
   text-align: right;
   font-family: 'JetBrains Mono', monospace;
   font-size: 14px;
@@ -2348,11 +2354,12 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   cursor: text;
 }
 .ab-periodo-input-cell:hover {
-  border-color: var(--color-border);
+  border-color: var(--color-accent);
 }
 .ab-periodo-input-cell:focus {
   outline: none;
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-light);
   background: var(--color-surface);
 }
 .ab-periodo-input-cell:empty::before {
