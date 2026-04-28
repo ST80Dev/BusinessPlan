@@ -2413,13 +2413,15 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 /* La riga sezione ha un singolo <td colspan>: senza sticky il titolo
    scorre via insieme alla tabella e resta visibile solo qualche
-   carattere ("CAVI" anziché "RICAVI"). Ancorandolo a sinistra il
-   titolo resta leggibile a qualsiasi posizione di scroll. */
-.ab-consuntivo-tab-scroll-table tr.ab-sezione td {
+   carattere ("CAVI" anziché "RICAVI"). Il `position: sticky` direttamente
+   sul <td colspan> è incoerente tra browser, quindi ancoriamo lo span
+   interno: il td scorre normalmente portandosi dietro lo sfondo della
+   sezione, lo span resta agganciato a sinistra. */
+.ab-consuntivo-tab-scroll-table tr.ab-sezione .ab-sezione-label-sticky {
   position: sticky;
-  left: 0;
+  left: 10px;
+  display: inline-block;
   z-index: 2;
-  background: var(--color-surface-alt);
 }
 .ab-consuntivo-tab tr.ab-prospetto-spacer td {
   padding: 2px 0;

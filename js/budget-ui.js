@@ -1365,7 +1365,10 @@ const BudgetUI = (() => {
         continue;
       }
       if (r.tipo === 'sezione') {
-        html += `<tr class="ab-sezione"><td colspan="${colspanTot}">${_escapeHtml(r.label)}</td></tr>`;
+        // Etichetta avvolta in uno span sticky: `position: sticky` su un
+        // <td colspan> ha comportamenti incoerenti tra browser (l'etichetta
+        // continua a scorrere via). Lo span sticky è invece affidabile.
+        html += `<tr class="ab-sezione"><td colspan="${colspanTot}"><span class="ab-sezione-label-sticky">${_escapeHtml(r.label)}</span></td></tr>`;
         continue;
       }
 
