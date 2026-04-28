@@ -2304,12 +2304,18 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-consuntivo-tab-scroll-table tbody .ab-col-stick {
   z-index: 2;
 }
+/* Le colonne sticky devono avere min-width e max-width identici e
+   coerenti con il `left` della colonna successiva: senza max-width il
+   contenuto (header lungo o cifre a 7 caratteri) dilata la cella oltre
+   il proprio slot e finisce sotto la successiva sticky che la copre,
+   tagliando l'ultimo carattere. */
 .ab-col-stick-1 { left: 0;     min-width: 240px; max-width: 240px; }
-.ab-col-stick-2 { left: 240px; min-width: 130px; box-shadow: none; }
-.ab-col-stick-3 { left: 370px; min-width: 150px; }
+.ab-col-stick-2 { left: 240px; min-width: 130px; max-width: 130px; box-shadow: none; }
+.ab-col-stick-3 { left: 370px; min-width: 180px; max-width: 180px; }
 .ab-col-stick-4 {
-  left: 520px;
+  left: 550px;
   min-width: 160px;
+  max-width: 160px;
   box-shadow: 4px 0 6px -4px rgba(0,0,0,0.18);
 }
 .ab-col-periodo {
@@ -2404,6 +2410,16 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   padding-top: 6px;
   padding-bottom: 4px;
   font-size: 12px;
+}
+/* La riga sezione ha un singolo <td colspan>: senza sticky il titolo
+   scorre via insieme alla tabella e resta visibile solo qualche
+   carattere ("CAVI" anziché "RICAVI"). Ancorandolo a sinistra il
+   titolo resta leggibile a qualsiasi posizione di scroll. */
+.ab-consuntivo-tab-scroll-table tr.ab-sezione td {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--color-surface-alt);
 }
 .ab-consuntivo-tab tr.ab-prospetto-spacer td {
   padding: 2px 0;
