@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Business Plan Tool</title>
+  <title>Studio AnaBil</title>
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,9 +21,9 @@
 
   <!-- ── Sidebar ────────────────────────────────────────── -->
   <nav id="sidebar">
-    <div class="sidebar-logo">
-      <div class="sidebar-logo-title">Business Plan</div>
-      <div class="sidebar-logo-sub">Studio Commerciale</div>
+    <div class="sidebar-logo" onclick="UI.navigate('home')" title="Torna alla home">
+      <div class="sidebar-logo-title">Studio AnaBil</div>
+      <div class="sidebar-logo-sub">Strumenti di analisi bilancio</div>
     </div>
 
     <!-- Info progetto corrente -->
@@ -37,43 +37,43 @@
     <div class="sidebar-nav">
       <div class="sidebar-nav-section">Navigazione</div>
 
-      <div class="sidebar-nav-item active" data-section="home" data-modulo="*" onclick="UI.navigate('home')">
+      <div class="sidebar-nav-item active" data-section="home" data-modulo="*" onclick="UI.navigate('home')" title="Torna alla home / cambia strumento">
         <span class="sidebar-nav-icon">⌂</span>
         <span>Home</span>
       </div>
 
       <!-- ── Voci Business Plan (BP) ────────────────────────── -->
-      <div class="sidebar-nav-item disabled" data-section="importa" data-modulo="bp" onclick="UI.navigate('importa')">
+      <div class="sidebar-nav-item disabled hidden" data-section="importa" data-modulo="bp" onclick="UI.navigate('importa')">
         <span class="sidebar-nav-icon">⇪</span>
         <span>Importa bilancio</span>
         <span class="sidebar-nav-status" id="nav-status-importa"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="dati-partenza" data-modulo="bp" onclick="UI.navigate('dati-partenza')">
+      <div class="sidebar-nav-item disabled hidden" data-section="dati-partenza" data-modulo="bp" onclick="UI.navigate('dati-partenza')">
         <span class="sidebar-nav-icon">📋</span>
         <span>Dati di partenza</span>
         <span class="sidebar-nav-status" id="nav-status-dati-partenza"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="driver" data-modulo="bp" onclick="UI.navigate('driver')">
+      <div class="sidebar-nav-item disabled hidden" data-section="driver" data-modulo="bp" onclick="UI.navigate('driver')">
         <span class="sidebar-nav-icon">⚙</span>
         <span>Driver &amp; Parametri</span>
         <span class="sidebar-nav-status" id="nav-status-driver"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="eventi" data-modulo="bp" onclick="UI.navigate('eventi')">
+      <div class="sidebar-nav-item disabled hidden" data-section="eventi" data-modulo="bp" onclick="UI.navigate('eventi')">
         <span class="sidebar-nav-icon">📅</span>
         <span>Eventi</span>
         <span class="sidebar-nav-status" id="nav-status-eventi"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="prospetti" data-modulo="bp" onclick="UI.navigate('prospetti')">
+      <div class="sidebar-nav-item disabled hidden" data-section="prospetti" data-modulo="bp" onclick="UI.navigate('prospetti')">
         <span class="sidebar-nav-icon">📊</span>
         <span>Prospetti futuri</span>
         <span class="sidebar-nav-status" id="nav-status-prospetti"></span>
       </div>
 
-      <div class="sidebar-nav-item disabled" data-section="dashboard" data-modulo="bp" onclick="UI.navigate('dashboard')">
+      <div class="sidebar-nav-item disabled hidden" data-section="dashboard" data-modulo="bp" onclick="UI.navigate('dashboard')">
         <span class="sidebar-nav-icon">◈</span>
         <span>Dashboard KPI</span>
         <span class="sidebar-nav-status" id="nav-status-dashboard"></span>
@@ -442,15 +442,22 @@
 <!-- =====================================================
      SCRIPT — ordine di caricamento importante
      ===================================================== -->
+<!-- Librerie vendored -->
 <script src="lib/chart.umd.js"></script>
-<script src="js/schema.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/budget-engine.js"></script>
-<script src="js/xlsx-mini.js"></script>
-<script src="js/excel-import.js"></script>
-<script src="js/projects.js"></script>
-<script src="js/budget-ui.js"></script>
-<script src="js/ui.js"></script>
+<script src="lib/xlsx-mini.js"></script>
+
+<!-- Modulo BP (Business Plan) -->
+<script src="js/modules/bp/schema.js"></script>
+<script src="js/modules/bp/engine.js"></script>
+
+<!-- Modulo AB (Analisi Costi & Budget) -->
+<script src="js/modules/ab/engine.js"></script>
+<script src="js/modules/ab/excel-import.js"></script>
+<script src="js/modules/ab/ui.js"></script>
+
+<!-- Core (shell e gestione progetti) -->
+<script src="js/core/projects.js"></script>
+<script src="js/core/ui.js"></script>
 
 <script>
   // Avvio applicazione

@@ -1,22 +1,33 @@
-# Business Plan Tool
+# Studio AnaBil
 
-Applicazione web per uso interno dello studio commerciale. Elabora bilanci storici (SP art. 2424, CE art. 2425 c.c.) e produce prospetti previsionali pluriennali completi: Stato Patrimoniale, Conto Economico, Rendiconto Finanziario, Cruscotto KPI.
+Suite di analisi economico-finanziarie per uso interno dello studio commerciale. Raggruppa più strumenti (moduli) accessibili da una home comune; ogni modulo ha proprio formato di progetto e propria interfaccia operativa.
 
 Nessuna installazione, nessun server, nessuna connessione a Internet. Tutto gira nel browser aprendo `index.html`.
 
 ---
 
+## Moduli disponibili
+
+| Modulo | Sigla | A cosa serve |
+|---|---|---|
+| Business Plan | BP | Bilanci storici SP/CE → proiezioni pluriennali → SP, CE, Rendiconto Finanziario, Cruscotto KPI |
+| Analisi Costi & Budget | AB | Import CE storico Excel → medie % sul fatturato → budget annuale, fatturato di break-even, monitoraggio consuntivo |
+
+L'architettura è predisposta per accogliere nuovi moduli di analisi senza interferire con quelli esistenti.
+
+---
+
 ## Come avviare
 
-1. Copiare la cartella `business-plan-tool/` sul server condiviso dello studio (o su un disco locale)
+1. Copiare la cartella `StudioAnaBil/` sul server condiviso dello studio (o su un disco locale)
 2. Aprire `index.html` con **Chrome** o **Edge**
-3. Dalla home: `Nuovo progetto` oppure trascinare nella pagina un file `.json` di un progetto esistente
+3. Dalla home scegliere il modulo (Business Plan o Analisi Costi & Budget) e creare un nuovo progetto, oppure trascinare nella pagina un file `.json` di un progetto esistente
 
 Nessuna installazione richiesta sui client. Le librerie grafiche e di parsing PDF sono incluse nella cartella `lib/` per il funzionamento offline.
 
 ---
 
-## Modalità di avvio progetto
+## Modulo Business Plan — Modalità di avvio progetto
 
 Alla creazione di un nuovo progetto si scelgono **scenario** e **granularità**.
 
@@ -39,7 +50,7 @@ La modalità è modificabile in qualsiasi momento: il motore di calcolo è ident
 
 ---
 
-## Flusso di lavoro tipico
+## Modulo Business Plan — Flusso di lavoro tipico
 
 1. **Dati di partenza** — inserire SP e CE storici (se disponibili) o lo SP semplificato della costituenda
 2. **Driver & Parametri** — configurare ricavi per voce, profili di stagionalità, DSO/DPO/DIO, aliquote fiscali, driver magazzino
@@ -50,7 +61,18 @@ La modalità è modificabile in qualsiasi momento: il motore di calcolo è ident
 
 ---
 
-## Anni previsionali e storico
+## Modulo Analisi Costi & Budget — Flusso di lavoro tipico
+
+1. **Importa CE** — caricare il bilancio di verifica Excel: il sistema estrae i sottoconti CE e li pre-mappa alle macroaree
+2. **Mappatura sottoconti** — riassegnare i sottoconti alle macroaree corrette (drag & drop, multi-selezione)
+3. **Storico & medie** — visualizzare gli importi per anno e la media % sul fatturato, base per la proiezione del budget
+4. **Budget anno** — proiettare i costi sull'anno corrente partendo dal fatturato ipotizzato e dalle medie storiche, ottenere fatturato di break-even
+5. **Consuntivo** — inserire il fatturato realizzato per periodo: il sistema proietta a fine anno e confronta col budget
+6. **Salvataggio** — il progetto è un file `.json` separato dai progetti BP
+
+---
+
+## Modulo Business Plan — Anni previsionali e storico
 
 - Anni previsionali: da **1 a 8** oltre l'anno base
 - Possibilità di includere fino a **3 anni storici** precedenti all'anno base per trend e confronti

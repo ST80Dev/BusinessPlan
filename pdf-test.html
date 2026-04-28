@@ -325,8 +325,8 @@ body {
   </div>
 </div>
 
-<!-- Schema.js loaded as regular script -->
-<script src="js/schema.js"></script>
+<!-- Schema BP loaded as regular script -->
+<script src="js/modules/bp/schema.js"></script>
 
 <!-- Main logic as ES module for pdf.js -->
 <script type="module">
@@ -335,7 +335,7 @@ import {
   buildDictionary,
   formatItalianNumber,
   estraiRighe
-} from './js/pdf-import.js';
+} from './js/modules/bp/pdf-import.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = './lib/pdf.worker.min.mjs';
 
@@ -345,7 +345,7 @@ let schemaDict = {};     // normalized_label -> { id, label }
 let allSchemaNodes = [];  // flat list of { id, label }
 let savedMapping = {};   // text -> schemaId  from localStorage
 
-// Build schema dictionary (wrappa il modulo js/pdf-import.js)
+// Build schema dictionary (wrappa il modulo js/modules/bp/pdf-import.js)
 if (typeof Schema === 'undefined') {
   console.error('Schema.js not loaded');
 } else {

@@ -113,6 +113,12 @@ html, body {
 .sidebar-logo {
   padding: 18px 20px 14px;
   border-bottom: 1px solid var(--color-sidebar-border);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.sidebar-logo:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .sidebar-logo-title {
@@ -125,9 +131,12 @@ html, body {
 }
 
 .sidebar-logo-sub {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--color-sidebar-muted);
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .sidebar-project-info {
@@ -456,6 +465,15 @@ html, body {
 /* ── Home page ──────────────────────────────────────────────── */
 .home-welcome {
   margin-bottom: 28px;
+}
+
+.home-welcome .home-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
 }
 
 .home-welcome h1 {
