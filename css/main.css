@@ -2026,31 +2026,50 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 
 /* ── Modulo AB — Consuntivo / Preconsuntivo ──────────────────── */
-.ab-consuntivo { padding: 24px; max-width: 1280px; }
+.ab-consuntivo { padding: 16px 20px; }
 
-.ab-consuntivo-head h2 {
-  font-size: 22px;
-  margin: 0 0 8px 0;
-  color: var(--color-text);
+.ab-consuntivo-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(520px, auto);
+  gap: 18px;
+  align-items: stretch;
+  margin-bottom: 14px;
 }
-.ab-consuntivo-head p {
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0 0 18px 0;
-  max-width: 780px;
+.ab-consuntivo-head-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
-
-.ab-consuntivo-toolbar {
+.ab-consuntivo-head-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.ab-consuntivo-head h2 {
+  font-size: 18px;
+  margin: 0;
+  color: var(--color-text);
+}
+.ab-consuntivo-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+.ab-consuntivo-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
 }
 .ab-freq-selector {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 12px;
 }
 .ab-freq-toggle {
   display: inline-flex;
@@ -2060,9 +2079,9 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   background: var(--color-surface);
 }
 .ab-freq-opt {
-  padding: 6px 14px;
+  padding: 4px 12px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--color-text-muted);
   user-select: none;
   transition: background 0.12s, color 0.12s;
@@ -2079,8 +2098,8 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 .ab-consuntivo-stats {
   display: flex;
-  gap: 22px;
-  font-size: 13px;
+  gap: 16px;
+  font-size: 12px;
 }
 .ab-consuntivo-stats strong {
   color: var(--color-text);
@@ -2089,9 +2108,28 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 
 .ab-consuntivo-kpi {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 22px;
+  grid-template-columns: repeat(3, minmax(170px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+.ab-consuntivo-kpi .ab-budget-kpi-card {
+  padding: 6px 10px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.ab-consuntivo-kpi .ab-kpi-label {
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+.ab-consuntivo-kpi .ab-kpi-value {
+  font-size: 18px;
+  line-height: 1.1;
+}
+.ab-consuntivo-kpi .ab-kpi-sub {
+  font-size: 10px;
+  margin-top: 2px;
 }
 
 /* Tabella consuntivo con prime 4 colonne fisse e mesi/trimestri scrollabili */
@@ -2181,6 +2219,39 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-consuntivo-tab td:first-child,
 .ab-consuntivo-tab th:first-child {
   width: auto;
+}
+
+/* Consuntivo: tabella più compatta verticalmente per far stare il prospetto
+   intero senza scroll della pagina */
+.ab-consuntivo-tab th,
+.ab-consuntivo-tab td {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+.ab-consuntivo-tab thead th {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 12px;
+}
+.ab-consuntivo-tab tr.ab-sezione td {
+  padding-top: 6px;
+  padding-bottom: 4px;
+  font-size: 12px;
+}
+.ab-consuntivo-tab tr.ab-prospetto-spacer td {
+  padding: 2px 0;
+  height: 2px;
+}
+.ab-consuntivo-tab tr.ab-prospetto-tot td {
+  font-size: 12px;
+}
+.ab-consuntivo-tab tr.ab-prospetto-tot td.num {
+  font-size: 13px;
+}
+.ab-consuntivo-tab .ab-periodo-input-cell {
+  padding: 2px 6px;
+  min-height: 18px;
+  font-size: 13px;
 }
 
 .ab-delta-good { color: var(--color-success); font-weight: 600; }
