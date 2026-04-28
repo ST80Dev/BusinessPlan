@@ -2323,6 +2323,40 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   box-shadow: 0 0 0 2px var(--color-accent-light);
 }
 
+/* Barra azioni dentro la riga-nota aperta: link "Elimina" e "Chiudi"
+   per cancellare il testo o nascondere la riga senza dover usare
+   solo il toggle "✕". Stile a link sobrio per non competere con i
+   bottoni primari della pagina. */
+.ab-budget-nota-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+  margin-top: 2px;
+}
+.ab-budget-nota-action {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.ab-budget-nota-action:hover,
+.ab-budget-nota-action:focus {
+  color: var(--color-accent);
+  background: var(--color-accent-light);
+  outline: none;
+}
+.ab-budget-nota-action-delete:hover,
+.ab-budget-nota-action-delete:focus {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+}
+
 /* ── Modulo AB — Consuntivo / Preconsuntivo ──────────────────── */
 .ab-consuntivo { padding: 8px 20px 16px; }
 
@@ -3102,19 +3136,6 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   }
 
   @page {
-    size: A4 landscape;
-    margin: 8mm;
-  }
-
-  /* Budget PDF: orientamento verticale.
-     `@page` non eredita dai selettori ordinari, ma supporta le "named
-     pages" (CSS Paged Media): assegniamo al container del budget la
-     pagina nominata `ab-portrait` quando il body è in modalità portrait,
-     e definiamo per quella pagina dimensione/margini A4 portrait. */
-  body.ab-pdf-portrait #ab-pdf-print {
-    page: ab-portrait;
-  }
-  @page ab-portrait {
     size: A4 portrait;
     margin: 10mm;
   }
