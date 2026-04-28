@@ -2202,6 +2202,111 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   color: var(--color-accent);
 }
 
+/* Note di voce nel Budget — icona-toggle accanto all'override e
+   riga-textarea espandibile sotto la riga macroarea. L'icona
+   "vuota" è una semplice "+" muted, quella "piena" diventa "!"
+   in colore warning per richiamare visivamente l'utente sul fatto
+   che la voce ha un'annotazione da leggere. */
+.ab-budget-override-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.ab-budget-nota-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.ab-budget-nota-toggle:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.ab-budget-nota-toggle-aperta {
+  background: var(--color-accent-light);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.ab-budget-nota-toggle-piena {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: #FFFFFF;
+}
+.ab-budget-nota-toggle-piena:hover {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: #FFFFFF;
+  filter: brightness(1.05);
+}
+
+.ab-budget-row-has-note td:first-child::before {
+  content: '!';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  color: #FFFFFF;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  vertical-align: 1px;
+}
+
+.ab-budget-nota-row td {
+  background: var(--color-warning-bg);
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--color-border-light);
+}
+.ab-budget-nota-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ab-budget-nota-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ab-budget-nota-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.ab-budget-nota-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-light);
+}
+
 /* ── Modulo AB — Consuntivo / Preconsuntivo ──────────────────── */
 .ab-consuntivo { padding: 8px 20px 16px; }
 

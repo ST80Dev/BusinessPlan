@@ -1061,10 +1061,11 @@ const Projects = (() => {
       macro_sezioni: JSON.parse(JSON.stringify(BudgetEngine.MACROAREE_AB)),
       mapping:       {},          // { 'XX/XX/XXX': 'macroarea_id' }
       storico:       storico,     // { 'YYYY': { macroarea_id: importo } }
-      budget:        {            // { fatturato_ipotizzato, override_pct: {}, override_fissi: {} }
+      budget:        {            // { fatturato_ipotizzato, override_pct: {}, override_fissi: {}, note: {} }
         fatturato_ipotizzato: null,
         override_pct:    {},
-        override_fissi:  {}
+        override_fissi:  {},
+        note:            {}        // { macroarea_id: 'testo nota libero' }
       },
       consuntivo: {
         frequenza: 'mensile',     // 'mensile' | 'trimestrale'
@@ -1149,23 +1150,26 @@ const Projects = (() => {
   }
 
   /**
-   * Aggiorna i campi del budget (fatturato ipotizzato e override).
+   * Aggiorna i campi del budget (fatturato ipotizzato, override e note).
    *
    *   field può essere:
    *     'fatturato_ipotizzato'   → value: number | null
    *     'override_pct.<id>'      → value: number (decimale, 0.12 = 12%) | null
    *     'override_fissi.<id>'    → value: number (€) | null
+   *     'note.<id>'              → value: string | null
    *
-   *   Passare value null/NaN rimuove l'override (torna al default storico).
+   *   Passare value null/NaN/'' rimuove l'override o la nota
+   *   (torna al default storico / nota assente).
    */
   function aggiornaBudget(field, value) {
     if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
     if (!_progettoCorrente.budget) {
-      _progettoCorrente.budget = { fatturato_ipotizzato: null, override_pct: {}, override_fissi: {} };
+      _progettoCorrente.budget = { fatturato_ipotizzato: null, override_pct: {}, override_fissi: {}, note: {} };
     }
     const b = _progettoCorrente.budget;
     if (!b.override_pct)   b.override_pct   = {};
     if (!b.override_fissi) b.override_fissi = {};
+    if (!b.note)           b.note           = {};
 
     const isVuoto = value == null || (typeof value === 'number' && !isFinite(value));
 
@@ -1179,6 +1183,11 @@ const Projects = (() => {
       const id = field.substring('override_fissi.'.length);
       if (isVuoto) delete b.override_fissi[id];
       else         b.override_fissi[id] = Number(value);
+    } else if (field.indexOf('note.') === 0) {
+      const id = field.substring('note.'.length);
+      const testo = (typeof value === 'string') ? value.trim() : '';
+      if (!testo) delete b.note[id];
+      else        b.note[id] = testo;
     } else {
       return;
     }

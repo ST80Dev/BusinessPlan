@@ -909,9 +909,18 @@ const BudgetUI = (() => {
          fissa/sotto-linea (input €). Vuota = usa default storico.
        - una colonna "Fonte" che indica se il valore viene da
          storico (S) o override utente (O).
+       - per ogni macroarea, un'icona "nota" accanto all'override:
+         click → si apre una textarea sotto la riga; se la nota è
+         compilata l'icona diventa evidenziata (alert) per segnalarla
+         visivamente all'utente.
 
      Tutti i totali sono ricalcolati al volo da BudgetEngine.calcolaBudget.
      ────────────────────────────────────────────────────────── */
+
+  // Set di id macroarea con la riga-nota attualmente espansa.
+  // Vive a livello di modulo: un re-render del prospetto (es. blur su
+  // un override) non chiude le note già aperte.
+  const _budgetNoteAperte = new Set();
 
   function _parseEuro(s) {
     if (!s) return null;
@@ -1099,18 +1108,68 @@ const BudgetUI = (() => {
         ? `Ultimo anno arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`
         : 'Media triennale';
 
-      html += `<tr class="${fonteCls}">
+      const note = (progetto.budget && progetto.budget.note) || {};
+      const notaTesto = (note[r.id] || '').trim();
+      const notaPresente = notaTesto.length > 0;
+      const notaAperta = _budgetNoteAperte.has(r.id);
+
+      html += `<tr class="${fonteCls}${notaPresente ? ' ab-budget-row-has-note' : ''}">
         <td>${_escapeHtml(r.label)}</td>
         <td class="num" title="${baseTitle}">${_fmtEuroInt(baseDisplay)}</td>
         <td class="num">${_fmtPct(dato.media_pct)}</td>
-        <td class="num">${_renderOverrideInput(r, dato, progetto)}</td>
+        <td class="num">${_renderOverrideCell(r, dato, progetto, notaPresente, notaAperta)}</td>
         <td class="num">${_fmtEuroInt(dato.valore * segno)}</td>
         <td class="num">${_fmtPct(dato.pct * segno)}</td>
       </tr>`;
+
+      if (notaAperta) {
+        html += `<tr class="ab-budget-nota-row${notaPresente ? ' ab-budget-nota-row-piena' : ''}">
+          <td colspan="${totaleColspan}">
+            <div class="ab-budget-nota-wrap">
+              <label class="ab-budget-nota-label">Nota — ${_escapeHtml(r.label)}</label>
+              <textarea class="ab-budget-nota-input"
+                        rows="2"
+                        placeholder="Annotazione libera per questa voce (visibile nei report)…"
+                        data-macro-id="${_escapeHtml(r.id)}"
+                        onblur="BudgetUI.notaBlur(this)"
+                        onkeydown="BudgetUI.notaKeyDown(event)">${_escapeHtml(notaTesto)}</textarea>
+            </div>
+          </td>
+        </tr>`;
+      }
     }
 
     html += '</tbody></table></div>';
     c.innerHTML = html;
+  }
+
+  /**
+   * Cella "Override" con input editabile + icona-toggle per la nota
+   * di voce. L'icona cambia stato visivo se è presente una nota
+   * (alert evidenziato vs. matita muted) ed è cliccabile per aprire
+   * la riga-textarea di sotto.
+   */
+  function _renderOverrideCell(r, dato, progetto, notaPresente, notaAperta) {
+    const inputHtml = _renderOverrideInput(r, dato, progetto);
+    const cls = 'ab-budget-nota-toggle'
+      + (notaPresente ? ' ab-budget-nota-toggle-piena' : '')
+      + (notaAperta   ? ' ab-budget-nota-toggle-aperta' : '');
+    const titolo = notaPresente
+      ? 'Nota presente — clicca per leggere/modificare'
+      : 'Aggiungi una nota a questa voce';
+    const aria = notaPresente
+      ? 'Nota presente: ' + (notaAperta ? 'chiudi' : 'apri')
+      : (notaAperta ? 'Chiudi nota' : 'Aggiungi nota');
+    return `<div class="ab-budget-override-wrap">
+      ${inputHtml}
+      <span class="${cls}"
+            role="button"
+            tabindex="0"
+            title="${titolo}"
+            aria-label="${aria}"
+            onclick="BudgetUI.toggleNota('${_escapeHtml(r.id)}')"
+            onkeydown="BudgetUI.notaToggleKeyDown(event, '${_escapeHtml(r.id)}')">${notaPresente ? '!' : '+'}</span>
+    </div>`;
   }
 
   function _renderOverrideInput(r, dato, progetto) {
@@ -1187,6 +1246,63 @@ const BudgetUI = (() => {
     if (e.key === 'Escape') {
       e.preventDefault();
       e.target.blur();
+    }
+  }
+
+  /**
+   * Apre/chiude la riga-nota di una voce del budget.
+   *
+   * Forza il blur del campo attivo prima del re-render, così
+   * eventuali importi appena editati ma non ancora confermati
+   * vengono salvati (coerente con la regola UI generale del progetto).
+   */
+  function toggleNota(macroId) {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    if (_budgetNoteAperte.has(macroId)) _budgetNoteAperte.delete(macroId);
+    else                                _budgetNoteAperte.add(macroId);
+    renderBudget();
+    if (_budgetNoteAperte.has(macroId)) {
+      const ta = document.querySelector('textarea[data-macro-id="' + macroId.replace(/"/g, '\\"') + '"]');
+      if (ta) {
+        ta.focus();
+        const v = ta.value;
+        ta.setSelectionRange(v.length, v.length);
+      }
+    }
+  }
+
+  function notaToggleKeyDown(e, macroId) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleNota(macroId);
+    }
+  }
+
+  function notaBlur(el) {
+    const macroId = el.dataset.macroId;
+    if (!macroId) return;
+    const testo = (el.value || '').trim();
+    Projects.aggiornaBudget('note.' + macroId, testo || null);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+  }
+
+  function notaKeyDown(e) {
+    // Esc: chiude senza salvare modifiche in corso (il blur successivo
+    // salverà comunque, ma l'utente percepisce la chiusura immediata).
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.target.blur();
+    }
+    // Ctrl/Cmd + Enter: conferma e chiude la riga-nota.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      const macroId = e.target.dataset.macroId;
+      e.target.blur();
+      if (macroId) _budgetNoteAperte.delete(macroId);
+      renderBudget();
     }
   }
 
@@ -1460,6 +1576,10 @@ const BudgetUI = (() => {
     cambiaMacroarea:    cambiaMacroarea,
     budgetBlur:         budgetBlur,
     budgetKeyDown:      budgetKeyDown,
+    toggleNota:         toggleNota,
+    notaToggleKeyDown:  notaToggleKeyDown,
+    notaBlur:           notaBlur,
+    notaKeyDown:        notaKeyDown,
     consuntivoBlur:     consuntivoBlur,
     cambiaFrequenza:    cambiaFrequenza
   };
