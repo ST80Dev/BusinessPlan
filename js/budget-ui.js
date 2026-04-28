@@ -1068,7 +1068,7 @@ const BudgetUI = (() => {
           <thead>
             <tr>
               <th>Macroarea</th>
-              <th class="num">Storico medio</th>
+              <th class="num" title="Costi variabili: media triennale €. Fissi, sotto-linea e imposte: ultimo anno arrotondato al centinaio (base del budget teorico).">Base storica</th>
               <th class="num">% storica</th>
               <th class="num">Override</th>
               <th class="num">Budget €</th>
@@ -1116,9 +1116,19 @@ const BudgetUI = (() => {
 
       const fonteCls = dato.fonte === 'override' ? 'ab-fonte-override' : 'ab-fonte-storico';
 
+      // Colonna "Base storica": per le voci non variabili (e non calcolate)
+      // mostriamo l'ultimo anno arrotondato al centinaio, che è il default
+      // del budget teorico. Per variabili pure e calcolato resta la media €
+      // informativa.
+      const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato && r.id !== 'ricavi';
+      const baseDisplay = isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0);
+      const baseTitle   = isNonVarNonCalc
+        ? `Ultimo anno arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`
+        : 'Media triennale';
+
       html += `<tr class="${fonteCls}">
         <td>${_escapeHtml(r.label)}</td>
-        <td class="num">${_fmtEuroInt(dato.media_euro)}</td>
+        <td class="num" title="${baseTitle}">${_fmtEuroInt(baseDisplay)}</td>
         <td class="num">${_fmtPct(dato.media_pct)}</td>
         <td class="num">${_renderOverrideInput(r, dato, progetto)}</td>
         <td class="num">${_fmtEuroInt(dato.valore * segno)}</td>

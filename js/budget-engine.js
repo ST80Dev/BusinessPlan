@@ -127,8 +127,11 @@ const BudgetEngine = (() => {
    *                    valore = override_fissi[id] OR media €
    *                    (le rimanenze in budget sono trattate come €
    *                    perché non scalano linearmente col fatturato)
-   *   fissi e sotto_linea e imposte:
-   *                    valore = override_fissi[id] OR media €
+   *   fissi, sotto_linea e imposte:
+   *                    valore = override_fissi[id] OR ultimo_anno
+   *                             arrotondato al centinaio
+   *                    (default ancorato al consuntivo più recente,
+   *                    per allinearsi ai costi di gestione attuali)
    *
    * Calcola tutti i derivati del prospetto (CdV, MdC, Tot costi,
    * Utile ante imposte, Utile netto) e il fatturato di break-even
@@ -168,6 +171,18 @@ const BudgetEngine = (() => {
         : 0;
     });
 
+    // Base "ultimo anno arrotondata al centinaio": per i costi fissi e
+    // le altre voci non variabili il budget teorico parte dall'ultima
+    // annualità storica anziché dalla media triennale, per allinearsi
+    // ai costi di gestione più recenti. L'arrotondamento al centinaio
+    // dà un valore tondo come default da rifinire poi via override.
+    const ultimoAnno = anni.length > 0 ? Math.max.apply(null, anni) : null;
+    const ultimoAnnoEuro = {};
+    macro.forEach(m => {
+      const v = ultimoAnno != null ? Number((storico[ultimoAnno] || {})[m.id]) || 0 : 0;
+      ultimoAnnoEuro[m.id] = Math.round(v / 100) * 100;
+    });
+
     // Fatturato budget
     const fatturatoOvr = Number(budget.fatturato_ipotizzato);
     const fatturato = (isFinite(fatturatoOvr) && fatturatoOvr > 0) ? fatturatoOvr : fatturatoStoricoMedio;
@@ -184,7 +199,9 @@ const BudgetEngine = (() => {
           fonte_pct: null,
           fonte: (isFinite(fatturatoOvr) && fatturatoOvr > 0) ? 'override' : 'storico',
           media_euro: medieEuro[m.id],
-          media_pct:  mediePct[m.id]
+          media_pct:  mediePct[m.id],
+          ultimo_anno_euro: ultimoAnnoEuro[m.id],
+          base_default: medieEuro[m.id]
         };
         continue;
       }
@@ -200,7 +217,9 @@ const BudgetEngine = (() => {
           fonte_pct: 'pct',
           fonte: (typeof pctOvr === 'number' && isFinite(pctOvr)) ? 'override' : 'storico',
           media_euro: medieEuro[m.id],
-          media_pct:  mediePct[m.id]
+          media_pct:  mediePct[m.id],
+          ultimo_anno_euro: ultimoAnnoEuro[m.id],
+          base_default: pct * fatturato  // base = % media × fatturato
         };
         // sommaPctVar: i costi variabili contribuiscono +pct,
         // i ricavi variabili (rim_fin sarebbe stato qui ma è calcolato)
@@ -210,16 +229,21 @@ const BudgetEngine = (() => {
         continue;
       }
 
-      // Tutti gli altri (calcolato, fissi, sotto_linea, imposte): € override o media €
+      // Calcolato (rim_ini/rim_fin): € override o media €
+      // Tutto il resto (fissi, sotto_linea, imposte): € override o ultimo
+      // anno arrotondato al centinaio — vedi commento su ultimoAnnoEuro.
       const eurOvr = ovrEur[m.id];
-      const valore = (typeof eurOvr === 'number' && isFinite(eurOvr)) ? eurOvr : (medieEuro[m.id] || 0);
+      const baseDefault = m.calcolato ? (medieEuro[m.id] || 0) : ultimoAnnoEuro[m.id];
+      const valore = (typeof eurOvr === 'number' && isFinite(eurOvr)) ? eurOvr : baseDefault;
       valori[m.id] = {
         valore,
         pct: fatturato > 0 ? valore / fatturato : 0,
         fonte_pct: 'euro',
         fonte: (typeof eurOvr === 'number' && isFinite(eurOvr)) ? 'override' : 'storico',
         media_euro: medieEuro[m.id],
-        media_pct:  mediePct[m.id]
+        media_pct:  mediePct[m.id],
+        ultimo_anno_euro: ultimoAnnoEuro[m.id],
+        base_default: baseDefault
       };
     }
 
@@ -246,6 +270,7 @@ const BudgetEngine = (() => {
     return {
       fatturato,
       fatturato_storico_medio: fatturatoStoricoMedio,
+      ultimo_anno: ultimoAnno,
       valori,
       cdv, totVar, mdc, fissi, totCosti,
       sottoLineaNetto, utileAnteImposte, imposte: imposteVal, utileNetto,
