@@ -2230,14 +2230,20 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 
 .ab-mappatura-sezione-titolo {
   font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--color-text-muted);
-  margin: 28px 0 8px 0;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--color-border);
+  letter-spacing: 1px;
+  color: #FFFFFF;
+  background: var(--color-sidebar-bg);
+  margin: 28px 0 12px 0;
+  padding: 9px 14px;
+  border-radius: 6px;
+  border: none;
+  box-shadow: 0 1px 2px rgba(27, 58, 92, 0.18);
+}
+.ab-mappatura-sezione-titolo:first-child {
+  margin-top: 4px;
 }
 
 .ab-gruppo {
@@ -2252,14 +2258,15 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   box-shadow: 0 0 0 2px var(--color-warning-bg);
 }
 .ab-gruppo-head {
-  padding: 10px 14px;
-  background: var(--color-surface-alt);
-  border-bottom: 1px solid var(--color-border);
+  padding: 11px 14px;
+  background: var(--color-accent-light);
+  border-bottom: 2px solid var(--color-accent);
 }
 .ab-gruppo-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--color-text);
+  letter-spacing: 0.2px;
 }
 .ab-gruppo-count {
   color: var(--color-text-muted);
@@ -2352,14 +2359,17 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 
 .ab-mini-sezione {
   font-family: var(--font-ui);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 10.5px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--color-text-muted);
-  margin: 6px 0 2px 0;
-  padding-bottom: 2px;
-  border-bottom: 1px solid var(--color-border-light);
+  letter-spacing: 0.8px;
+  color: #FFFFFF;
+  background: var(--color-sidebar-bg);
+  margin: 10px 0 4px 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: none;
+  box-shadow: 0 1px 2px rgba(27, 58, 92, 0.15);
 }
 .ab-mini-sezione:first-child { margin-top: 0; }
 
@@ -2368,17 +2378,17 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 4px 8px;
-  margin-bottom: 2px;
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border-light);
+  padding: 5px 8px;
+  margin-bottom: 3px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: default;
   transition: background 0.12s, border-color 0.12s, transform 0.12s;
 }
 .ab-mini-box-label {
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text);
   line-height: 1.3;
   flex: 1 1 auto;
