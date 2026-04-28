@@ -2229,13 +2229,21 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 
 /* Sfondi opachi per le righe speciali sulle celle sticky (necessario perché
-   position:sticky richiede un background non-trasparente per coprire le celle
-   sottostanti durante lo scroll) */
-.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-verde .ab-col-stick,
-.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-verde-forte .ab-col-stick,
-.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-arancio .ab-col-stick,
+   position:sticky richiede un background non-trasparente sul td stesso per
+   coprire le celle scrollate sottostanti: `background: inherit` non basta
+   perché il <tr> non ha un background proprio — il colore è impostato sui td
+   delle righe totale e quindi inherit risulta trasparente) */
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-verde .ab-col-stick {
+  background: var(--color-success-bg);
+}
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-verde-forte .ab-col-stick {
+  background: var(--color-success);
+}
+.ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-arancio .ab-col-stick {
+  background: var(--color-warning-bg);
+}
 .ab-consuntivo-tab-scroll-table tr.ab-prospetto-tot-arancio-forte .ab-col-stick {
-  background: inherit;
+  background: var(--color-warning);
 }
 .ab-consuntivo-tab-scroll-table thead tr .ab-col-stick {
   background: var(--color-prospetto-th-bg);
