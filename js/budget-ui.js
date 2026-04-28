@@ -1247,47 +1247,48 @@ const BudgetUI = (() => {
       <div class="ab-consuntivo">
 
         <div class="ab-consuntivo-head">
-          <h2>Consuntivo & preconsuntivo ${annoCorrente}</h2>
-          <p class="text-muted">
-            Inserisci il fatturato realmente fatturato nelle colonne ${pre.frequenza === 'trimestrale' ? 'trimestrali' : 'mensili'} a destra.
-            Il sistema proietta a fine anno mantenendo lo stesso ritmo di fatturazione,
-            applica le percentuali di costo del budget per stimare i risultati attesi e
-            distribuisce i costi fissi pro-rata sul periodo.
-          </p>
-        </div>
-
-        <div class="ab-consuntivo-toolbar">
-          <div class="ab-freq-selector">
-            <span class="text-muted">Frequenza:</span>
-            <div class="ab-freq-toggle">
-              <div class="ab-freq-opt ${pre.frequenza === 'mensile' ? 'active' : ''}"
-                   onclick="BudgetUI.cambiaFrequenza('mensile')">Mensile</div>
-              <div class="ab-freq-opt ${pre.frequenza === 'trimestrale' ? 'active' : ''}"
-                   onclick="BudgetUI.cambiaFrequenza('trimestrale')">Trimestrale</div>
+          <div class="ab-consuntivo-head-left">
+            <div class="ab-consuntivo-head-top">
+              <h2>Consuntivo & preconsuntivo ${annoCorrente}</h2>
+              <div class="ab-consuntivo-controls">
+                <div class="ab-freq-selector">
+                  <span class="text-muted">Frequenza:</span>
+                  <div class="ab-freq-toggle">
+                    <div class="ab-freq-opt ${pre.frequenza === 'mensile' ? 'active' : ''}"
+                         onclick="BudgetUI.cambiaFrequenza('mensile')">Mensile</div>
+                    <div class="ab-freq-opt ${pre.frequenza === 'trimestrale' ? 'active' : ''}"
+                         onclick="BudgetUI.cambiaFrequenza('trimestrale')">Trimestrale</div>
+                  </div>
+                </div>
+                <div class="ab-consuntivo-stats text-muted">
+                  <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
+                  <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
+                  <span>Consuntivato: <strong>${_fmtEuro(pre.fatturato_consuntivato)}</strong></span>
+                </div>
+              </div>
             </div>
+            <p class="text-muted ab-consuntivo-desc">
+              Inserisci il fatturato realmente fatturato nelle colonne ${pre.frequenza === 'trimestrale' ? 'trimestrali' : 'mensili'} a destra.
+              Il sistema proietta a fine anno mantenendo lo stesso ritmo di fatturazione, applica le percentuali di costo del budget e distribuisce i costi fissi pro-rata sul periodo.
+            </p>
           </div>
-          <div class="ab-consuntivo-stats text-muted">
-            <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
-            <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
-            <span>Consuntivato: <strong>${_fmtEuro(pre.fatturato_consuntivato)}</strong></span>
-          </div>
-        </div>
 
-        <div class="ab-consuntivo-kpi">
-          <div class="ab-budget-kpi-card ab-kpi-verde">
-            <div class="ab-kpi-label">Fatturato proiettato fine anno</div>
-            <div class="ab-kpi-value">${_fmtKpi(pre.fatturato_proiettato)}</div>
-            <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.fatturato_proiettato, pre.budget.fatturato), +1)} vs budget</div>
-          </div>
-          <div class="ab-budget-kpi-card ${pre.proiezione.utileNetto >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}">
-            <div class="ab-kpi-label">Utile netto proiettato</div>
-            <div class="ab-kpi-value">${_fmtKpi(pre.proiezione.utileNetto)}</div>
-            <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.proiezione.utileNetto, pre.budget.utileNetto), +1)} vs budget</div>
-          </div>
-          <div class="ab-budget-kpi-card ab-kpi-arancio">
-            <div class="ab-kpi-label">MdC proiettato</div>
-            <div class="ab-kpi-value">${_fmtKpi(pre.proiezione.mdc)}</div>
-            <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.proiezione.mdc, pre.budget.mdc), +1)} vs budget</div>
+          <div class="ab-consuntivo-kpi">
+            <div class="ab-budget-kpi-card ab-kpi-verde">
+              <div class="ab-kpi-label">Fatturato proiettato fine anno</div>
+              <div class="ab-kpi-value">${_fmtKpi(pre.fatturato_proiettato)}</div>
+              <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.fatturato_proiettato, pre.budget.fatturato), +1)} vs budget</div>
+            </div>
+            <div class="ab-budget-kpi-card ${pre.proiezione.utileNetto >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}">
+              <div class="ab-kpi-label">Utile netto proiettato</div>
+              <div class="ab-kpi-value">${_fmtKpi(pre.proiezione.utileNetto)}</div>
+              <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.proiezione.utileNetto, pre.budget.utileNetto), +1)} vs budget</div>
+            </div>
+            <div class="ab-budget-kpi-card ab-kpi-arancio">
+              <div class="ab-kpi-label">MdC proiettato</div>
+              <div class="ab-kpi-value">${_fmtKpi(pre.proiezione.mdc)}</div>
+              <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.proiezione.mdc, pre.budget.mdc), +1)} vs budget</div>
+            </div>
           </div>
         </div>
 
