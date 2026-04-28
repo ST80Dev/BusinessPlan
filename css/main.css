@@ -1872,35 +1872,40 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-budget-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 24px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
   display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 28px;
-  align-items: stretch;
+  grid-template-columns: minmax(220px, 1fr) 2fr;
+  gap: 14px;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 .ab-budget-fatturato {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: 2px;
 }
 .ab-budget-fatturato-label {
-  font-size: 13px;
+  font-size: 10px;
   color: var(--color-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.6px;
-  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
 }
 .ab-budget-fatturato-input {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 30px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--color-accent);
   background: var(--color-accent-light);
-  padding: 12px 16px;
-  border-radius: 8px;
-  border: 2px solid var(--color-accent-light);
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--color-accent-light);
   outline: none;
   text-align: right;
   transition: border-color 0.15s;
@@ -1909,19 +1914,24 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   border-color: var(--color-accent);
 }
 .ab-budget-fatturato-sub {
-  font-size: 12px;
-  margin-top: 6px;
+  font-size: 10px;
+  margin-top: 2px;
 }
 
 .ab-budget-kpi {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 8px;
 }
 .ab-budget-kpi-card {
   border-radius: 8px;
   padding: 14px 16px;
   border: 1px solid var(--color-border);
+}
+/* Versione compatta KPI dentro l'header del Budget anno */
+.ab-budget-card .ab-budget-kpi-card {
+  border-radius: 5px;
+  padding: 6px 10px;
 }
 .ab-kpi-verde {
   background: var(--color-success-bg);
@@ -1957,6 +1967,19 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   font-size: 12px;
   color: var(--color-text-muted);
   margin-top: 4px;
+}
+/* Versione compatta dei testi KPI dentro l'header del Budget anno */
+.ab-budget-card .ab-kpi-label {
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
+}
+.ab-budget-card .ab-kpi-value {
+  font-size: 14px;
+}
+.ab-budget-card .ab-kpi-sub {
+  font-size: 10px;
+  margin-top: 1px;
 }
 
 .ab-budget-tab td:first-child,

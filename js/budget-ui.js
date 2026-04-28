@@ -31,6 +31,11 @@ const BudgetUI = (() => {
     return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' });
   }
 
+  function _fmtEuroInt(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return '—';
+    return Math.round(n).toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: 'always' });
+  }
+
   function _escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
@@ -1096,7 +1101,7 @@ const BudgetUI = (() => {
           <td class="num"></td>
           <td class="num"></td>
           <td class="num"></td>
-          <td class="num">${_fmtEuro(valBudget * segno)}</td>
+          <td class="num">${_fmtEuroInt(valBudget * segno)}</td>
           <td class="num">${_fmtPct(pctBudget * segno)}</td>
         </tr>`;
         continue;
@@ -1113,10 +1118,10 @@ const BudgetUI = (() => {
 
       html += `<tr class="${fonteCls}">
         <td>${_escapeHtml(r.label)}</td>
-        <td class="num">${_fmtEuro(dato.media_euro)}</td>
+        <td class="num">${_fmtEuroInt(dato.media_euro)}</td>
         <td class="num">${_fmtPct(dato.media_pct)}</td>
         <td class="num">${_renderOverrideInput(r, dato, progetto)}</td>
-        <td class="num">${_fmtEuro(dato.valore * segno)}</td>
+        <td class="num">${_fmtEuroInt(dato.valore * segno)}</td>
         <td class="num">${_fmtPct(dato.pct * segno)}</td>
       </tr>`;
     }
@@ -1148,7 +1153,7 @@ const BudgetUI = (() => {
 
     if (r.inputType === 'euro') {
       const cur = ovrEur[r.id];
-      const display = (typeof cur === 'number') ? _fmtEuro(cur) : '';
+      const display = (typeof cur === 'number') ? _fmtEuroInt(cur) : '';
       return `<div class="amount-field ab-budget-input"
                    contenteditable="true"
                    data-budget-field="override_fissi.${_escapeHtml(r.id)}"
