@@ -61,23 +61,8 @@ const UI = (() => {
       el.classList.toggle('active', el.dataset.section === sezione);
     });
 
-    // Aggiorna header
-    const titoli = {
-      'home':            'Home',
-      'importa':         'Importa bilancio',
-      'dati-partenza':   'Dati di partenza',
-      'driver':          'Driver & Parametri',
-      'eventi':          'Eventi',
-      'prospetti':       'Prospetti futuri',
-      'dashboard':       'Dashboard KPI',
-      'ab-importa-ce':   'Importa CE',
-      'ab-mappatura':    'Mappatura sottoconti',
-      'ab-storico':      'Storico & medie',
-      'ab-budget':       'Budget anno',
-      'ab-consuntivo':   'Consuntivo'
-    };
-    const headerTitle = document.getElementById('header-title');
-    if (headerTitle) headerTitle.textContent = titoli[sezione] || sezione;
+    // Aggiorna header (titolo e sottotitolo per la sezione corrente)
+    _aggiornaHeaderSezione(sezione);
 
     // Aggiorna header actions
     _renderHeaderActions(sezione);
@@ -125,6 +110,59 @@ const UI = (() => {
         break;
       default:
         content.innerHTML = '';
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Header — titolo, sottotitolo, cliente
+     ────────────────────────────────────────────────────────── */
+
+  /* Titolo lungo + descrizione sintetica per ogni sezione: la
+     descrizione è nell'header, così le pagine non duplicano più
+     <h2> e paragrafo di intro. */
+  const _SEZIONI_HEADER = {
+    'home':            { titolo: 'Home',                                 sub: '' },
+    'importa':         { titolo: 'Importa bilancio',                     sub: 'Carica un bilancio storico per popolare SP/CE.' },
+    'dati-partenza':   { titolo: 'Dati di partenza',                     sub: 'SP e CE storici dell\'anno base — input manuale o import.' },
+    'driver':          { titolo: 'Driver & Parametri',                   sub: 'Ricavi, stagionalità, DSO/DPO/DIO, magazzino, fiscale.' },
+    'eventi':          { titolo: 'Eventi',                               sub: 'Mutui, investimenti, variazioni strutturali, operazioni soci.' },
+    'prospetti':       { titolo: 'Prospetti futuri',                     sub: 'SP, CE, rendiconto e cruscotto previsionali pluriennali.' },
+    'dashboard':       { titolo: 'Dashboard KPI',                        sub: 'Grafici di sintesi e KPI cards sull\'orizzonte di previsione.' },
+    'ab-importa-ce':   { titolo: 'Importa CE da bilancio di verifica',   sub: 'Carica l\'Excel del bilancio di verifica: il sistema estrae i sottoconti CE e li pre-mappa alle macroaree.' },
+    'ab-mappatura':    { titolo: 'Mappatura sottoconti → macroaree',     sub: 'Trascina i sottoconti sui box della mini-CE per riassegnarli; multi-selezione con Shift/Ctrl.' },
+    'ab-storico':      { titolo: 'Storico CE per macroarea',             sub: 'Importi per anno e media % sul fatturato — base per la proiezione del budget.' },
+    'ab-budget':       { titolo: 'Budget anno',                          sub: 'Proietta i costi sull\'anno corrente partendo dal fatturato ipotizzato e dalle medie storiche.' },
+    'ab-consuntivo':   { titolo: 'Consuntivo & preconsuntivo',           sub: 'Inserisci il fatturato realizzato per periodo: il sistema proietta a fine anno e confronta col budget.' }
+  };
+
+  function _aggiornaHeaderSezione(sezione) {
+    const titoloEl = document.getElementById('header-title');
+    const subEl    = document.getElementById('header-subtitle');
+    const clienteEl = document.getElementById('header-cliente');
+    const cfg = _SEZIONI_HEADER[sezione] || { titolo: sezione, sub: '' };
+
+    if (titoloEl) titoloEl.textContent = cfg.titolo;
+    if (subEl) {
+      if (cfg.sub) {
+        subEl.textContent = cfg.sub;
+        subEl.classList.remove('hidden');
+      } else {
+        subEl.textContent = '';
+        subEl.classList.add('hidden');
+      }
+    }
+
+    // Cliente in alto a sinistra: sempre visibile se c'è un progetto aperto,
+    // anche per la home (così il contesto resta evidente).
+    if (clienteEl) {
+      const progetto = Projects.getProgetto();
+      if (progetto && progetto.meta && progetto.meta.cliente) {
+        clienteEl.textContent = progetto.meta.cliente;
+        clienteEl.classList.remove('hidden');
+      } else {
+        clienteEl.textContent = '';
+        clienteEl.classList.add('hidden');
+      }
     }
   }
 
@@ -177,8 +215,7 @@ const UI = (() => {
       el.classList.toggle('active', el.dataset.section === 'home');
     });
 
-    const headerTitle = document.getElementById('header-title');
-    if (headerTitle) headerTitle.textContent = 'Home';
+    _aggiornaHeaderSezione('home');
 
     // Header actions per home
     const badges = document.getElementById('header-badges');

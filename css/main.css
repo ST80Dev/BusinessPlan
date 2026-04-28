@@ -58,7 +58,7 @@
 
   /* Layout */
   --sidebar-width:         240px;
-  --header-height:         58px;
+  --header-height:         76px;
   --footer-height:         36px;
 
   /* Tipografia */
@@ -271,11 +271,50 @@ html, body {
   box-shadow: var(--shadow-sm);
 }
 
+.header-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+}
+
+.header-cliente {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .header-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--color-text-primary);
-  flex: 1;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-subtitle {
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .header-badge {
@@ -1688,17 +1727,6 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 /* ── Modulo AB — Importa CE ──────────────────────────────────── */
 .ab-import { padding: 24px; max-width: 1100px; }
 
-.ab-import-intro h2 {
-  font-size: 22px;
-  margin: 0 0 8px 0;
-  color: var(--color-text);
-}
-.ab-import-intro p {
-  font-size: 14px;
-  line-height: 1.55;
-  margin: 0 0 24px 0;
-}
-
 .ab-import-dropzone {
   border: 2px dashed var(--color-border);
   background: var(--color-surface-alt);
@@ -1834,18 +1862,6 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 }
 
 /* ── Modulo AB — Prospetto Storico ───────────────────────────── */
-.ab-storico-head h2 {
-  font-size: 20px;
-  margin: 0 0 6px 0;
-  color: var(--color-text);
-}
-.ab-storico-head p {
-  font-size: 12px;
-  line-height: 1.45;
-  margin: 0 0 12px 0;
-  max-width: 780px;
-}
-
 .ab-storico-prospetto td:first-child,
 .ab-storico-prospetto th:first-child {
   width: 38%;
@@ -2183,24 +2199,6 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   gap: 6px;
   min-width: 0;
 }
-.ab-consuntivo-head-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.ab-consuntivo-head h2 {
-  font-size: 18px;
-  margin: 0;
-  color: var(--color-text);
-}
-.ab-consuntivo-desc {
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 0;
-  color: var(--color-text-muted);
-}
 .ab-consuntivo-controls {
   display: flex;
   align-items: center;
@@ -2465,16 +2463,6 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   margin: -24px -24px 16px -24px;
   padding: 14px 24px 10px 24px;
   border-bottom: 1px solid var(--color-border-light);
-}
-.ab-mappatura-head h2 {
-  font-size: 18px;
-  margin: 0 0 4px 0;
-  color: var(--color-text);
-}
-.ab-mappatura-head p {
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 0 0 8px 0;
 }
 .ab-mappatura-stats {
   display: flex;

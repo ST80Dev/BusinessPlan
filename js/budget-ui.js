@@ -55,17 +55,6 @@ const BudgetUI = (() => {
     c.innerHTML = `
       <div class="ab-import">
 
-        <div class="ab-import-intro">
-          <h2>Importa CE da bilancio di verifica</h2>
-          <p class="text-muted">
-            Carica il file Excel del bilancio di verifica esportato dal gestionale.
-            Il sistema legge automaticamente la sezione CE (dopo "Ratei e risconti passivi"),
-            estrae i sottoconti e li pre-mappa alle macroaree in base al mastro di
-            appartenenza. Le rimanenze iniziali e finali vengono calcolate dai mastri di
-            variazione 61 (lavori in corso) e 80 (variazione rimanenze materiali).
-          </p>
-        </div>
-
         <div class="ab-import-dropzone" id="ab-dropzone">
           <div class="ab-import-dropzone-icon">⇪</div>
           <div class="ab-import-dropzone-title">Trascina qui il file .xlsx</div>
@@ -442,14 +431,6 @@ const BudgetUI = (() => {
 
     let html = `
       <div class="ab-storico">
-        <div class="ab-storico-head">
-          <h2>Storico CE per macroarea</h2>
-          <p class="text-muted">
-            Importi per anno e incidenza media percentuale sul fatturato. La media % delle
-            macroaree variabili è la base che il budget userà per proiettare i costi
-            sull'anno in corso.
-          </p>
-        </div>
         <table class="ab-storico-tab ab-storico-prospetto">
           <thead>
             <tr>
@@ -580,14 +561,6 @@ const BudgetUI = (() => {
     let html = `
       <div class="ab-mappatura">
         <div class="ab-mappatura-head">
-          <h2>Mappatura sottoconti → macroaree</h2>
-          <p class="text-muted">
-            <strong>Trascina</strong> uno o più sottoconti dalla lista a destra sui box della
-            <em>mini-CE</em> a sinistra per riassegnarli; in alternativa usa il menu a tendina
-            sulla riga. Per selezionare più sottoconti tieni premuto <kbd>Shift</kbd> o
-            <kbd>Ctrl</kbd> mentre clicchi sul codice. I sottoconti dei mastri 61 e 80
-            (variazione rimanenze) confluiscono automaticamente nelle rim. iniziali/finali.
-          </p>
           <div class="ab-mappatura-stats">
             <span><strong>${totale}</strong> sottoconti CE totali</span>
             <span><strong>${mappati}</strong> mappati</span>
@@ -1270,29 +1243,22 @@ const BudgetUI = (() => {
 
         <div class="ab-consuntivo-head">
           <div class="ab-consuntivo-head-left">
-            <div class="ab-consuntivo-head-top">
-              <h2>Consuntivo & preconsuntivo ${annoCorrente}</h2>
-              <div class="ab-consuntivo-controls">
-                <div class="ab-freq-selector">
-                  <span class="text-muted">Frequenza:</span>
-                  <div class="ab-freq-toggle">
-                    <div class="ab-freq-opt ${pre.frequenza === 'mensile' ? 'active' : ''}"
-                         onclick="BudgetUI.cambiaFrequenza('mensile')">Mensile</div>
-                    <div class="ab-freq-opt ${pre.frequenza === 'trimestrale' ? 'active' : ''}"
-                         onclick="BudgetUI.cambiaFrequenza('trimestrale')">Trimestrale</div>
-                  </div>
-                </div>
-                <div class="ab-consuntivo-stats text-muted">
-                  <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
-                  <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
-                  <span>Consuntivato: <strong>${_fmtEuroInt(pre.fatturato_consuntivato)}</strong></span>
+            <div class="ab-consuntivo-controls">
+              <div class="ab-freq-selector">
+                <span class="text-muted">Frequenza:</span>
+                <div class="ab-freq-toggle">
+                  <div class="ab-freq-opt ${pre.frequenza === 'mensile' ? 'active' : ''}"
+                       onclick="BudgetUI.cambiaFrequenza('mensile')">Mensile</div>
+                  <div class="ab-freq-opt ${pre.frequenza === 'trimestrale' ? 'active' : ''}"
+                       onclick="BudgetUI.cambiaFrequenza('trimestrale')">Trimestrale</div>
                 </div>
               </div>
+              <div class="ab-consuntivo-stats text-muted">
+                <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
+                <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
+                <span>Consuntivato: <strong>${_fmtEuroInt(pre.fatturato_consuntivato)}</strong></span>
+              </div>
             </div>
-            <p class="text-muted ab-consuntivo-desc">
-              Inserisci il fatturato realmente fatturato nelle colonne ${pre.frequenza === 'trimestrale' ? 'trimestrali' : 'mensili'} a destra.
-              Il sistema proietta a fine anno mantenendo lo stesso ritmo di fatturazione, applica le percentuali di costo del budget e distribuisce i costi fissi pro-rata sul periodo.
-            </p>
           </div>
 
           <div class="ab-consuntivo-kpi">
