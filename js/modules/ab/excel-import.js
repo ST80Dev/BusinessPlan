@@ -354,8 +354,14 @@ const ExcelImport = (() => {
       // Inizializza tutte le macroaree a 0 (semplifica le tabelle UI)
       macroAree.forEach(m => { storico[annoStr][m.id] = 0; });
 
-      // Aggrega i sottoconti mappati: per costi prendiamo Dare,
-      // per ricavi prendiamo Avere. Il segno è già naturale nel dato.
+      // Aggrega i sottoconti mappati col loro saldo netto contabile,
+      // orientato secondo la convenzione della macroarea di destinazione:
+      //   - macroaree di tipo 'costo'  → contributo = Dare − Avere
+      //   - macroaree di tipo 'ricavo' → contributo = Avere − Dare
+      // Così un sottoconto può essere spostato in qualunque sezione
+      // mantenendo il proprio segno reale: un rimborso (Avere) finito
+      // in una macroarea di costo riduce il totale dei costi anziché
+      // sparire (la vecchia logica leggeva la sola colonna Dare).
       for (const s of parsed.sottoconti) {
         const macroId = mapping[s.codice];
         if (!macroId) continue;
@@ -363,7 +369,9 @@ const ExcelImport = (() => {
         if (!macro) continue;
         const v = s.valori[anno];
         if (!v) continue;
-        const importo = (macro.tipo === 'ricavo') ? v.avere : v.dare;
+        const importo = (macro.tipo === 'ricavo')
+          ? (v.avere - v.dare)
+          : (v.dare - v.avere);
         storico[annoStr][macroId] += importo;
       }
 
