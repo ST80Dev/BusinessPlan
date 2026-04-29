@@ -184,11 +184,11 @@ const BudgetUI = (() => {
     const numNonMap = parsed.sottoconti.length - numMappati - totRimanenze;
 
     const sezioni = [
-      { sez: 'ricavi',      titolo: 'Ricavi' },
-      { sez: 'variabili',   titolo: 'Costi variabili' },
-      { sez: 'fissi',       titolo: 'Costi fissi di gestione' },
-      { sez: 'sotto_linea', titolo: 'Voci sotto la linea' },
-      { sez: 'imposte',     titolo: 'Imposte' }
+      { sez: 'ricavi',             titolo: 'Ricavi' },
+      { sez: 'variabili',          titolo: 'Costi variabili' },
+      { sez: 'fissi',              titolo: 'Costi fissi di gestione' },
+      { sez: 'prov_oneri_straord', titolo: 'Proventi/Oneri Straordinari' },
+      { sez: 'imposte',            titolo: 'Imposte' }
     ];
 
     let tabHtml = '<table class="ab-storico-tab"><thead><tr><th>Macroarea</th>';
@@ -289,7 +289,7 @@ const BudgetUI = (() => {
        MARGINE DI CONTRIBUZIONE
        [Costi fissi]
        COSTI FISSI DI GESTIONE / TOTALE COSTI FISSI / TOTALE COSTI
-       [Sotto la linea]
+       [Proventi/Oneri Straordinari]
        UTILE ANTE IMPOSTE / IMPOSTE / UTILE NETTO
 
      Per ogni macroarea variabile/fissa viene calcolata la "Media %"
@@ -299,7 +299,7 @@ const BudgetUI = (() => {
 
   /**
    * Calcola tutti i totali e i derivati del prospetto, anno per anno.
-   * @returns {Object<string, Object>} per anno → { fatturato, cdv, totVar, mdc, totFissi, totCosti, sottoLineaNetto, utileAnteImposte, imposte, utileNetto }
+   * @returns {Object<string, Object>} per anno → { fatturato, cdv, totVar, mdc, totFissi, totCosti, provOneriStraordNetto, utileAnteImposte, imposte, utileNetto }
    */
   function _calcolaTotaliStorico(progetto) {
     const anni = progetto.meta.anni_storici;
@@ -324,15 +324,15 @@ const BudgetUI = (() => {
       const straord    = sa.straordinari || 0;
       const altriRic   = sa.altri_ric || 0;
       const altriProvF = sa.altri_prov_f || 0;
-      const sottoLineaNetto = altriRic + altriProvF - straord;
-      const utileAnteImposte = mdc - fissi + sottoLineaNetto;
+      const provOneriStraordNetto = altriRic + altriProvF - straord;
+      const utileAnteImposte = mdc - fissi + provOneriStraordNetto;
       const imposte = sa.imposte || 0;
       const utileNetto = utileAnteImposte - imposte;
 
       out[a] = {
         fatturato, matPrime, altriVar, rimIni, rimFin,
         cdv, totVar, mdc, fissi, totCosti,
-        straord, altriRic, altriProvF, sottoLineaNetto,
+        straord, altriRic, altriProvF, provOneriStraordNetto,
         utileAnteImposte, imposte, utileNetto
       };
     }
@@ -363,7 +363,7 @@ const BudgetUI = (() => {
     });
 
     // Derivati
-    ['cdv','totVar','mdc','fissi','totCosti','utileAnteImposte','utileNetto','sottoLineaNetto'].forEach(k => {
+    ['cdv','totVar','mdc','fissi','totCosti','utileAnteImposte','utileNetto','provOneriStraordNetto'].forEach(k => {
       const pcts = anni.map(a => totali[a][k] / totali[a].fatturato);
       out[k] = pcts.reduce((s, p) => s + p, 0) / pcts.length;
     });
@@ -491,7 +491,7 @@ const BudgetUI = (() => {
      Layout a due colonne:
        - Sidebar interna sx: mini-CE con tutte le macroaree
          strutturate per sezione (Ricavi → Costi variabili →
-         Costi fissi → Sotto la linea → Imposte). Ogni box è un
+         Costi fissi → Proventi/Oneri Straordinari → Imposte). Ogni box è un
          drop target con contatore live.
        - Main dx: lista dei sottoconti raggruppati per macroarea
          attualmente assegnata. Ogni riga è draggable; il dropdown
@@ -551,11 +551,11 @@ const BudgetUI = (() => {
     const mappati = totale - nonMappati.length - inRimanenze.length;
 
     const sezioniProspetto = [
-      { sez: 'ricavi',      titolo: 'Ricavi' },
-      { sez: 'variabili',   titolo: 'Costi variabili' },
-      { sez: 'fissi',       titolo: 'Costi fissi di gestione' },
-      { sez: 'sotto_linea', titolo: 'Voci sotto la linea' },
-      { sez: 'imposte',     titolo: 'Imposte' }
+      { sez: 'ricavi',             titolo: 'Ricavi' },
+      { sez: 'variabili',          titolo: 'Costi variabili' },
+      { sez: 'fissi',              titolo: 'Costi fissi di gestione' },
+      { sez: 'prov_oneri_straord', titolo: 'Proventi/Oneri Straordinari' },
+      { sez: 'imposte',            titolo: 'Imposte' }
     ];
 
     let html = `
@@ -864,11 +864,11 @@ const BudgetUI = (() => {
 
   function _dropdownMacroaree(codiceSottoconto, currentId, macroAree) {
     const sezioniProspetto = [
-      { sez: 'ricavi',      titolo: 'Ricavi' },
-      { sez: 'variabili',   titolo: 'Costi variabili' },
-      { sez: 'fissi',       titolo: 'Costi fissi' },
-      { sez: 'sotto_linea', titolo: 'Sotto la linea' },
-      { sez: 'imposte',     titolo: 'Imposte' }
+      { sez: 'ricavi',             titolo: 'Ricavi' },
+      { sez: 'variabili',          titolo: 'Costi variabili' },
+      { sez: 'fissi',              titolo: 'Costi fissi' },
+      { sez: 'prov_oneri_straord', titolo: 'Proventi/Oneri Straordinari' },
+      { sez: 'imposte',            titolo: 'Imposte' }
     ];
 
     let html = `<select class="form-select form-select-sm ab-macro-select" data-codice="${_escapeHtml(codiceSottoconto)}" onchange="BudgetUI.cambiaMacroarea(this.dataset.codice, this.value)">`;
@@ -906,7 +906,7 @@ const BudgetUI = (() => {
 
      Tabella prospetto identica per layout allo Storico, ma con:
        - una colonna "Override" per macroarea variabile (input %) o
-         fissa/sotto-linea (input €). Vuota = usa default storico.
+         fissa/straordinaria (input €). Vuota = usa default storico.
        - una colonna "Fonte" che indica se il valore viene da
          storico (S) o override utente (O).
        - per ogni macroarea, un'icona "nota" accanto all'override:
@@ -950,7 +950,7 @@ const BudgetUI = (() => {
    * Valore "Base storica" della singola macroarea, coerente con la cella
    * mostrata nel prospetto: media triennale € per ricavi, costi variabili
    * e rimanenze; ultimo anno arrotondato al centinaio per fissi,
-   * sotto-linea e imposte.
+   * proventi/oneri straordinari e imposte.
    */
   function _baseStoricaVoce(macroSezioni, b, id) {
     const m = (macroSezioni || []).find(x => x.id === id);
@@ -975,8 +975,8 @@ const BudgetUI = (() => {
       .reduce((s, k) => s + v(k), 0);
     const mdc = fatturato - cdv;
     const totCosti = cdv + fissi;
-    const sottoLineaNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
-    const utileAnteImposte = mdc - fissi + sottoLineaNetto;
+    const provOneriStraordNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
+    const utileAnteImposte = mdc - fissi + provOneriStraordNetto;
     const utileNetto = utileAnteImposte - v('imposte');
     return { fatturato, cdv, mdc, fissi, totCosti, utileAnteImposte, utileNetto };
   }
@@ -1085,7 +1085,7 @@ const BudgetUI = (() => {
           <thead>
             <tr>
               <th>Macroarea</th>
-              <th class="num" title="Costi variabili: media triennale €. Fissi, sotto-linea e imposte: ultimo anno arrotondato al centinaio (base del budget teorico).">Base storica</th>
+              <th class="num" title="Costi variabili: media triennale €. Fissi, proventi/oneri straordinari e imposte: ultimo anno arrotondato al centinaio (base del budget teorico).">Base storica</th>
               <th class="num">% storica</th>
               <th class="num">Override</th>
               <th class="num">Budget €</th>
@@ -1100,7 +1100,7 @@ const BudgetUI = (() => {
     // Totali "Base storica": ricalcoliamo gli aggregati con la stessa
     // logica del budget, ma usando come valore di partenza per ogni voce
     // la cella "Base storica" (media € per variabili/calcolati e ricavi,
-    // ultimo anno arrotondato per fissi/sotto-linea/imposte). Così i
+    // ultimo anno arrotondato per fissi/prov_oneri_straord/imposte). Così i
     // totali mostrati nella colonna Base storica sono coerenti col valore
     // teorico che il budget partirebbe a usare in assenza di override.
     const baseTot = _calcolaBaseStoricaTotali(progetto, b);
@@ -1859,9 +1859,9 @@ const BudgetUI = (() => {
 
     // Note metodologiche fisse (riprendono i tooltip a video)
     const noteMetodo = [
-      '<strong>Base storica</strong> — per costi variabili (mat. prime, altri costi variabili) e rimanenze: media triennale degli importi storici. Per costi fissi, sotto-linea e imposte: ultimo anno arrotondato al centinaio (default del budget teorico).',
+      '<strong>Base storica</strong> — per costi variabili (mat. prime, altri costi variabili) e rimanenze: media triennale degli importi storici. Per costi fissi, proventi/oneri straordinari e imposte: ultimo anno arrotondato al centinaio (default del budget teorico).',
       '<strong>% storica</strong> — incidenza media sul fatturato calcolata come media delle incidenze % di ciascun anno storico (non come media degli importi diviso media del fatturato).',
-      '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi, sotto-linea e imposte: importo di partenza (ultimo anno) o override utente. Rimanenze: media € storica o override €.',
+      '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi, proventi/oneri straordinari e imposte: importo di partenza (ultimo anno) o override utente. Rimanenze: media € storica o override €.',
       '<strong>Costo del venduto</strong> = Mat. prime + Altri costi variabili + Rimanenze iniziali − Rimanenze finali.',
       `<strong>Fatturato di break-even</strong> = (Rim. iniziali − Rim. finali + Σ costi fissi) / (1 − Σ % costi variabili). ${b.break_even != null ? 'Differenza vs ipotizzato: ' + _fmtPctSigned(deltaFattBe || 0) : 'Non calcolabile (denominatore non positivo o costi fissi nulli).'}`
     ];
@@ -1940,7 +1940,7 @@ const BudgetUI = (() => {
     });
 
     const valoriCum = {};
-    const totaliCum = { fatturato: 0, cdv: 0, totVar: 0, mdc: 0, fissi: 0, totCosti: 0, sottoLineaNetto: 0, utileAnteImposte: 0, imposte: 0, utileNetto: 0 };
+    const totaliCum = { fatturato: 0, cdv: 0, totVar: 0, mdc: 0, fissi: 0, totCosti: 0, provOneriStraordNetto: 0, utileAnteImposte: 0, imposte: 0, utileNetto: 0 };
 
     if (lastIdx >= 0) {
       for (let i = 0; i <= lastIdx; i++) {
@@ -2132,10 +2132,10 @@ const BudgetUI = (() => {
     // Note metodologiche
     const noteMetodo = [
       pre.frequenza === 'trimestrale'
-        ? '<strong>Colonne trimestrali</strong> — ogni colonna mostra il singolo trimestre <em>isolato</em>: i costi variabili sono % budget × fatturato del trimestre, i fissi/sotto-linea/imposte sono pro-quota 1/4 del budget annuale. I trimestri non compilati sono indicati come tali e mostrano i soli costi pro-quota (fatturato 0).'
-        : '<strong>Colonna cumulato</strong> — somma da gennaio all\'ultimo mese compilato. I costi variabili scalano col fatturato effettivo cumulato, i costi fissi/sotto-linea/imposte sono pro-quota in dodicesimi.',
+        ? '<strong>Colonne trimestrali</strong> — ogni colonna mostra il singolo trimestre <em>isolato</em>: i costi variabili sono % budget × fatturato del trimestre, i fissi/proventi/oneri straord./imposte sono pro-quota 1/4 del budget annuale. I trimestri non compilati sono indicati come tali e mostrano i soli costi pro-quota (fatturato 0).'
+        : '<strong>Colonna cumulato</strong> — somma da gennaio all\'ultimo mese compilato. I costi variabili scalano col fatturato effettivo cumulato, i costi fissi/proventi/oneri straord./imposte sono pro-quota in dodicesimi.',
       '<strong>Budget €</strong> — è sempre il budget <em>annuale</em> completo, come riferimento. Non viene proporzionato al periodo: il confronto utile è quello della colonna "Proiezione fine anno", che ribalta sul totale anno il ritmo di fatturazione osservato.',
-      '<strong>Proiezione fine anno</strong> — fatturato proiettato = fatturato consuntivato / frazione di anno chiusa. Costi variabili = % budget × fatturato proiettato. Costi fissi/sotto-linea/imposte = budget annuale intero. Le rimanenze sono assunte stabili al budget.',
+      '<strong>Proiezione fine anno</strong> — fatturato proiettato = fatturato consuntivato / frazione di anno chiusa. Costi variabili = % budget × fatturato proiettato. Costi fissi/proventi/oneri straord./imposte = budget annuale intero. Le rimanenze sono assunte stabili al budget.',
       '<strong>Δ vs budget</strong> — differenza Proiezione − Budget annuale. Verde = scostamento favorevole (più ricavi/utile o meno costi); rosso = sfavorevole.'
     ];
 

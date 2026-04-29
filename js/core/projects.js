@@ -701,6 +701,7 @@ const Projects = (() => {
           UI.mostraNotifica('File non valido: struttura progetto non riconosciuta.', 'error');
           return;
         }
+        if (dati.meta && dati.meta.modulo === 'ab') _migraProgettoAB(dati);
         _progettoCorrente = dati;
         _sincronizzaDriverIdCounter(dati);
         _modificato = false;
@@ -711,6 +712,19 @@ const Projects = (() => {
       }
     };
     reader.readAsText(file);
+  }
+
+  /**
+   * Migrazione progetti AB: la sezione delle voci straordinarie
+   * era originariamente identificata da `sotto_linea`, oggi è
+   * `prov_oneri_straord`. Riallinea le macro_sezioni dei progetti
+   * salvati con la vecchia chiave senza alterarne i dati.
+   */
+  function _migraProgettoAB(dati) {
+    if (!Array.isArray(dati.macro_sezioni)) return;
+    dati.macro_sezioni.forEach(function(m) {
+      if (m && m.sezione === 'sotto_linea') m.sezione = 'prov_oneri_straord';
+    });
   }
 
   /**

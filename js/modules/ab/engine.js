@@ -21,11 +21,11 @@ const BudgetEngine = (() => {
        id        — chiave stabile usata in storico/budget/mapping
        label     — etichetta visibile
        sezione   — raggruppamento di prospetto (ricavi | variabili |
-                   fissi | sotto_linea | imposte)
+                   fissi | prov_oneri_straord | imposte)
        tipo      — ricavo | costo
        var_fisso — variabile | fisso (rilevante solo per costi sopra
-                   la linea; le voci sotto_linea/imposte non concorrono
-                   al break-even)
+                   la linea; le voci prov_oneri_straord/imposte non
+                   concorrono al break-even)
        mastri    — codici mastro (XX) tipici del piano dei conti
                    italiano da cui i sottoconti vengono pre-mappati a
                    questa macroarea. L'utente può sempre spostare
@@ -47,9 +47,9 @@ const BudgetEngine = (() => {
     { id: 'ammortamenti', label: 'Ammortamenti',                           sezione: 'fissi',      tipo: 'costo',  var_fisso: 'fisso',     mastri: ['75'] },
     { id: 'oneri_gest',   label: 'Oneri diversi di gestione',              sezione: 'fissi',      tipo: 'costo',  var_fisso: 'fisso',     mastri: ['84'] },
     { id: 'oneri_fin',    label: 'Int. pass. e altri oneri finanz.',       sezione: 'fissi',      tipo: 'costo',  var_fisso: 'fisso',     mastri: ['88'] },
-    { id: 'straordinari', label: 'Oneri straordinari',                     sezione: 'sotto_linea',tipo: 'costo',  var_fisso: null,        mastri: ['95'] },
-    { id: 'altri_ric',    label: 'Altri ricavi e proventi',                sezione: 'sotto_linea',tipo: 'ricavo', var_fisso: null,        mastri: ['64'], filtro_conto: '64/05' },
-    { id: 'altri_prov_f', label: 'Altri proventi finanziari',              sezione: 'sotto_linea',tipo: 'ricavo', var_fisso: null,        mastri: ['87'], includi_conto: '64/15' },
+    { id: 'straordinari', label: 'Oneri straordinari',                     sezione: 'prov_oneri_straord', tipo: 'costo',  var_fisso: null,        mastri: ['95'] },
+    { id: 'altri_ric',    label: 'Altri ricavi e proventi',                sezione: 'prov_oneri_straord', tipo: 'ricavo', var_fisso: null,        mastri: ['64'], filtro_conto: '64/05' },
+    { id: 'altri_prov_f', label: 'Altri proventi finanziari',              sezione: 'prov_oneri_straord', tipo: 'ricavo', var_fisso: null,        mastri: ['87'], includi_conto: '64/15' },
     { id: 'imposte',      label: 'Imposte sul reddito',                    sezione: 'imposte',    tipo: 'costo',  var_fisso: null,        mastri: ['96'] }
   ];
 
@@ -127,7 +127,7 @@ const BudgetEngine = (() => {
    *                    valore = override_fissi[id] OR media €
    *                    (le rimanenze in budget sono trattate come €
    *                    perché non scalano linearmente col fatturato)
-   *   fissi, sotto_linea e imposte:
+   *   fissi, prov_oneri_straord e imposte:
    *                    valore = override_fissi[id] OR ultimo_anno
    *                             arrotondato al centinaio
    *                    (default ancorato al consuntivo più recente,
@@ -139,8 +139,8 @@ const BudgetEngine = (() => {
    *
    *   F_be = (rim_ini − rim_fin + Σ fissi) / (1 − Σ pct_var)
    *
-   * Le voci sotto la linea e le imposte non concorrono al BE
-   * operativo per definizione classica.
+   * Le voci di proventi/oneri straordinari e le imposte non
+   * concorrono al BE operativo per definizione classica.
    *
    * @param {Object} progetto - progetto AB
    * @returns {Object} prospetto budget completo
@@ -230,7 +230,7 @@ const BudgetEngine = (() => {
       }
 
       // Calcolato (rim_ini/rim_fin): € override o media €
-      // Tutto il resto (fissi, sotto_linea, imposte): € override o ultimo
+      // Tutto il resto (fissi, prov_oneri_straord, imposte): € override o ultimo
       // anno arrotondato al centinaio — vedi commento su ultimoAnnoEuro.
       const eurOvr = ovrEur[m.id];
       const baseDefault = m.calcolato ? (medieEuro[m.id] || 0) : ultimoAnnoEuro[m.id];
@@ -255,8 +255,8 @@ const BudgetEngine = (() => {
     const fissi   = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
                       .reduce((s, k) => s + v(k), 0);
     const totCosti = totVar + fissi;
-    const sottoLineaNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
-    const utileAnteImposte = mdc - fissi + sottoLineaNetto;
+    const provOneriStraordNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
+    const utileAnteImposte = mdc - fissi + provOneriStraordNetto;
     const imposteVal = v('imposte');
     const utileNetto = utileAnteImposte - imposteVal;
 
@@ -273,7 +273,7 @@ const BudgetEngine = (() => {
       ultimo_anno: ultimoAnno,
       valori,
       cdv, totVar, mdc, fissi, totCosti,
-      sottoLineaNetto, utileAnteImposte, imposte: imposteVal, utileNetto,
+      provOneriStraordNetto, utileAnteImposte, imposte: imposteVal, utileNetto,
       somma_pct_var: sommaPctVar,
       break_even: breakEven
     };
@@ -341,7 +341,7 @@ const BudgetEngine = (() => {
           continue;
         }
 
-        // Fissi/calcolato/sotto_linea/imposte: budget annuale × frazione tempo
+        // Fissi/calcolato/prov_oneri_straord/imposte: budget annuale × frazione tempo
         const valBudget = (budget.valori[m.id] && budget.valori[m.id].valore) || 0;
         valori[m.id] = { valore: valBudget * frazTempo };
       }
@@ -353,8 +353,8 @@ const BudgetEngine = (() => {
       const fissi   = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
                         .reduce((s, k) => s + v(k), 0);
       const totCosti = totVar + fissi;
-      const sottoLineaNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
-      const utileAnteImposte = mdc - fissi + sottoLineaNetto;
+      const provOneriStraordNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
+      const utileAnteImposte = mdc - fissi + provOneriStraordNetto;
       const imposteVal = v('imposte');
       const utileNetto = utileAnteImposte - imposteVal;
 
@@ -362,7 +362,7 @@ const BudgetEngine = (() => {
         valori,
         fatturato: fattAnnoCompleto,
         cdv, totVar, mdc, fissi, totCosti,
-        sottoLineaNetto, utileAnteImposte, imposte: imposteVal, utileNetto
+        provOneriStraordNetto, utileAnteImposte, imposte: imposteVal, utileNetto
       };
     }
 
@@ -370,8 +370,9 @@ const BudgetEngine = (() => {
     const proiezione   = _calcolaVista(fattConsuntivato, fattProiettato, 1);
 
     // Vista per periodo (mese o trimestre): variabili pro-quota sul fatturato
-    // del periodo, fissi pro-rata su 1/N dell'anno. Le righe sotto-linea e
-    // imposte seguono lo stesso pro-rata dei fissi (sono comunque stime).
+    // del periodo, fissi pro-rata su 1/N dell'anno. Le righe di proventi/oneri
+    // straordinari e imposte seguono lo stesso pro-rata dei fissi (sono
+    // comunque stime).
     const periodiKeys = cons.frequenza === 'trimestrale'
       ? ['1', '2', '3', '4']
       : ['01','02','03','04','05','06','07','08','09','10','11','12'];
