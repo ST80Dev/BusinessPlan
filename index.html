@@ -30,7 +30,7 @@
     <div class="sidebar-project-info" id="sidebar-project-info">
       <div class="sidebar-project-name text-muted" id="sidebar-project-name">Nessun progetto</div>
       <div class="sidebar-project-meta" id="sidebar-project-meta">—</div>
-      <div class="sidebar-project-edit-btn hidden" id="sidebar-project-edit" onclick="UI.apriModificaCliente()" title="Modifica ragione sociale, anno base e orizzonte anni">✎ Modifica dati base</div>
+      <div class="sidebar-project-edit-btn hidden" id="sidebar-project-edit" onclick="UI.apriModificaDati()" title="Modifica ragione sociale, anno base e orizzonte anni">✎ Modifica dati base</div>
     </div>
 
     <!-- Navigazione principale -->
@@ -412,6 +412,71 @@
     <div class="modal-footer">
       <div class="btn btn-secondary" onclick="UI.closeModal('modal-modifica-cliente')">Annulla</div>
       <div class="btn btn-primary" onclick="Projects.aggiornaMetaDati()">Salva modifiche</div>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
+     MODALE ANAGRAFICA ANALISI COSTI (AB)
+     ===================================================== -->
+<div class="modal-overlay hidden" id="modal-anagrafica-ab">
+  <div class="modal" style="width:580px;max-height:88vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <span class="modal-title">Anagrafica</span>
+      <div class="modal-close" onclick="UI.closeModal('modal-anagrafica-ab')">✕</div>
+    </div>
+
+    <div class="modal-body" style="overflow:auto">
+
+      <!-- Nome ditta -->
+      <div class="form-group">
+        <span class="form-label required">Nome ditta / Ragione sociale</span>
+        <div class="form-field"
+             contenteditable="true"
+             id="aab-cliente"
+             data-placeholder="Es. Rossi Srl"
+             spellcheck="false"></div>
+      </div>
+
+      <!-- Settore + Anno corrente -->
+      <div class="form-row">
+        <div class="form-group">
+          <span class="form-label">Settore</span>
+          <div class="form-field"
+               contenteditable="true"
+               id="aab-settore"
+               data-placeholder="Es. Commercio al dettaglio"
+               spellcheck="false"></div>
+        </div>
+
+        <div class="form-group">
+          <span class="form-label required">Anno corrente</span>
+          <div class="form-field"
+               contenteditable="true"
+               id="aab-anno-corrente"
+               data-placeholder="Es. 2026"
+               spellcheck="false"></div>
+          <div class="form-hint">Anno per cui si fa il budget</div>
+        </div>
+      </div>
+
+      <!-- Note libere — esposte negli export accanto al nome ditta -->
+      <div class="form-group">
+        <span class="form-label">Note anagrafiche</span>
+        <div class="form-hint" style="margin-bottom:8px">
+          Campi liberi (es. P.IVA, CONCORDATO, REGIME …) mostrati in testata
+          degli export accanto al nome ditta.
+        </div>
+        <div id="aab-note-list" class="ab-note-list"></div>
+        <div class="btn btn-secondary btn-sm" style="margin-top:8px"
+             onclick="UI.aggiungiNotaAnagrafica()">+ Aggiungi nota</div>
+      </div>
+
+    </div><!-- /.modal-body -->
+
+    <div class="modal-footer">
+      <div class="btn btn-secondary" onclick="UI.closeModal('modal-anagrafica-ab')">Annulla</div>
+      <div class="btn btn-primary" onclick="Projects.salvaAnagraficaAB()">Salva</div>
     </div>
   </div>
 </div>

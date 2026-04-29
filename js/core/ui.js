@@ -51,6 +51,19 @@ const UI = (() => {
       document.activeElement.blur();
     }
 
+    // Conferma ritorno alla Home se ci sono modifiche non salvate
+    // (la Home chiude di fatto il progetto a livello UI: si perderebbero
+    // i dati non scaricati come JSON)
+    if (sezione === 'home' && _sezioneCorrente !== 'home'
+        && Projects.getProgetto() && Projects.haModifiche()) {
+      const ok = window.confirm(
+        'Ci sono modifiche non salvate.\n\n' +
+        'Tornando alla Home il progetto corrente verrà chiuso e le modifiche andranno perse.\n\n' +
+        'Continuare comunque? (Annulla per restare e salvare prima il progetto)'
+      );
+      if (!ok) return;
+    }
+
     // Cleanup chart dashboard prima di cambiare sezione
     _destroyDashboardCharts();
 
@@ -336,11 +349,18 @@ const UI = (() => {
       }
     }
 
-    // Mostra link modifica solo per BP (la modale modifica è BP-specific)
+    // Pulsante modifica anagrafica: visibile per BP e AB, l'etichetta
+    // ed il modale aperto cambiano in base al modulo.
     const editEl = document.getElementById('sidebar-project-edit');
     if (editEl) {
-      if (modulo === 'bp') editEl.classList.remove('hidden');
-      else                 editEl.classList.add('hidden');
+      editEl.classList.remove('hidden');
+      if (modulo === 'ab') {
+        editEl.textContent = '✎ Anagrafica';
+        editEl.title = 'Modifica ragione sociale, anno e note libere mostrate negli export';
+      } else {
+        editEl.textContent = '✎ Modifica dati base';
+        editEl.title = 'Modifica ragione sociale, anno base e orizzonte anni';
+      }
     }
 
     // Mostra solo le voci sidebar del modulo corrente, abilitate.
@@ -444,6 +464,127 @@ const UI = (() => {
     if (prev) prev.remove();
 
     openModal('modal-modifica-cliente');
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Anagrafica AB — modale modifica dati ditta + note libere
+     ────────────────────────────────────────────────────────── */
+
+  /**
+   * Router del pulsante "Modifica dati base" della sidebar: apre
+   * il modale corretto in base al modulo del progetto corrente.
+   */
+  function apriModificaDati() {
+    const p = Projects.getProgetto();
+    if (!p || !p.meta) return;
+    if (p.meta.modulo === 'ab') apriAnagraficaAB();
+    else                        apriModificaCliente();
+  }
+
+  /**
+   * Apre il modale anagrafica AB pre-compilato con i valori correnti
+   * (ditta, settore, anno corrente, note libere).
+   */
+  function apriAnagraficaAB() {
+    const p = Projects.getProgetto();
+    if (!p || !p.meta || p.meta.modulo !== 'ab') return;
+
+    const m = p.meta;
+    const cli  = document.getElementById('aab-cliente');
+    const sett = document.getElementById('aab-settore');
+    const anno = document.getElementById('aab-anno-corrente');
+    if (cli)  cli.textContent  = m.cliente || '';
+    if (sett) sett.textContent = m.settore || '';
+    if (anno) anno.textContent = m.anno_corrente != null ? String(m.anno_corrente) : '';
+
+    // Rimuovi un eventuale errore precedente
+    const prev = document.getElementById('modal-aab-error');
+    if (prev) prev.remove();
+
+    _renderNoteAnagraficaList(Array.isArray(m.note_anagrafica) ? m.note_anagrafica : []);
+    openModal('modal-anagrafica-ab');
+  }
+
+  /**
+   * Rende l'elenco delle note anagrafiche nel modale.
+   * @param {Array<{titolo:string,testo:string}>} note
+   */
+  function _renderNoteAnagraficaList(note) {
+    const list = document.getElementById('aab-note-list');
+    if (!list) return;
+    if (!note || note.length === 0) {
+      list.innerHTML = '<div class="ab-note-list-empty">Nessuna nota. Usa "+ Aggiungi nota" per inserirne una.</div>';
+      return;
+    }
+    let html = '';
+    note.forEach((n, i) => {
+      html += '<div class="ab-note-row" data-idx="' + i + '">'
+            +   '<div class="form-field" contenteditable="true" data-field="titolo" '
+            +        'data-placeholder="Titolo (es. P.IVA)" spellcheck="false">' + _escapeHtml(n.titolo || '') + '</div>'
+            +   '<div class="form-field" contenteditable="true" data-field="testo" '
+            +        'data-placeholder="Testo (es. 12345678901)" spellcheck="false">' + _escapeHtml(n.testo || '') + '</div>'
+            +   '<div class="ab-note-row-del" onclick="UI.rimuoviNotaAnagrafica(' + i + ')" title="Rimuovi nota">×</div>'
+            + '</div>';
+    });
+    list.innerHTML = html;
+  }
+
+  /**
+   * Legge le note attualmente presenti nel DOM del modale.
+   * @returns {Array<{titolo:string,testo:string}>}
+   */
+  function _leggiNoteAnagraficaDom() {
+    const list = document.getElementById('aab-note-list');
+    if (!list) return [];
+    const rows = list.querySelectorAll('.ab-note-row');
+    const out = [];
+    rows.forEach(r => {
+      const t = r.querySelector('[data-field="titolo"]');
+      const x = r.querySelector('[data-field="testo"]');
+      out.push({
+        titolo: (t && t.textContent || '').trim(),
+        testo:  (x && x.textContent || '').trim()
+      });
+    });
+    return out;
+  }
+
+  /**
+   * Aggiunge una riga note vuota in coda.
+   */
+  function aggiungiNotaAnagrafica() {
+    const note = _leggiNoteAnagraficaDom();
+    note.push({ titolo: '', testo: '' });
+    _renderNoteAnagraficaList(note);
+    // Focus al titolo della nuova riga per inserimento immediato
+    const list = document.getElementById('aab-note-list');
+    if (list) {
+      const rows = list.querySelectorAll('.ab-note-row');
+      const last = rows[rows.length - 1];
+      if (last) {
+        const t = last.querySelector('[data-field="titolo"]');
+        if (t) t.focus();
+      }
+    }
+  }
+
+  /**
+   * Rimuove la riga nota all'indice indicato.
+   * @param {number} idx
+   */
+  function rimuoviNotaAnagrafica(idx) {
+    const note = _leggiNoteAnagraficaDom();
+    if (idx < 0 || idx >= note.length) return;
+    note.splice(idx, 1);
+    _renderNoteAnagraficaList(note);
+  }
+
+  /**
+   * Espone la lettura DOM al modulo Projects (chiamata da salvaAnagraficaAB).
+   * @returns {Array<{titolo:string,testo:string}>}
+   */
+  function leggiNoteAnagraficaCorrenti() {
+    return _leggiNoteAnagraficaDom();
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -5197,6 +5338,11 @@ const UI = (() => {
     aggiornaStatusBar,
     mostraNotifica,
     apriModificaCliente,
+    apriModificaDati,
+    apriAnagraficaAB,
+    aggiungiNotaAnagrafica,
+    rimuoviNotaAnagrafica,
+    leggiNoteAnagraficaCorrenti,
     // Importa bilancio
     importaCambiaVoce,
     importaSalvaRegole,
