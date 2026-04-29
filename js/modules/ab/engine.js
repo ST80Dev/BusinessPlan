@@ -247,7 +247,8 @@ const BudgetEngine = (() => {
       // Variabili pure (no calcolato): % override o % media × fatturato
       if (m.var_fisso === 'variabile' && !m.calcolato) {
         const pctOvr = ovrPct[m.id];
-        const pct    = (typeof pctOvr === 'number' && isFinite(pctOvr)) ? pctOvr : (mediePct[m.id] || 0);
+        const pctMedia = mediePct[m.id] || 0;
+        const pct    = (typeof pctOvr === 'number' && isFinite(pctOvr)) ? pctOvr : pctMedia;
         const valore = pct * fatturato;
         valori[m.id] = {
           valore,
@@ -257,7 +258,10 @@ const BudgetEngine = (() => {
           media_euro: medieEuro[m.id],
           media_pct:  mediePct[m.id],
           ultimo_anno_euro: ultimoAnnoEuro[m.id],
-          base_default: pct * fatturato  // base = % media × fatturato
+          // base_default: stima storica indipendente dall'override —
+          // sempre % media × fatturato_ipotizzato. Si scala col fatturato
+          // budget e resta confrontabile col Budget € finale.
+          base_default: pctMedia * fatturato
         };
         // sommaPctVar: i costi variabili contribuiscono +pct,
         // i ricavi variabili (rim_fin sarebbe stato qui ma è calcolato)
@@ -268,10 +272,16 @@ const BudgetEngine = (() => {
       }
 
       // Calcolato (rim_ini/rim_fin): € override o media €
-      // Tutto il resto (fissi, prov_oneri_straord, imposte): € override o ultimo
-      // anno arrotondato al centinaio — vedi commento su ultimoAnnoEuro.
+      // Proventi/oneri straordinari (sezione prov_oneri_straord): per loro
+      // natura non ricorrente, default a 0 nel budget; l'utente può
+      // sempre forzare un valore tramite override.
+      // Tutto il resto (fissi, imposte): € override o ultimo anno
+      // arrotondato al centinaio — vedi commento su ultimoAnnoEuro.
       const eurOvr = ovrEur[m.id];
-      const baseDefault = m.calcolato ? (medieEuro[m.id] || 0) : ultimoAnnoEuro[m.id];
+      const isStraord = m.sezione === 'prov_oneri_straord';
+      const baseDefault = m.calcolato ? (medieEuro[m.id] || 0)
+                        : isStraord  ? 0
+                        : ultimoAnnoEuro[m.id];
       const valore = (typeof eurOvr === 'number' && isFinite(eurOvr)) ? eurOvr : baseDefault;
       valori[m.id] = {
         valore,
