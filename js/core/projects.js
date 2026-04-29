@@ -1074,14 +1074,15 @@ const Projects = (() => {
 
     return {
       meta: {
-        modulo:        'ab',
-        cliente:       meta.cliente,
-        settore:       meta.settore || '',
-        anno_corrente: annoCorr,
-        anni_storici:  anniStorici,
-        creato:        oggi,
-        modificato:    oggi,
-        stato:         'in_lavorazione'
+        modulo:          'ab',
+        cliente:         meta.cliente,
+        settore:         meta.settore || '',
+        anno_corrente:   annoCorr,
+        anni_storici:    anniStorici,
+        note_anagrafica: [],   // [{titolo, testo}] — esposte negli export
+        creato:          oggi,
+        modificato:      oggi,
+        stato:           'in_lavorazione'
       },
       macro_sezioni: JSON.parse(JSON.stringify(BudgetEngine.MACROAREE_AB)),
       mapping:       {},          // { 'XX/XX/XXX': 'macroarea_id' }
@@ -1384,6 +1385,102 @@ const Projects = (() => {
     return true;
   }
 
+  /**
+   * Aggiorna l'anagrafica del progetto AB (cliente, settore, anno
+   * corrente, note libere). Le note sono lette dal DOM via
+   * UI.leggiNoteAnagraficaCorrenti().
+   *
+   * Quando l'anno corrente cambia anche la lista degli anni storici
+   * scorre di conseguenza, mantenendo invariato il numero di anni di
+   * storico configurato. I dati storici già caricati (storico,
+   * sottoconti_ce, mapping) NON vengono spostati: l'utente verrà
+   * tipicamente a re-importare il bilancio. Questo evita migrazioni
+   * automatiche su chiavi anno che potrebbero non corrispondere ai
+   * nuovi periodi.
+   */
+  function salvaAnagraficaAB() {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+
+    const cliEl  = document.getElementById('aab-cliente');
+    const settEl = document.getElementById('aab-settore');
+    const annoEl = document.getElementById('aab-anno-corrente');
+
+    const cliente = (cliEl  && cliEl.textContent  || '').trim();
+    const settore = (settEl && settEl.textContent || '').trim();
+    const anno    = parseInt(((annoEl && annoEl.textContent) || '').trim(), 10);
+
+    const errori = [];
+    if (!cliente) errori.push('Il nome ditta è obbligatorio.');
+    if (isNaN(anno) || anno < 1900 || anno > 2100) errori.push('Anno corrente non valido.');
+
+    if (errori.length > 0) {
+      _mostraErroreAnagraficaAB(errori.join(' '));
+      return;
+    }
+
+    // Note libere — scartiamo righe completamente vuote
+    let note = [];
+    if (UI && typeof UI.leggiNoteAnagraficaCorrenti === 'function') {
+      note = UI.leggiNoteAnagraficaCorrenti()
+              .filter(n => (n.titolo || '').trim() || (n.testo || '').trim())
+              .map(n => ({ titolo: (n.titolo || '').trim(), testo: (n.testo || '').trim() }));
+    }
+
+    const meta = _progettoCorrente.meta;
+    meta.cliente = cliente;
+    meta.settore = settore;
+
+    if (anno !== meta.anno_corrente) {
+      meta.anno_corrente = anno;
+      // Ricalcola la lista degli anni storici mantenendo la cardinalità
+      const n = Array.isArray(meta.anni_storici) && meta.anni_storici.length > 0
+        ? meta.anni_storici.length : 3;
+      const nuovi = [];
+      for (let i = n; i >= 1; i--) nuovi.push(anno - i);
+      meta.anni_storici = nuovi;
+    }
+
+    meta.note_anagrafica = note;
+    meta.modificato = new Date().toISOString().split('T')[0];
+
+    _modificato = true;
+    _aggiungiRecente(_progettoCorrente);
+
+    UI.closeModal('modal-anagrafica-ab');
+
+    // Aggiorna sidebar info senza riportare l'utente alla prima sezione
+    const nameEl = document.getElementById('sidebar-project-name');
+    const metaEl = document.getElementById('sidebar-project-meta');
+    if (nameEl) nameEl.textContent = meta.cliente;
+    if (metaEl) metaEl.textContent = `Analisi Costi · ${meta.anno_corrente}`;
+
+    // Aggiorna l'header (badge anno) lasciando invariata la sezione corrente
+    const headerCliente = document.getElementById('header-cliente');
+    if (headerCliente) headerCliente.textContent = meta.cliente;
+    const badgeAnno = document.querySelector('#header-badges .header-badge-anno');
+    if (badgeAnno) badgeAnno.textContent = `Anno: ${meta.anno_corrente}`;
+
+    UI.mostraNotifica('Anagrafica aggiornata.', 'success');
+  }
+
+  /**
+   * Mostra un messaggio di errore in cima al modale anagrafica AB.
+   */
+  function _mostraErroreAnagraficaAB(msg) {
+    const prev = document.getElementById('modal-aab-error');
+    if (prev) prev.remove();
+
+    const div = document.createElement('div');
+    div.id = 'modal-aab-error';
+    div.style.cssText = 'padding:10px 14px;border-radius:4px;font-size:13px;margin-bottom:12px;';
+    div.className = 'text-error';
+    div.style.background = 'var(--color-error-bg)';
+    div.textContent = msg;
+
+    const body = document.querySelector('#modal-anagrafica-ab .modal-body');
+    if (body) body.prepend(div);
+  }
+
   /* ── API pubblica ────────────────────────────────────────── */
   return {
     creaProgetto,
@@ -1414,7 +1511,8 @@ const Projects = (() => {
     aggiornaConsuntivo,
     creaMacroareaCustom,
     rinominaMacroareaCustom,
-    eliminaMacroareaCustom
+    eliminaMacroareaCustom,
+    salvaAnagraficaAB
   };
 
 })();

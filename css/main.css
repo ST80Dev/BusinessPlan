@@ -3159,6 +3159,63 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
    regola (la classe è applicata in js/modules/ab/ui.js). */
 .ab-pdf-notes-metodo { display: none; }
 
+/* ── Note anagrafiche (modale + testata PDF) ─────────────────── */
+.ab-note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ab-note-row {
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+.ab-note-row .form-field {
+  margin: 0;
+}
+.ab-note-row-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  user-select: none;
+  font-size: 16px;
+}
+.ab-note-row-del:hover {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+.ab-note-list-empty {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  padding: 6px 0;
+}
+
+/* Note anagrafiche in testata export PDF: lista compatta accanto al
+   nome ditta (P.IVA, CONCORDATO, REGIME, ecc.) */
+.ab-pdf-head-note {
+  font-size: 11px;
+  color: var(--color-text-primary);
+  margin-top: 4px;
+  line-height: 1.45;
+}
+.ab-pdf-head-note-item {
+  display: inline-block;
+  margin-right: 14px;
+}
+.ab-pdf-head-note-titolo {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
 /* ── Print ───────────────────────────────────────────────────── */
 @media print {
   #sidebar, #header, #footer { display: none; }

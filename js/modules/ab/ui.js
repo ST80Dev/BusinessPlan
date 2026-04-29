@@ -1837,11 +1837,30 @@ const BudgetUI = (() => {
   function _pdfHeader(progetto, sottotitolo) {
     const cliente = (progetto.meta && progetto.meta.cliente) || '—';
     const anno = (progetto.meta && progetto.meta.anno_corrente) || '';
+    const note = (progetto.meta && Array.isArray(progetto.meta.note_anagrafica))
+      ? progetto.meta.note_anagrafica : [];
+
+    let noteHtml = '';
+    if (note.length > 0) {
+      const items = note.map(n => {
+        const t = (n && n.titolo || '').trim();
+        const x = (n && n.testo  || '').trim();
+        if (!t && !x) return '';
+        const sep = (t && x) ? ': ' : '';
+        return '<span class="ab-pdf-head-note-item">'
+             +   '<span class="ab-pdf-head-note-titolo">' + _escapeHtml(t) + '</span>'
+             +   _escapeHtml(sep + x)
+             + '</span>';
+      }).filter(s => s).join('');
+      if (items) noteHtml = '<div class="ab-pdf-head-note">' + items + '</div>';
+    }
+
     return `
       <div class="ab-pdf-head">
         <div class="ab-pdf-head-title">
           <div class="ab-pdf-head-cliente">${_escapeHtml(cliente)}</div>
           <div class="ab-pdf-head-sub">${_escapeHtml(sottotitolo)}${anno ? ' — anno ' + _escapeHtml(String(anno)) : ''}</div>
+          ${noteHtml}
         </div>
         <div class="ab-pdf-head-meta text-muted">
           <div>Studio AnaBil · Modulo A&amp;B</div>
