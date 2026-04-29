@@ -1235,7 +1235,7 @@ const BudgetUI = (() => {
             <tr>
               <th>Macroarea</th>
               <th class="num" title="Media degli importi € sui tre anni storici, riferimento informativo per le decisioni di budget.">Media triennale</th>
-              <th class="num" title="Default del budget in assenza di override: ricavi, fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 (natura non ricorrente); rimanenze = media € storica.">Base storica</th>
+              <th class="num" title="Default del budget in assenza di override: ricavi, fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 (natura non ricorrente); rimanenze = media € storica.">Base (Ult. Anno o %)</th>
               <th class="num">% storica</th>
               <th class="num">Override</th>
               <th class="num">Budget €</th>
@@ -2069,7 +2069,7 @@ const BudgetUI = (() => {
     // Note metodologiche fisse (riprendono i tooltip a video)
     const noteMetodo = [
       '<strong>Media triennale</strong> — media in € degli importi storici sui tre anni: riferimento informativo per ponderare correzioni manuali al budget.',
-      '<strong>Base storica</strong> — default di partenza del budget in assenza di override: ricavi, costi fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili (incluse macroaree custom variabili) = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 per natura non ricorrente; rimanenze = media € storica.',
+      '<strong>Base (Ult. Anno o %)</strong> — default di partenza del budget in assenza di override: ricavi, costi fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili (incluse macroaree custom variabili) = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 per natura non ricorrente; rimanenze = media € storica.',
       '<strong>% storica</strong> — incidenza media sul fatturato calcolata come media delle incidenze % di ciascun anno storico (non come media degli importi diviso media del fatturato).',
       '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi e imposte: ultimo anno o override utente. Proventi/oneri straordinari: 0 di default o override utente. Rimanenze: media € storica o override €.',
       '<strong>Costo del venduto</strong> = Mat. prime + Altri costi variabili + Rimanenze iniziali − Rimanenze finali.',
@@ -2083,7 +2083,7 @@ const BudgetUI = (() => {
     html += '<table class="ab-pdf-tab"><thead><tr>'
          +    '<th>Macroarea</th>'
          +    '<th class="num">Media triennale</th>'
-         +    '<th class="num">Base storica</th>'
+         +    '<th class="num">Base (Ult. Anno o %)</th>'
          +    '<th class="num">% storica</th>'
          +    '<th class="num">Budget €</th>'
          +    '<th class="num">Budget %</th>'
