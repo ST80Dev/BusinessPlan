@@ -155,7 +155,8 @@ const BudgetEngine = (() => {
    * Costruisce il budget previsionale dell'anno corrente sullo
    * schema fisso AB. Per ogni macroarea:
    *
-   *   ricavi:         valore = override fatturato_ipotizzato OR media €
+   *   ricavi:         valore = override fatturato_ipotizzato OR ultimo
+   *                            anno arrotondato al centinaio
    *   variabili pure (mat_prime, altri_var):
    *                    valore = (override_pct OR pct_media) × fatturato
    *   variabili calcolate (rim_ini, rim_fin):
@@ -206,21 +207,23 @@ const BudgetEngine = (() => {
         : 0;
     });
 
-    // Base "ultimo anno arrotondata al centinaio": per i costi fissi e
-    // le altre voci non variabili il budget teorico parte dall'ultima
+    // Base "ultimo anno arrotondata al centinaio": per il fatturato e
+    // per i costi non variabili il budget teorico parte dall'ultima
     // annualità storica anziché dalla media triennale, per allinearsi
-    // ai costi di gestione più recenti. L'arrotondamento al centinaio
-    // dà un valore tondo come default da rifinire poi via override.
+    // alla situazione più recente. L'arrotondamento al centinaio dà un
+    // valore tondo come default da rifinire poi via override.
     const ultimoAnno = anni.length > 0 ? Math.max.apply(null, anni) : null;
     const ultimoAnnoEuro = {};
     macro.forEach(m => {
       const v = ultimoAnno != null ? Number((storico[ultimoAnno] || {})[m.id]) || 0 : 0;
       ultimoAnnoEuro[m.id] = Math.round(v / 100) * 100;
     });
+    const fatturatoUltimoArrotondato = ultimoAnnoEuro['ricavi'] || 0;
 
-    // Fatturato budget
+    // Fatturato budget: default = ultimo fatturato storico arrotondato
+    // al centinaio (non la media triennale, che resta solo informativa).
     const fatturatoOvr = Number(budget.fatturato_ipotizzato);
-    const fatturato = (isFinite(fatturatoOvr) && fatturatoOvr > 0) ? fatturatoOvr : fatturatoStoricoMedio;
+    const fatturato = (isFinite(fatturatoOvr) && fatturatoOvr > 0) ? fatturatoOvr : fatturatoUltimoArrotondato;
 
     // Calcolo per ogni macroarea
     const valori = {};
@@ -236,7 +239,7 @@ const BudgetEngine = (() => {
           media_euro: medieEuro[m.id],
           media_pct:  mediePct[m.id],
           ultimo_anno_euro: ultimoAnnoEuro[m.id],
-          base_default: medieEuro[m.id]
+          base_default: ultimoAnnoEuro[m.id]
         };
         continue;
       }
@@ -305,6 +308,7 @@ const BudgetEngine = (() => {
     return {
       fatturato,
       fatturato_storico_medio: fatturatoStoricoMedio,
+      fatturato_ultimo_arrotondato: fatturatoUltimoArrotondato,
       ultimo_anno: ultimoAnno,
       valori,
       cdv, totVar, mdc, fissi, totCosti,
