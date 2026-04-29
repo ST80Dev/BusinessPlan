@@ -3020,10 +3020,14 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   margin-bottom: 14px;
 }
 .ab-pdf-kpi-card {
-  border: 1px solid var(--color-border);
+  /* Tinte più sature delle variabili globali: in stampa economica a colori
+     i toni della UI a schermo (#EEF2F7, #E8F8EF, #FEF3E7) escono quasi
+     bianchi. Qui usiamo valori dedicati al solo PDF, lasciando inalterata
+     la palette a video. */
+  border: 1px solid #8FA4C1;
   border-radius: 4px;
   padding: 8px 10px;
-  background: var(--color-surface-alt);
+  background: #D9E3F2;
 }
 .ab-pdf-kpi-label {
   font-size: 10px;
@@ -3050,7 +3054,7 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   font-size: 11px;
 }
 .ab-pdf-tab thead th {
-  background: var(--color-surface-alt);
+  background: #C9D6EA;
   border-bottom: 1px solid var(--color-text-primary);
   padding: 6px 8px;
   text-align: left;
@@ -3070,7 +3074,7 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   border-bottom: 1px solid var(--color-border-light);
 }
 .ab-pdf-tab tr.ab-sezione td {
-  background: var(--color-surface-hover);
+  background: #A9BCDB;
   font-weight: 700;
   font-size: 10px;
   text-transform: uppercase;
@@ -3087,14 +3091,22 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   font-weight: 700;
   border-top: 1px solid var(--color-text-primary);
 }
-.ab-pdf-tab tr.ab-prospetto-tot-verde td,
-.ab-pdf-tab tr.ab-prospetto-tot-verde-forte td {
-  background: var(--color-success-bg);
+/* Verde / arancio: i totali "forti" (FATTURATO, UTILE NETTO, TOTALE COSTI)
+   ora si distinguono dalle varianti leggere (MdC, CDV, fissi…) anche in PDF. */
+.ab-pdf-tab tr.ab-prospetto-tot-verde td {
+  background: #BFE5CC;
   color: var(--color-text-primary);
 }
-.ab-pdf-tab tr.ab-prospetto-tot-arancio td,
+.ab-pdf-tab tr.ab-prospetto-tot-verde-forte td {
+  background: #7FCC9D;
+  color: var(--color-text-primary);
+}
+.ab-pdf-tab tr.ab-prospetto-tot-arancio td {
+  background: #FBD5A6;
+  color: var(--color-text-primary);
+}
 .ab-pdf-tab tr.ab-prospetto-tot-arancio-forte td {
-  background: var(--color-warning-bg);
+  background: #F2A95F;
   color: var(--color-text-primary);
 }
 .ab-pdf-tab .ab-pdf-noteref {
@@ -3103,7 +3115,7 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   font-size: 9px;
 }
 .ab-pdf-tab .ab-pdf-col-vuoto {
-  background: var(--color-surface-alt);
+  background: #DCE3EE;
   color: var(--color-text-muted);
 }
 .ab-pdf-col-stato {
