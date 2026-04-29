@@ -3141,6 +3141,12 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   line-height: 1.4;
 }
 
+/* Le "Note di metodo" restano generate dal codice ma non vengono mostrate:
+   l'operatore preferisce riservare lo spazio del PDF alla tabella e alle
+   annotazioni manuali per conto. Per riattivarle basta rimuovere questa
+   regola (la classe è applicata in js/modules/ab/ui.js). */
+.ab-pdf-notes-metodo { display: none; }
+
 /* ── Print ───────────────────────────────────────────────────── */
 @media print {
   #sidebar, #header, #footer { display: none; }
