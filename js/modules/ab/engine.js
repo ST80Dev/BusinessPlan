@@ -268,10 +268,16 @@ const BudgetEngine = (() => {
       }
 
       // Calcolato (rim_ini/rim_fin): € override o media €
-      // Tutto il resto (fissi, prov_oneri_straord, imposte): € override o ultimo
-      // anno arrotondato al centinaio — vedi commento su ultimoAnnoEuro.
+      // Proventi/oneri straordinari (sezione prov_oneri_straord): per loro
+      // natura non ricorrente, default a 0 nel budget; l'utente può
+      // sempre forzare un valore tramite override.
+      // Tutto il resto (fissi, imposte): € override o ultimo anno
+      // arrotondato al centinaio — vedi commento su ultimoAnnoEuro.
       const eurOvr = ovrEur[m.id];
-      const baseDefault = m.calcolato ? (medieEuro[m.id] || 0) : ultimoAnnoEuro[m.id];
+      const isStraord = m.sezione === 'prov_oneri_straord';
+      const baseDefault = m.calcolato ? (medieEuro[m.id] || 0)
+                        : isStraord  ? 0
+                        : ultimoAnnoEuro[m.id];
       const valore = (typeof eurOvr === 'number' && isFinite(eurOvr)) ? eurOvr : baseDefault;
       valori[m.id] = {
         valore,
