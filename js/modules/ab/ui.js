@@ -303,7 +303,19 @@ const BudgetUI = (() => {
    */
   function _calcolaTotaliStorico(progetto) {
     const anni = progetto.meta.anni_storici;
+    const macroSez = progetto.macro_sezioni || [];
     const out = {};
+    // Somma per sezione orientata sul ruolo (cost/result), così le
+    // macroaree custom partecipano automaticamente ai derivati.
+    const sumSez = (sa, sez, orient) => macroSez
+      .filter(m => m.sezione === sez)
+      .reduce((s, m) => {
+        const val = sa[m.id] || 0;
+        const sign = orient === 'cost'
+          ? (m.tipo === 'costo'  ? +1 : -1)
+          : (m.tipo === 'ricavo' ? +1 : -1);
+        return s + sign * val;
+      }, 0);
     for (const a of anni) {
       const sa = (progetto.storico && progetto.storico[a]) || {};
       const fatturato = sa.ricavi || 0;
@@ -312,19 +324,18 @@ const BudgetUI = (() => {
       const rimIni    = sa.rim_ini || 0;
       const rimFin    = sa.rim_fin || 0;
 
-      const cdv    = matPrime + altriVar + rimIni - rimFin;
+      const cdv    = sumSez(sa, 'variabili', 'cost');
       const totVar = cdv;
       const mdc    = fatturato - totVar;
 
-      const fissi = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
-        .reduce((s, k) => s + (sa[k] || 0), 0);
+      const fissi = sumSez(sa, 'fissi', 'cost');
 
       const totCosti = totVar + fissi;
 
       const straord    = sa.straordinari || 0;
       const altriRic   = sa.altri_ric || 0;
       const altriProvF = sa.altri_prov_f || 0;
-      const provOneriStraordNetto = altriRic + altriProvF - straord;
+      const provOneriStraordNetto = sumSez(sa, 'prov_oneri_straord', 'result');
       const utileAnteImposte = mdc - fissi + provOneriStraordNetto;
       const imposte = sa.imposte || 0;
       const utileNetto = utileAnteImposte - imposte;
@@ -376,6 +387,54 @@ const BudgetUI = (() => {
     return (p * 100).toFixed(1).replace('.', ',') + '%';
   }
 
+  /**
+   * Inserisce le macroaree custom dell'utente nei template `righe`
+   * dei prospetti, subito prima del primo totale che chiude la
+   * rispettiva sezione (cdv → variabili, fissi → fissi,
+   * utileAnteImposte → prov_oneri_straord). Ogni prospetto passa
+   * le proprie opzioni (inputType / segno / segnoBuono) per
+   * dare alle righe custom la stessa forma delle predefinite.
+   *
+   * @param {Array} righe        - template di righe del prospetto
+   * @param {Array} macroAree    - progetto.macro_sezioni
+   * @param {Object} [opts]
+   * @param {Object} [opts.inputType]  - { variabili?, fissi?, prov_oneri_straord? }
+   * @param {Object} [opts.segno]      - idem (display sign)
+   * @param {Object} [opts.segnoBuono] - idem (segnaletica consuntivo)
+   * @returns {Array}
+   */
+  function _injectCustomRighe(righe, macroAree, opts) {
+    opts = opts || {};
+    const customBySez = {};
+    (macroAree || []).filter(m => m.custom).forEach(m => {
+      (customBySez[m.sezione] = customBySez[m.sezione] || []).push(m);
+    });
+    if (Object.keys(customBySez).length === 0) return righe;
+
+    const anchors = {
+      cdv:              'variabili',
+      fissi:            'fissi',
+      utileAnteImposte: 'prov_oneri_straord'
+    };
+    const injected = {};
+    const out = [];
+    for (const r of righe) {
+      if (r.tipo === 'totale' && anchors[r.id] && !injected[anchors[r.id]]) {
+        const sez = anchors[r.id];
+        (customBySez[sez] || []).forEach(m => {
+          const row = { tipo: 'macro', id: m.id, label: m.label, custom: true };
+          if (opts.inputType  && opts.inputType[sez])  row.inputType  = opts.inputType[sez];
+          if (opts.segno      && opts.segno[sez])      row.segno      = opts.segno[sez];
+          if (opts.segnoBuono && opts.segnoBuono[sez]) row.segnoBuono = opts.segnoBuono[sez];
+          out.push(row);
+        });
+        injected[sez] = true;
+      }
+      out.push(r);
+    }
+    return out;
+  }
+
   function renderStorico() {
     const c = document.getElementById('content');
     if (!c) return;
@@ -391,7 +450,7 @@ const BudgetUI = (() => {
     const mediePct = _calcolaMediePct(progetto, totali);
 
     // Schema righe del prospetto (tipo, etichetta, formula/macroId)
-    const righe = [
+    const righeRaw = [
       { tipo: 'sezione', label: 'RICAVI' },
       { tipo: 'macro',   id: 'ricavi',       label: 'Ricavi' },
       { tipo: 'totale',  id: 'fatturato',    label: 'FATTURATO',                evidenza: 'verde-forte' },
@@ -428,6 +487,10 @@ const BudgetUI = (() => {
       { tipo: 'macro',   id: 'imposte',      label: 'Imposte sul reddito' },
       { tipo: 'totale',  id: 'utileNetto',   label: 'UTILE NETTO',              evidenza: 'verde-forte' }
     ];
+
+    const righe = _injectCustomRighe(righeRaw, progetto.macro_sezioni, {
+      segno: { prov_oneri_straord: -1 }
+    });
 
     let html = `
       <div class="ab-storico">
@@ -646,10 +709,19 @@ const BudgetUI = (() => {
       </div>
     `;
 
+    // Sezioni in cui l'utente può creare gruppi propri (vedi
+    // Projects.SEZIONI_CUSTOM): in queste mostriamo accanto al
+    // titolo un pulsante "+ Nuovo gruppo".
+    const sezioniConCustom = ['variabili', 'fissi', 'prov_oneri_straord'];
+
     sezioniProspetto.forEach(({ sez, titolo }) => {
       const macroSez = macroAree.filter(m => m.sezione === sez);
-      if (macroSez.length === 0) return;
-      html += `<div class="ab-mini-sezione">${_escapeHtml(titolo)}</div>`;
+      const ammetteCustom = sezioniConCustom.indexOf(sez) >= 0;
+      if (macroSez.length === 0 && !ammetteCustom) return;
+      const btnNuovo = ammetteCustom
+        ? `<span class="ab-mini-add" data-add-custom="${_escapeHtml(sez)}" title="Crea un nuovo gruppo in questa sezione" tabindex="0">+ Nuovo gruppo</span>`
+        : '';
+      html += `<div class="ab-mini-sezione">${_escapeHtml(titolo)}${btnNuovo}</div>`;
       macroSez.forEach(m => {
         if (m.calcolato) {
           // Box readonly: rim. iniziali / rim. finali, hatch pattern
@@ -665,9 +737,14 @@ const BudgetUI = (() => {
         const count = (gruppi[m.id] || []).length;
         const flagCls = m.var_fisso === 'variabile' ? ' ab-mini-flag-var'
                       : m.var_fisso === 'fisso'     ? ' ab-mini-flag-fix' : '';
+        const customCls = m.custom ? ' ab-mini-box-custom' : '';
         const tip = _descrizioneMacro(m).replace(/"/g, '&quot;');
+        const elimina = m.custom
+          ? `<span class="ab-mini-elimina" data-elimina-custom="${_escapeHtml(m.id)}" title="Elimina questo gruppo (i sottoconti tornano a Non mappati)" tabindex="0">×</span>`
+          : '';
         html += `
-          <div class="ab-mini-box${flagCls}" data-drop-macro="${_escapeHtml(m.id)}" tabindex="0" title="${tip}">
+          <div class="ab-mini-box${flagCls}${customCls}" data-drop-macro="${_escapeHtml(m.id)}" tabindex="0" title="${tip}">
+            ${elimina}
             <div class="ab-mini-box-label">${_escapeHtml(m.label)}</div>
             <div class="ab-mini-box-count" data-mini-count="${_escapeHtml(m.id)}">${count}</div>
           </div>
@@ -760,6 +837,35 @@ const BudgetUI = (() => {
 
     // Click sulla cella codice → toggle selezione (solo Shift/Ctrl)
     root.addEventListener('click', (ev) => {
+      // "+ Nuovo gruppo" — crea una macroarea custom nella sezione
+      const addBtn = ev.target.closest('[data-add-custom]');
+      if (addBtn) {
+        ev.preventDefault();
+        const sez = addBtn.dataset.addCustom;
+        const label = (window.prompt('Nome del nuovo gruppo:') || '').trim();
+        if (!label) return;
+        const id = Projects.creaMacroareaCustom(sez, label);
+        if (id) {
+          UI.aggiornaStatusBar('modificato');
+          renderMacroSezioni();
+        } else {
+          UI.mostraNotifica('Impossibile creare il gruppo (nome non valido o sezione non ammessa).', 'error');
+        }
+        return;
+      }
+      // "×" su un box custom — eliminazione con conferma
+      const delBtn = ev.target.closest('[data-elimina-custom]');
+      if (delBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const id = delBtn.dataset.eliminaCustom;
+        if (!confirm('Eliminare questo gruppo? I sottoconti mappati torneranno a "Non mappati".')) return;
+        if (Projects.eliminaMacroareaCustom(id)) {
+          UI.aggiornaStatusBar('modificato');
+          renderMacroSezioni();
+        }
+        return;
+      }
       const cell = ev.target.closest('.ab-cell-codice');
       if (!cell) return;
       const tr = cell.closest('tr.ab-row-draggable');
@@ -969,13 +1075,24 @@ const BudgetUI = (() => {
   function _calcolaBaseStoricaTotali(progetto, b) {
     const macroSez = progetto.macro_sezioni || [];
     const v = id => _baseStoricaVoce(macroSez, b, id);
+    // Somma per sezione orientata sul ruolo: 'cost' per variabili/fissi,
+    // 'result' per prov_oneri_straord. Stesso schema dell'engine; include
+    // automaticamente eventuali macroaree custom.
+    const sumSez = (sez, orient) => macroSez
+      .filter(m => m.sezione === sez)
+      .reduce((s, m) => {
+        const val = v(m.id) || 0;
+        const sign = orient === 'cost'
+          ? (m.tipo === 'costo'  ? +1 : -1)
+          : (m.tipo === 'ricavo' ? +1 : -1);
+        return s + sign * val;
+      }, 0);
     const fatturato = v('ricavi');
-    const cdv = v('mat_prime') + v('altri_var') + v('rim_ini') - v('rim_fin');
-    const fissi = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
-      .reduce((s, k) => s + v(k), 0);
-    const mdc = fatturato - cdv;
-    const totCosti = cdv + fissi;
-    const provOneriStraordNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
+    const cdv       = sumSez('variabili',          'cost');
+    const fissi     = sumSez('fissi',              'cost');
+    const mdc       = fatturato - cdv;
+    const totCosti  = cdv + fissi;
+    const provOneriStraordNetto = sumSez('prov_oneri_straord', 'result');
     const utileAnteImposte = mdc - fissi + provOneriStraordNetto;
     const utileNetto = utileAnteImposte - v('imposte');
     return { fatturato, cdv, mdc, fissi, totCosti, utileAnteImposte, utileNetto };
@@ -998,7 +1115,7 @@ const BudgetUI = (() => {
     // CdV per costruzione; COSTI FISSI DI GESTIONE = TOTALE COSTI FISSI in
     // assenza di ulteriori sotto-aggregati) e gli spacer relativi, per far
     // stare l'intero prospetto a video senza scroll verticale.
-    const righe = [
+    const righeRaw = [
       { tipo: 'sezione', label: 'RICAVI' },
       { tipo: 'macro',   id: 'ricavi',       label: 'Ricavi',                                 inputType: 'euro_fatturato' },
       { tipo: 'totale',  id: 'fatturato',    label: 'FATTURATO',                              evidenza: 'verde-forte' },
@@ -1031,6 +1148,11 @@ const BudgetUI = (() => {
       { tipo: 'macro',   id: 'imposte',      label: 'Imposte sul reddito',                    inputType: 'euro' },
       { tipo: 'totale',  id: 'utileNetto',   label: 'UTILE NETTO',                            evidenza: 'verde-forte' }
     ];
+
+    const righe = _injectCustomRighe(righeRaw, progetto.macro_sezioni, {
+      inputType: { variabili: 'pct', fissi: 'euro', prov_oneri_straord: 'euro' },
+      segno:     { prov_oneri_straord: -1 }
+    });
 
     // KPI: differenze percentuali fatturato vs storico medio e fatturato vs BE
     const fattStorico = b.fatturato_storico_medio;
@@ -1508,7 +1630,7 @@ const BudgetUI = (() => {
           <tbody>
     `;
 
-    const righe = [
+    const righeRaw = [
       { tipo: 'sezione', label: 'RICAVI' },
       { tipo: 'macro',   id: 'ricavi',           label: 'Ricavi',                                 segnoBuono: +1 },
       { tipo: 'totale',  id: 'fatturato',        label: 'FATTURATO',                              evidenza: 'verde-forte', segnoBuono: +1 },
@@ -1537,6 +1659,11 @@ const BudgetUI = (() => {
       { tipo: 'macro',   id: 'imposte',          label: 'Imposte sul reddito',                    segnoBuono: -1 },
       { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde', segnoBuono: +1 }
     ];
+
+    const righe = _injectCustomRighe(righeRaw, progetto.macro_sezioni, {
+      segno:      { prov_oneri_straord: -1 },
+      segnoBuono: { variabili: -1, fissi: -1, prov_oneri_straord: +1 }
+    });
 
     const colspanTot = 4 + periodiKeys.length;
     const valPerPeriodo = (rowDef, k) => {
@@ -1738,7 +1865,7 @@ const BudgetUI = (() => {
     const mdcPct = b.fatturato > 0 ? b.mdc / b.fatturato : 0;
     const utileNettoPct = b.fatturato > 0 ? b.utileNetto / b.fatturato : 0;
 
-    const righe = [
+    const righeRaw = [
       { tipo: 'sezione', label: 'RICAVI' },
       { tipo: 'macro',   id: 'ricavi',           label: 'Ricavi' },
       { tipo: 'totale',  id: 'fatturato',        label: 'FATTURATO',                              evidenza: 'verde-forte' },
@@ -1767,6 +1894,10 @@ const BudgetUI = (() => {
       { tipo: 'macro',   id: 'imposte',          label: 'Imposte sul reddito' },
       { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde-forte' }
     ];
+
+    const righe = _injectCustomRighe(righeRaw, progetto.macro_sezioni, {
+      segno: { prov_oneri_straord: -1 }
+    });
 
     const colspanTot = 5;
     let body = '';
@@ -1980,7 +2111,7 @@ const BudgetUI = (() => {
 
     // segnoBuono: +1 se "più alto = meglio" (ricavi, utile, MdC, rim. finali)
     //             -1 se "più alto = peggio" (costi, oneri, imposte)
-    const righe = [
+    const righeRaw = [
       { tipo: 'sezione', label: 'RICAVI' },
       { tipo: 'macro',   id: 'ricavi',           label: 'Ricavi',                                 segnoBuono: +1 },
       { tipo: 'totale',  id: 'fatturato',        label: 'FATTURATO',                              evidenza: 'verde-forte', segnoBuono: +1 },
@@ -2009,6 +2140,11 @@ const BudgetUI = (() => {
       { tipo: 'macro',   id: 'imposte',          label: 'Imposte sul reddito',                    segnoBuono: -1 },
       { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde', segnoBuono: +1 }
     ];
+
+    const righe = _injectCustomRighe(righeRaw, progetto.macro_sezioni, {
+      segno:      { prov_oneri_straord: -1 },
+      segnoBuono: { variabili: -1, fissi: -1, prov_oneri_straord: +1 }
+    });
 
     const colspanTot = 4 + cols.length;
     let body = '';

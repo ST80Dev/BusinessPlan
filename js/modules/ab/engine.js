@@ -68,6 +68,41 @@ const BudgetEngine = (() => {
     return r ? r.id : null;
   }
 
+  /**
+   * Somma i valori di tutte le macroaree di una data `sezione`,
+   * orientando il segno secondo il ruolo della sezione:
+   *
+   *   orient = 'cost'   → somma i costi e sottrae i ricavi
+   *                       (usata per CdV/Variabili e per i Fissi:
+   *                        rim_fin viene sottratto perché tipo='ricavo')
+   *
+   *   orient = 'result' → somma i ricavi e sottrae i costi
+   *                       (usata per Proventi/Oneri Straordinari:
+   *                        altri_ric/altri_prov_f sommano, straordinari
+   *                        sottrae)
+   *
+   * Sostituisce le sommatorie hardcoded sugli id predefiniti, così le
+   * macroaree custom create dall'utente partecipano automaticamente
+   * (vedi macroaree con flag `custom: true`).
+   *
+   * @param {Array}    macroSezioni
+   * @param {Function} getVal       - id → valore numerico
+   * @param {string}   sezione      - 'variabili' | 'fissi' | 'prov_oneri_straord' | ...
+   * @param {string}   orient       - 'cost' | 'result'
+   * @returns {number}
+   */
+  function _sumSezione(macroSezioni, getVal, sezione, orient) {
+    return (macroSezioni || [])
+      .filter(m => m.sezione === sezione)
+      .reduce((s, m) => {
+        const v = getVal(m.id) || 0;
+        const sign = orient === 'cost'
+          ? (m.tipo === 'costo'  ? +1 : -1)
+          : (m.tipo === 'ricavo' ? +1 : -1);
+        return s + sign * v;
+      }, 0);
+  }
+
   /* ──────────────────────────────────────────────────────────
      API pubblica
      ────────────────────────────────────────────────────────── */
@@ -247,15 +282,15 @@ const BudgetEngine = (() => {
       };
     }
 
-    // Derivati del prospetto
+    // Derivati del prospetto — somme aggregate per sezione, così le
+    // macroaree custom partecipano senza modifiche all'engine.
     const v = id => (valori[id] && valori[id].valore) || 0;
-    const cdv     = v('mat_prime') + v('altri_var') + v('rim_ini') - v('rim_fin');
+    const cdv     = _sumSezione(macro, v, 'variabili',          'cost');
     const totVar  = cdv;
     const mdc     = fatturato - totVar;
-    const fissi   = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
-                      .reduce((s, k) => s + v(k), 0);
+    const fissi   = _sumSezione(macro, v, 'fissi',              'cost');
     const totCosti = totVar + fissi;
-    const provOneriStraordNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
+    const provOneriStraordNetto = _sumSezione(macro, v, 'prov_oneri_straord', 'result');
     const utileAnteImposte = mdc - fissi + provOneriStraordNetto;
     const imposteVal = v('imposte');
     const utileNetto = utileAnteImposte - imposteVal;
@@ -347,13 +382,12 @@ const BudgetEngine = (() => {
       }
 
       const v = id => (valori[id] && valori[id].valore) || 0;
-      const cdv     = v('mat_prime') + v('altri_var') + v('rim_ini') - v('rim_fin');
+      const cdv     = _sumSezione(macro, v, 'variabili',          'cost');
       const totVar  = cdv;
       const mdc     = v('ricavi') - totVar;
-      const fissi   = ['servizi','godimento','personale','ammortamenti','oneri_gest','oneri_fin']
-                        .reduce((s, k) => s + v(k), 0);
+      const fissi   = _sumSezione(macro, v, 'fissi',              'cost');
       const totCosti = totVar + fissi;
-      const provOneriStraordNetto = v('altri_ric') + v('altri_prov_f') - v('straordinari');
+      const provOneriStraordNetto = _sumSezione(macro, v, 'prov_oneri_straord', 'result');
       const utileAnteImposte = mdc - fissi + provOneriStraordNetto;
       const imposteVal = v('imposte');
       const utileNetto = utileAnteImposte - imposteVal;
