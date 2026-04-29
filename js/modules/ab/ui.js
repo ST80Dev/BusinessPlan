@@ -2009,7 +2009,10 @@ const BudgetUI = (() => {
          +    '<th class="num">Budget %</th>'
          +  '</tr></thead><tbody>' + body + '</tbody></table>';
 
-    html += '<div class="ab-pdf-notes"><div class="ab-pdf-notes-title">Note di metodo</div><ol>';
+    // Le note di metodo restano nel codice ma sono nascoste in stampa
+    // (CSS: .ab-pdf-notes-metodo { display: none }). L'operatore preferisce
+    // riservare lo spazio alla tabella e alle annotazioni manuali per conto.
+    html += '<div class="ab-pdf-notes ab-pdf-notes-metodo"><div class="ab-pdf-notes-title">Note di metodo</div><ol>';
     for (const t of noteMetodo) html += '<li>' + t + '</li>';
     html += '</ol></div>';
 
@@ -2286,7 +2289,10 @@ const BudgetUI = (() => {
          +    periodHeaders
          +  '</tr></thead><tbody>' + body + '</tbody></table>';
 
-    html += '<div class="ab-pdf-notes"><div class="ab-pdf-notes-title">Note di metodo</div><ol>';
+    // Le note di metodo restano nel codice ma sono nascoste in stampa
+    // (CSS: .ab-pdf-notes-metodo { display: none }). L'operatore preferisce
+    // riservare lo spazio alla tabella e alle annotazioni manuali per conto.
+    html += '<div class="ab-pdf-notes ab-pdf-notes-metodo"><div class="ab-pdf-notes-title">Note di metodo</div><ol>';
     for (const t of noteMetodo) html += '<li>' + t + '</li>';
     html += '</ol></div>';
 
