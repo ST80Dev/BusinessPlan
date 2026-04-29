@@ -298,7 +298,7 @@ const ExcelImport = (() => {
      dallo Step 4 (UI mappatura).
 
      Eccezione: il mastro 64 (Altri ricavi) è split tra
-       64/05/xxx → macroarea 'altri_ric' (sotto la linea)
+       64/05/xxx → macroarea 'altri_ric' (proventi/oneri straordinari)
        64/15/xxx → macroarea 'altri_prov_f' (proventi finanz.)
      Implementato tramite il flag `includi_conto`/`filtro_conto`.
      ────────────────────────────────────────────────────────── */
