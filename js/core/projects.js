@@ -1279,6 +1279,111 @@ const Projects = (() => {
     _modificato = true;
   }
 
+  /* ──────────────────────────────────────────────────────────
+     Macroaree custom (gruppi definiti dall'utente)
+
+     L'utente può creare gruppi propri dentro le sezioni
+     'variabili', 'fissi' e 'prov_oneri_straord' per raccogliere
+     sottoconti spostati manualmente — es. raggruppare alcuni
+     servizi che si vogliono trattare come variabili anziché tra
+     gli "Altri costi variabili".
+
+     Le custom sono persistite direttamente in `macro_sezioni`
+     accanto a quelle predefinite, marcate con `custom: true`.
+     Tipo forzato a 'costo' (segno orientato dalla sezione di
+     destinazione: cost-positive in Variabili/Fissi,
+     result-negative in Prov./Oneri Straord., come 'straordinari').
+     ────────────────────────────────────────────────────────── */
+
+  const SEZIONI_CUSTOM = ['variabili', 'fissi', 'prov_oneri_straord'];
+
+  function _generaIdCustom() {
+    return 'cust_' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function _varFissoPerSezione(sez) {
+    if (sez === 'variabili') return 'variabile';
+    if (sez === 'fissi')     return 'fisso';
+    return null;  // prov_oneri_straord
+  }
+
+  /**
+   * Crea una macroarea custom in una delle sezioni ammesse.
+   * @param {string} sezione - 'variabili' | 'fissi' | 'prov_oneri_straord'
+   * @param {string} label   - etichetta scelta dall'utente
+   * @returns {string|null} id generato, o null se input non valido
+   */
+  function creaMacroareaCustom(sezione, label) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return null;
+    if (SEZIONI_CUSTOM.indexOf(sezione) < 0) return null;
+    const lbl = (label || '').trim();
+    if (!lbl) return null;
+    if (!Array.isArray(_progettoCorrente.macro_sezioni)) _progettoCorrente.macro_sezioni = [];
+    const id = _generaIdCustom();
+    _progettoCorrente.macro_sezioni.push({
+      id,
+      label:     lbl,
+      sezione,
+      tipo:      'costo',
+      var_fisso: _varFissoPerSezione(sezione),
+      mastri:    [],
+      custom:    true
+    });
+    _modificato = true;
+    return id;
+  }
+
+  /**
+   * Rinomina una macroarea custom.
+   * @returns {boolean} true se rinominata, false altrimenti
+   */
+  function rinominaMacroareaCustom(id, nuovoLabel) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return false;
+    const m = (_progettoCorrente.macro_sezioni || []).find(x => x.id === id);
+    if (!m || !m.custom) return false;
+    const lbl = (nuovoLabel || '').trim();
+    if (!lbl) return false;
+    m.label = lbl;
+    _modificato = true;
+    return true;
+  }
+
+  /**
+   * Elimina una macroarea custom. I sottoconti mappati al gruppo
+   * eliminato tornano a "Non mappati"; lo storico viene ricalcolato.
+   * @returns {boolean} true se eliminata, false altrimenti
+   */
+  function eliminaMacroareaCustom(id) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return false;
+    const macro = _progettoCorrente.macro_sezioni || [];
+    const idx = macro.findIndex(x => x.id === id);
+    if (idx < 0 || !macro[idx].custom) return false;
+
+    // Rimuovi la macroarea
+    macro.splice(idx, 1);
+
+    // I sottoconti mappati lì tornano a "Non mappati" (rimuovi mapping)
+    const mapping = _progettoCorrente.mapping || {};
+    for (const cod in mapping) {
+      if (mapping[cod] === id) delete mapping[cod];
+    }
+
+    // Ricalcola storico (rimuovendo la chiave custom dai totali per anno)
+    if (typeof ExcelImport !== 'undefined' && ExcelImport.ricalcolaStorico) {
+      _progettoCorrente.storico = ExcelImport.ricalcolaStorico(_progettoCorrente);
+    }
+
+    // Pulizia override budget eventualmente legati al gruppo
+    if (_progettoCorrente.budget) {
+      if (_progettoCorrente.budget.override_pct)   delete _progettoCorrente.budget.override_pct[id];
+      if (_progettoCorrente.budget.override_fissi) delete _progettoCorrente.budget.override_fissi[id];
+      if (_progettoCorrente.budget.note)           delete _progettoCorrente.budget.note[id];
+    }
+
+    _modificato = true;
+    return true;
+  }
+
   /* ── API pubblica ────────────────────────────────────────── */
   return {
     creaProgetto,
@@ -1306,7 +1411,10 @@ const Projects = (() => {
     applicaImportCE,
     aggiornaMappingSottoconto,
     aggiornaBudget,
-    aggiornaConsuntivo
+    aggiornaConsuntivo,
+    creaMacroareaCustom,
+    rinominaMacroareaCustom,
+    eliminaMacroareaCustom
   };
 
 })();
