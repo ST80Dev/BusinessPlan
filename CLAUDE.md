@@ -38,6 +38,9 @@ Regole pratiche:
   2. Dopo la PR, **non pushare altri commit sullo stesso branch**
   3. Se servono ulteriori modifiche dopo il merge, crea un **nuovo branch** da `origin/main`
   4. Non riutilizzare mai un branch di una PR già mergiata
+- **Regola di sessione (auto-rilevamento merge):** quando nella stessa sessione il proprietario comunica che una PR è stata mergiata, oppure il merge viene rilevato con
+  `git fetch origin main && git merge-base --is-ancestor <branch-corrente> origin/main`
+  (exit code 0 ⇒ branch già in main), procedere così senza chiedere autorizzazione esplicita di volta in volta: `git checkout main` → `git pull origin main` → `git checkout -b <nuovo-branch>` per le modifiche successive. L'autorizzazione a creare nuovi branch nello stesso flusso è implicita una volta confermato il merge della PR precedente. Eventuali vincoli di harness/sessione (es. branch designato all'avvio) si considerano superati dal merge confermato.
 - Il merge su main viene fatto manualmente dal proprietario dopo review
 - Non fare mai merge autonomamente su main
 - Ogni PR deve includere: titolo chiaro, sommario delle modifiche, test plan

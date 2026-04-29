@@ -715,16 +715,27 @@ const Projects = (() => {
   }
 
   /**
-   * Migrazione progetti AB: la sezione delle voci straordinarie
-   * era originariamente identificata da `sotto_linea`, oggi è
-   * `prov_oneri_straord`. Riallinea le macro_sezioni dei progetti
-   * salvati con la vecchia chiave senza alterarne i dati.
+   * Migrazione progetti AB:
+   *  - sezione 'sotto_linea' → 'prov_oneri_straord' (rinomina semantica)
+   *  - se sono presenti i sottoconti_ce, ricalcola lo storico con la
+   *    nuova logica di aggregazione (saldo netto Dare−Avere orientato
+   *    sulla macroarea), così che progetti salvati prima del cambio
+   *    di regola si allineino senza richiedere all'utente di toccare
+   *    la mappatura. Lo storico è derivato dai sottoconti, non viene
+   *    editato a mano dall'utente: la sovrascrittura è sicura.
    */
   function _migraProgettoAB(dati) {
-    if (!Array.isArray(dati.macro_sezioni)) return;
-    dati.macro_sezioni.forEach(function(m) {
-      if (m && m.sezione === 'sotto_linea') m.sezione = 'prov_oneri_straord';
-    });
+    if (Array.isArray(dati.macro_sezioni)) {
+      dati.macro_sezioni.forEach(function(m) {
+        if (m && m.sezione === 'sotto_linea') m.sezione = 'prov_oneri_straord';
+      });
+    }
+    if (Array.isArray(dati.sottoconti_ce) && dati.sottoconti_ce.length > 0
+        && typeof ExcelImport !== 'undefined' && ExcelImport.ricalcolaStorico) {
+      try {
+        dati.storico = ExcelImport.ricalcolaStorico(dati);
+      } catch (_e) { /* fallback: lascia lo storico esistente */ }
+    }
   }
 
   /**
