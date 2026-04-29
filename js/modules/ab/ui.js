@@ -1054,15 +1054,15 @@ const BudgetUI = (() => {
 
   /**
    * Valore "Base storica" della singola macroarea, coerente con la cella
-   * mostrata nel prospetto: media triennale € per ricavi, costi variabili
-   * e rimanenze; ultimo anno arrotondato al centinaio per fissi,
+   * mostrata nel prospetto: media triennale € per costi variabili e
+   * rimanenze; ultimo anno arrotondato al centinaio per ricavi, fissi,
    * proventi/oneri straordinari e imposte.
    */
   function _baseStoricaVoce(macroSezioni, b, id) {
     const m = (macroSezioni || []).find(x => x.id === id);
     const dato = b.valori[id];
     if (!dato) return 0;
-    const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato && id !== 'ricavi';
+    const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato;
     return isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0);
   }
 
@@ -1154,9 +1154,10 @@ const BudgetUI = (() => {
       segno:     { prov_oneri_straord: -1 }
     });
 
-    // KPI: differenze percentuali fatturato vs storico medio e fatturato vs BE
-    const fattStorico = b.fatturato_storico_medio;
-    const deltaFattStorico = fattStorico > 0 ? (b.fatturato - fattStorico) / fattStorico : 0;
+    // KPI: differenze percentuali fatturato vs ultimo fatturato storico
+    // (arrotondato al centinaio, base del budget teorico) e vs break-even
+    const fattBase = b.fatturato_ultimo_arrotondato;
+    const deltaFattBase = fattBase > 0 ? (b.fatturato - fattBase) / fattBase : 0;
     const deltaFattBe = (b.break_even != null && b.break_even > 0)
       ? (b.fatturato - b.break_even) / b.break_even : null;
     const mdcPct = b.fatturato > 0 ? b.mdc / b.fatturato : 0;
@@ -1174,7 +1175,7 @@ const BudgetUI = (() => {
                  onblur="BudgetUI.budgetBlur(this)"
                  onkeydown="BudgetUI.budgetKeyDown(event)">${_fmtEuro(b.fatturato)}</div>
             <div class="ab-budget-fatturato-sub text-muted">
-              Storico medio: ${_fmtEuro(fattStorico)} ${fattStorico > 0 ? `(${_fmtPctSigned(deltaFattStorico)} vs ipotizzato)` : ''}
+              Ultimo fatturato${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''} arrotondato: ${_fmtEuro(fattBase)} ${fattBase > 0 ? `(${_fmtPctSigned(deltaFattBase)} vs ipotizzato)` : ''}
             </div>
           </div>
 
@@ -1207,7 +1208,7 @@ const BudgetUI = (() => {
           <thead>
             <tr>
               <th>Macroarea</th>
-              <th class="num" title="Costi variabili: media triennale €. Fissi, proventi/oneri straordinari e imposte: ultimo anno arrotondato al centinaio (base del budget teorico).">Base storica</th>
+              <th class="num" title="Costi variabili: media triennale €. Ricavi, fissi, proventi/oneri straordinari e imposte: ultimo anno arrotondato al centinaio (base del budget teorico).">Base storica</th>
               <th class="num">% storica</th>
               <th class="num">Override</th>
               <th class="num">Budget €</th>
@@ -1269,7 +1270,7 @@ const BudgetUI = (() => {
       // mostriamo l'ultimo anno arrotondato al centinaio, che è il default
       // del budget teorico. Per variabili pure e calcolato resta la media €
       // informativa.
-      const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato && r.id !== 'ricavi';
+      const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato;
       const baseDisplay = isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0);
       const baseTitle   = isNonVarNonCalc
         ? `Ultimo anno arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`
@@ -1877,8 +1878,8 @@ const BudgetUI = (() => {
     const note = (progetto.budget && progetto.budget.note) || {};
 
     // KPI riepilogativi (stessi che vedo a video)
-    const fattStorico = b.fatturato_storico_medio;
-    const deltaFattStorico = fattStorico > 0 ? (b.fatturato - fattStorico) / fattStorico : 0;
+    const fattBase = b.fatturato_ultimo_arrotondato;
+    const deltaFattBase = fattBase > 0 ? (b.fatturato - fattBase) / fattBase : 0;
     const deltaFattBe = (b.break_even != null && b.break_even > 0)
       ? (b.fatturato - b.break_even) / b.break_even : null;
     const mdcPct = b.fatturato > 0 ? b.mdc / b.fatturato : 0;
@@ -1960,7 +1961,7 @@ const BudgetUI = (() => {
       const dato = b.valori[r.id] || { valore: 0, pct: 0, media_euro: 0, media_pct: 0 };
       if (r.nascondiSeZero && Math.abs(dato.media_euro) < 0.005 && Math.abs(dato.valore) < 0.005) continue;
 
-      const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato && r.id !== 'ricavi';
+      const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato;
       const baseDisplay = isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0);
 
       // Nota utente: se presente, assegna numero progressivo e lo mostra come [n]
@@ -1987,7 +1988,7 @@ const BudgetUI = (() => {
         <div class="ab-pdf-kpi-card">
           <div class="ab-pdf-kpi-label">Fatturato ipotizzato</div>
           <div class="ab-pdf-kpi-value">${_fmtEuroInt(b.fatturato)} €</div>
-          <div class="ab-pdf-kpi-sub">Storico medio: ${_fmtEuroInt(fattStorico)} € ${fattStorico > 0 ? '(' + _fmtPctSigned(deltaFattStorico) + ' vs ipotizzato)' : ''}</div>
+          <div class="ab-pdf-kpi-sub">Ultimo fatturato${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''} arrotondato: ${_fmtEuroInt(fattBase)} € ${fattBase > 0 ? '(' + _fmtPctSigned(deltaFattBase) + ' vs ipotizzato)' : ''}</div>
         </div>
         <div class="ab-pdf-kpi-card">
           <div class="ab-pdf-kpi-label">Margine di contribuzione</div>
