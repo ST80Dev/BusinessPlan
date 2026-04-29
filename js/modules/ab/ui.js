@@ -1063,17 +1063,20 @@ const BudgetUI = (() => {
   }
 
   /**
-   * Valore "Base storica" della singola macroarea, coerente con la cella
-   * mostrata nel prospetto: 0 per i proventi/oneri straordinari (default
-   * di natura non ricorrente); media triennale € per costi variabili e
-   * rimanenze; ultimo anno arrotondato al centinaio per ricavi, fissi
-   * e imposte.
+   * Valore "Base storica" della singola macroarea = default di partenza
+   * del budget in assenza di override:
+   *   - proventi/oneri straordinari: 0 (natura non ricorrente)
+   *   - ricavi, fissi, imposte: ultimo anno arrotondato al centinaio
+   *   - costi variabili (incluse macroaree custom variabili):
+   *     % media storica × fatturato ipotizzato (dato.base_default)
+   *   - rimanenze (calcolato): media triennale degli importi €
    */
   function _baseStoricaVoce(macroSezioni, b, id) {
     const m = (macroSezioni || []).find(x => x.id === id);
     const dato = b.valori[id];
     if (!dato) return 0;
     if (m && m.sezione === 'prov_oneri_straord') return 0;
+    if (m && m.var_fisso === 'variabile' && !m.calcolato) return dato.base_default || 0;
     const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato;
     return isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0);
   }
@@ -1232,7 +1235,7 @@ const BudgetUI = (() => {
             <tr>
               <th>Macroarea</th>
               <th class="num" title="Media degli importi € sui tre anni storici, riferimento informativo per le decisioni di budget.">Media triennale</th>
-              <th class="num" title="Costi variabili: media triennale €. Ricavi, fissi e imposte: ultimo anno arrotondato al centinaio (base del budget teorico). Proventi/oneri straordinari: 0 di default (natura non ricorrente).">Base storica</th>
+              <th class="num" title="Default del budget in assenza di override: ricavi, fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 (natura non ricorrente); rimanenze = media € storica.">Base storica</th>
               <th class="num">% storica</th>
               <th class="num">Override</th>
               <th class="num">Budget €</th>
@@ -1292,20 +1295,25 @@ const BudgetUI = (() => {
 
       const fonteCls = dato.fonte === 'override' ? 'ab-fonte-override' : 'ab-fonte-storico';
 
-      // Colonna "Base storica": per gli straordinari mostriamo 0 (default
-      // di natura non ricorrente, coerente con base_default dell'engine).
-      // Per le voci non variabili (e non calcolate) mostriamo l'ultimo
-      // anno arrotondato al centinaio, default del budget teorico. Per
-      // variabili pure e calcolato resta la media € informativa.
+      // Colonna "Base storica" = default del budget in assenza di override:
+      //   - straordinari: 0 (natura non ricorrente)
+      //   - variabili pure (anche custom): % media × fatturato ipotizzato
+      //   - non var, non calc, non straord (ricavi/fissi/imposte): ultimo
+      //     anno arrotondato al centinaio
+      //   - calcolato (rim_ini/rim_fin): media € storica
       const isStraord = m && m.sezione === 'prov_oneri_straord';
+      const isVarPura = m && m.var_fisso === 'variabile' && !m.calcolato;
       const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato;
       const baseDisplay = isStraord ? 0
+        : isVarPura ? (dato.base_default || 0)
         : (isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0));
       const baseTitle   = isStraord
         ? 'Default 0 (voce di natura non ricorrente — usare l\'override per forzare un valore)'
-        : (isNonVarNonCalc
-            ? `Ultimo anno arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`
-            : 'Media triennale');
+        : isVarPura
+            ? '% media storica × fatturato ipotizzato'
+            : (isNonVarNonCalc
+                ? `Ultimo anno arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`
+                : 'Media triennale');
       const mediaTriDisplay = (dato.media_euro || 0);
 
       const note = (progetto.budget && progetto.budget.note) || {};
@@ -2006,8 +2014,10 @@ const BudgetUI = (() => {
       if (r.nascondiSeZero && Math.abs(dato.media_euro) < 0.005 && Math.abs(dato.valore) < 0.005) continue;
 
       const isStraord = m && m.sezione === 'prov_oneri_straord';
+      const isVarPura = m && m.var_fisso === 'variabile' && !m.calcolato;
       const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato;
       const baseDisplay = isStraord ? 0
+        : isVarPura ? (dato.base_default || 0)
         : (isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0));
       const mediaTriDisplay = (dato.media_euro || 0);
 
@@ -2059,7 +2069,7 @@ const BudgetUI = (() => {
     // Note metodologiche fisse (riprendono i tooltip a video)
     const noteMetodo = [
       '<strong>Media triennale</strong> — media in € degli importi storici sui tre anni: riferimento informativo per ponderare correzioni manuali al budget.',
-      '<strong>Base storica</strong> — per costi variabili (mat. prime, altri costi variabili) e rimanenze: media triennale degli importi storici. Per ricavi, costi fissi e imposte: ultimo anno arrotondato al centinaio (default del budget teorico). Proventi/oneri straordinari: 0 di default per natura non ricorrente.',
+      '<strong>Base storica</strong> — default di partenza del budget in assenza di override: ricavi, costi fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili (incluse macroaree custom variabili) = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 per natura non ricorrente; rimanenze = media € storica.',
       '<strong>% storica</strong> — incidenza media sul fatturato calcolata come media delle incidenze % di ciascun anno storico (non come media degli importi diviso media del fatturato).',
       '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi e imposte: ultimo anno o override utente. Proventi/oneri straordinari: 0 di default o override utente. Rimanenze: media € storica o override €.',
       '<strong>Costo del venduto</strong> = Mat. prime + Altri costi variabili + Rimanenze iniziali − Rimanenze finali.',

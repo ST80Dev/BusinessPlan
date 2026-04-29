@@ -247,7 +247,8 @@ const BudgetEngine = (() => {
       // Variabili pure (no calcolato): % override o % media × fatturato
       if (m.var_fisso === 'variabile' && !m.calcolato) {
         const pctOvr = ovrPct[m.id];
-        const pct    = (typeof pctOvr === 'number' && isFinite(pctOvr)) ? pctOvr : (mediePct[m.id] || 0);
+        const pctMedia = mediePct[m.id] || 0;
+        const pct    = (typeof pctOvr === 'number' && isFinite(pctOvr)) ? pctOvr : pctMedia;
         const valore = pct * fatturato;
         valori[m.id] = {
           valore,
@@ -257,7 +258,10 @@ const BudgetEngine = (() => {
           media_euro: medieEuro[m.id],
           media_pct:  mediePct[m.id],
           ultimo_anno_euro: ultimoAnnoEuro[m.id],
-          base_default: pct * fatturato  // base = % media × fatturato
+          // base_default: stima storica indipendente dall'override —
+          // sempre % media × fatturato_ipotizzato. Si scala col fatturato
+          // budget e resta confrontabile col Budget € finale.
+          base_default: pctMedia * fatturato
         };
         // sommaPctVar: i costi variabili contribuiscono +pct,
         // i ricavi variabili (rim_fin sarebbe stato qui ma è calcolato)
