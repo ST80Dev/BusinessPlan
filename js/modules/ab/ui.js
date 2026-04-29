@@ -1235,8 +1235,8 @@ const BudgetUI = (() => {
             <tr>
               <th>Macroarea</th>
               <th class="num" title="Media degli importi € sui tre anni storici, riferimento informativo per le decisioni di budget.">Media triennale</th>
+              <th class="num" title="Incidenza % media sul fatturato calcolata come media delle incidenze % di ciascun anno storico.">% storica</th>
               <th class="num" title="Default del budget in assenza di override: ricavi, fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 (natura non ricorrente); rimanenze = media € storica.">Base (Ult. Anno o %)</th>
-              <th class="num">% storica</th>
               <th class="num">Override</th>
               <th class="num">Budget €</th>
               <th class="num">Budget %</th>
@@ -1277,8 +1277,8 @@ const BudgetUI = (() => {
         html += `<tr class="${cls}">
           <td>${_escapeHtml(r.label)}</td>
           <td class="num">${_fmtEuroInt(valMediaTri * segno)}</td>
-          <td class="num">${_fmtEuroInt(valBase * segno)}</td>
           <td class="num">${_fmtPct(pctBase * segno)}</td>
+          <td class="num">${_fmtEuroInt(valBase * segno)}</td>
           <td class="num"></td>
           <td class="num">${_fmtEuroInt(valBudget * segno)}</td>
           <td class="num">${_fmtPct(pctBudget * segno)}</td>
@@ -1324,8 +1324,8 @@ const BudgetUI = (() => {
       html += `<tr class="${fonteCls}${notaPresente ? ' ab-budget-row-has-note' : ''}">
         <td>${_escapeHtml(r.label)}</td>
         <td class="num" title="Media triennale degli importi storici">${_fmtEuroInt(mediaTriDisplay)}</td>
-        <td class="num" title="${baseTitle}">${_fmtEuroInt(baseDisplay)}</td>
         <td class="num">${_fmtPct(dato.media_pct)}</td>
+        <td class="num" title="${baseTitle}">${_fmtEuroInt(baseDisplay)}</td>
         <td class="num">${_renderOverrideCell(r, dato, progetto, notaPresente, notaAperta)}</td>
         <td class="num">${_fmtEuroInt(dato.valore * segno)}</td>
         <td class="num">${_fmtPct(dato.pct * segno)}</td>
@@ -2001,8 +2001,8 @@ const BudgetUI = (() => {
         body += `<tr class="${cls}">
           <td>${_escapeHtml(r.label)}</td>
           <td class="num">${_fmtEuroInt(valMediaTri * segno)}</td>
-          <td class="num">${_fmtEuroInt(valBase * segno)}</td>
           <td class="num">${_fmtPct(pctBase * segno)}</td>
+          <td class="num">${_fmtEuroInt(valBase * segno)}</td>
           <td class="num">${_fmtEuroInt(valBudget * segno)}</td>
           <td class="num">${_fmtPct(pctBudget * segno)}</td>
         </tr>`;
@@ -2033,8 +2033,8 @@ const BudgetUI = (() => {
       body += `<tr>
         <td>${_escapeHtml(r.label)}${notaMark}</td>
         <td class="num">${_fmtEuroInt(mediaTriDisplay)}</td>
-        <td class="num">${_fmtEuroInt(baseDisplay)}</td>
         <td class="num">${_fmtPct(dato.media_pct)}</td>
+        <td class="num">${_fmtEuroInt(baseDisplay)}</td>
         <td class="num">${_fmtEuroInt(dato.valore * segno)}</td>
         <td class="num">${_fmtPct(dato.pct * segno)}</td>
       </tr>`;
@@ -2083,8 +2083,8 @@ const BudgetUI = (() => {
     html += '<table class="ab-pdf-tab"><thead><tr>'
          +    '<th>Macroarea</th>'
          +    '<th class="num">Media triennale</th>'
-         +    '<th class="num">Base (Ult. Anno o %)</th>'
          +    '<th class="num">% storica</th>'
+         +    '<th class="num">Base (Ult. Anno o %)</th>'
          +    '<th class="num">Budget €</th>'
          +    '<th class="num">Budget %</th>'
          +  '</tr></thead><tbody>' + body + '</tbody></table>';
