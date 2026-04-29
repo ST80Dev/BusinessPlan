@@ -492,14 +492,17 @@ const BudgetUI = (() => {
       segno: { prov_oneri_straord: -1 }
     });
 
+    // Numero colonne per riga: 1 (etichetta) + 2 per anno (€ e %) + 1 (Media %)
+    const totaleColspan = anni.length * 2 + 2;
+
     let html = `
       <div class="ab-storico">
-        <table class="ab-storico-tab ab-storico-prospetto">
+        <table class="ab-storico-tab ab-storico-prospetto ab-storico-prospetto-3a">
           <thead>
             <tr>
               <th>Macroarea</th>
-              ${anni.map(a => `<th class="num">${a}</th>`).join('')}
-              <th class="num">Media %</th>
+              ${anni.map(a => `<th class="num ab-storico-anno-eur">${a} €</th><th class="num ab-storico-anno-pct">${a} %</th>`).join('')}
+              <th class="num" title="Media triennale dell'incidenza % sul fatturato di ciascun anno">Media %</th>
             </tr>
           </thead>
           <tbody>
@@ -507,11 +510,11 @@ const BudgetUI = (() => {
 
     for (const r of righe) {
       if (r.tipo === 'spacer') {
-        html += `<tr class="ab-prospetto-spacer"><td colspan="${anni.length + 2}">&nbsp;</td></tr>`;
+        html += `<tr class="ab-prospetto-spacer"><td colspan="${totaleColspan}">&nbsp;</td></tr>`;
         continue;
       }
       if (r.tipo === 'sezione') {
-        html += `<tr class="ab-sezione"><td colspan="${anni.length + 2}">${_escapeHtml(r.label)}</td></tr>`;
+        html += `<tr class="ab-sezione"><td colspan="${totaleColspan}">${_escapeHtml(r.label)}</td></tr>`;
         continue;
       }
 
@@ -533,13 +536,20 @@ const BudgetUI = (() => {
         ? `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}`
         : '';
 
-      html += `<tr class="${cls}"><td>${_escapeHtml(r.label)}</td>`;
-      valori.forEach(v => {
-        const display = v * segno;
-        html += `<td class="num">${_fmtEuro(display)}</td>`;
-      });
-      // Media % — mostra solo se la macroarea/derivato ha un'incidenza significativa
+      // Per i ricavi (denominatore) le % sul fatturato sono sempre 100%
+      // e poco informative: lasciamo le celle % vuote. Per i derivati
+      // mostriamo sempre la %, altrimenti rispettiamo la macroarea.
       const mostraPct = (r.tipo === 'totale' || r.id !== 'ricavi');
+
+      html += `<tr class="${cls}"><td>${_escapeHtml(r.label)}</td>`;
+      valori.forEach((v, i) => {
+        const display = v * segno;
+        html += `<td class="num ab-storico-anno-eur">${_fmtEuro(display)}</td>`;
+        const fattAnno = (totali[anni[i]] || {}).fatturato || 0;
+        const pctAnno = (mostraPct && fattAnno > 0) ? (v / fattAnno) * segno : null;
+        html += `<td class="num ab-storico-anno-pct">${pctAnno != null ? _fmtPct(pctAnno) : ''}</td>`;
+      });
+      // Media triennale delle % anno per anno
       html += `<td class="num">${mostraPct && mediaPct != null ? _fmtPct(mediaPct * segno) : ''}</td>`;
       html += '</tr>';
     }

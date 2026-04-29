@@ -1952,6 +1952,22 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   font-size: 13px;
 }
 
+/* Storico triennale a coppie €/% per anno: separatore sottile sulla
+   colonna €, così il colpo d'occhio raggruppa le due celle dello stesso
+   anno e distingue il gruppo successivo. La % è meno appariscente
+   tipograficamente per non rubare scena agli importi. */
+.ab-storico-prospetto-3a th.ab-storico-anno-eur,
+.ab-storico-prospetto-3a td.ab-storico-anno-eur {
+  border-left: 1px solid var(--color-border);
+}
+.ab-storico-prospetto-3a thead th.ab-storico-anno-eur,
+.ab-storico-prospetto-3a thead th.ab-storico-anno-pct {
+  white-space: nowrap;
+}
+.ab-storico-prospetto-3a td.ab-storico-anno-pct {
+  color: var(--color-text-muted);
+}
+
 /* Verde = risultato positivo / Fatturato / MdC / Utile */
 .ab-storico-prospetto tr.ab-prospetto-tot-verde td {
   background: var(--color-success-bg);
