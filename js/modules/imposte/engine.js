@@ -1061,12 +1061,276 @@
     };
   }
 
+  // -------------------------------------------------------------------------
+  // Chiusura anno e generazione progetto N+1
+  // -------------------------------------------------------------------------
+
+  /** Clone profondo via JSON. Sufficiente per progetti (no funzioni, no Date). */
+  function deepClone(obj) {
+    return obj ? JSON.parse(JSON.stringify(obj)) : obj;
+  }
+
+  /** Restituisce la data odierna in formato "YYYY-MM-DD". */
+  function isoToday() {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const g = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + g;
+  }
+
+  /**
+   * Determina se l'anno N è entro i primi 3 esercizi dalla costituzione.
+   * Assume "primo esercizio" = anno della data_costituzione.
+   * Se data_costituzione manca, ritorna false (perdita andrà a limitate, scelta conservativa).
+   */
+  function isEntroPrimi3Esercizi(annoN, dataCostituzione, regoleAnno) {
+    if (!dataCostituzione) return false;
+    const annoCost = parseInt(String(dataCostituzione).slice(0, 4), 10);
+    if (!annoCost || isNaN(annoCost)) return false;
+    const nMax = num(regoleAnno && regoleAnno.ires && regoleAnno.ires.perdite && regoleAnno.ires.perdite.perdite_piene_n_esercizi_iniziali) || 3;
+    return (annoN - annoCost) < nMax;
+  }
+
+  /**
+   * Aggiorna l'array delle plusvalenze rateizzate dopo la chiusura dell'anno N.
+   * Per ogni entry attiva nell'anno N (non esaurita), aggiunge la quota imputata
+   * a `imputate`. Filtra via le entry esaurite.
+   */
+  function aggiornaPlusvalenze(arrPlus, annoN) {
+    const out = [];
+    for (const p of (arrPlus || [])) {
+      const annoReal = num(p.anno_realizzo);
+      const importo = num(p.importo);
+      const rate = Math.max(1, Math.min(5, num(p.rate) || 1));
+      const quota = importo / rate;
+      const imputate = Array.isArray(p.imputate) ? p.imputate.slice() : [];
+
+      // Era attiva nell'anno N? Lo è se annoN ∈ [annoReal, annoReal + rate − 1]
+      const attivaInN = (annoReal > 0 && annoN >= annoReal && annoN < annoReal + rate);
+      if (attivaInN && imputate.length < rate) {
+        imputate.push(arr(quota));
+      }
+
+      // Mantengo l'entry solo se ha ancora almeno un anno di attività
+      // futura (annoReal + rate - 1 > annoN) E non ha già esaurito tutte
+      // le rate. Le entry temporalmente concluse o esaurite vengono scartate.
+      const ultimoAnnoAttivo = annoReal + rate - 1;
+      if (ultimoAnnoAttivo > annoN && imputate.length < rate) {
+        out.push({ anno_realizzo: annoReal, importo: arr(importo), rate: rate, imputate: imputate });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Aggiorna l'array delle manutenzioni eccedenti 5%.
+   * Rimuove le entry "esaurite": quelle il cui ultimo esercizio di riporto è
+   * stato l'anno N. Cioè entry con `anno + 5 ≤ N`.
+   */
+  function aggiornaManutenzioni(arrM, annoN) {
+    const out = [];
+    for (const m of (arrM || [])) {
+      const annoForm = num(m.anno);
+      const importo = num(m.importo);
+      // Riporto in 5 esercizi successivi → ultima quota matura nell'anno annoForm+5
+      // Quando si chiude l'anno N: l'entry resta utile per N+1, N+2, ... finché annoForm+5 ≥ N+1
+      if (annoForm > 0 && (annoForm + 5) >= (annoN + 1)) {
+        out.push({ anno: annoForm, importo: arr(importo) });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Costruisce il blocco "lavoro_irap" per l'anno N+1 a partire da quello di N.
+   * Shift: anno_corrente → anno_precedente; nuovi anno_corrente azzerati.
+   * Aggiunge anche base_imp_irap_anno_prec e saldo_irap_anno_prec_versato
+   * usando l'output del calcolo dell'anno chiuso.
+   */
+  function costruisciLavoroIrapAnnoSuccessivo(lavN, calcoloOutput) {
+    lavN = lavN || {};
+    const irap = (calcoloOutput && calcoloOutput.irap) || {};
+    return {
+      costo_dip_indeterminato_anno: 0,
+      costo_dip_indeterminato_anno_prec: num(lavN.costo_dip_indeterminato_anno),
+      costo_amm_cocoo_anno: 0,
+      costo_amm_cocoo_anno_prec: num(lavN.costo_amm_cocoo_anno),
+      // Saldo IRAP appena chiuso → diventa "anno precedente" per il calcolo
+      // successivo della deduzione IRAP da IRES (quota analitica + forfait 10%).
+      // Solo la parte effettivamente versata: se a credito, è 0.
+      saldo_irap_anno_prec_versato: arr(Math.max(0, num(irap.saldo_irap))),
+      acconti_irap_anno_versati: 0,
+      base_imp_irap_anno_prec: arr(num(irap.imponibile_irap)),
+      deduzioni_irap_anno_prec_no_occupazionali: arr(
+        num(irap.deduzioni && irap.deduzioni.IS1) +
+        num(irap.deduzioni && irap.deduzioni.IS4) +
+        num(irap.deduzioni && irap.deduzioni.IC75)
+      )
+    };
+  }
+
+  /**
+   * Azzera ricorsivamente i numeri di un oggetto annidato, preservando le chiavi.
+   * Stringhe, booleani e oggetti complessi (es. liste) vengono lasciati ai default
+   * (stringhe vuote / false / array vuoti).
+   */
+  function azzeraNumeri(obj) {
+    if (obj === null || obj === undefined) return obj;
+    if (Array.isArray(obj)) return [];
+    if (typeof obj === 'object') {
+      const out = {};
+      for (const k of Object.keys(obj)) out[k] = azzeraNumeri(obj[k]);
+      return out;
+    }
+    if (typeof obj === 'number') return 0;
+    if (typeof obj === 'string') return '';
+    if (typeof obj === 'boolean') return false;
+    return obj;
+  }
+
+  /**
+   * Chiude l'anno N e genera il progetto per l'anno N+1.
+   *
+   * Restituisce due oggetti:
+   *  - progettoChiuso: clone del progetto in input con `meta.chiuso = true`
+   *    e `calcoli` popolato con l'output di calcoloCompleto (snapshot
+   *    immutabile del calcolo dell'anno chiuso).
+   *  - progettoNuovoAnno: nuovo progetto per l'anno N+1, pre-popolato con
+   *    lo `storico` aggiornato (riporti perdite, ACE, ROL/IP, plus,
+   *    manutenzioni, crediti d'imposta) e con tutte le voci di input
+   *    azzerate.
+   *
+   * @param {object} progetto
+   * @param {object} calcoloOutput - output di calcoloCompleto()
+   * @param {object} regoleAnno
+   * @returns {{ progettoChiuso: object, progettoNuovoAnno: object }}
+   */
+  function chiudiAnno(progetto, calcoloOutput, regoleAnno) {
+    if (!progetto || !calcoloOutput || !regoleAnno) {
+      throw new Error('chiudiAnno: progetto, calcoloOutput e regoleAnno sono obbligatori');
+    }
+
+    const annoN = num((progetto.meta || {}).anno_imposta) || num(regoleAnno.anno_imposta);
+    if (annoN <= 0) {
+      throw new Error('chiudiAnno: anno_imposta non valido nel progetto');
+    }
+    const annoN1 = annoN + 1;
+    const oggi = isoToday();
+
+    const ires = calcoloOutput.ires || {};
+    const irap = calcoloOutput.irap || {};
+    const rol = calcoloOutput.rol || {};
+    const ace = ires.ace || {};
+    const perdite = ires.perdite || {};
+
+    // 1) Progetto chiuso = clone con meta.chiuso, calcoli salvati
+    const progettoChiuso = deepClone(progetto);
+    progettoChiuso.meta = progettoChiuso.meta || {};
+    progettoChiuso.meta.chiuso = true;
+    progettoChiuso.meta.modificato = oggi;
+    progettoChiuso.meta.stato = 'chiuso';
+    progettoChiuso.calcoli = deepClone(calcoloOutput);
+
+    // 2) Storico aggiornato per l'anno N+1
+    const storicoN = progetto.storico || {};
+
+    // 2a) Plusvalenze rateizzate
+    const plusN1 = aggiornaPlusvalenze(storicoN.plusvalenze_rateizzate, annoN);
+
+    // 2b) Manutenzioni eccedenti 5%
+    const manutN1 = aggiornaManutenzioni(storicoN.manutenzioni_eccedenti_5pct, annoN);
+
+    // 2c) Riporti ROL e interessi passivi
+    const ipRiportoN1 = arr(num(rol.ip_indeducibili_riporto_a_nuovo));
+    const rolRiportoN1 = arr(num(rol.rol_residuo_riporto_a_nuovo));
+
+    // 2d) Perdite
+    //     - Decremento stock con i residui post-utilizzo del calcolo
+    //     - Aggiunta nuova perdita se l'anno N è chiuso in perdita
+    let pieneN1 = (perdite.stock_piene_residue || []).map(p => ({ anno: num(p.anno), importo: arr(num(p.importo)) }))
+                                                       .filter(p => p.importo > 0);
+    let limitateN1 = (perdite.stock_limitate_residue || []).map(p => ({ anno: num(p.anno), importo: arr(num(p.importo)) }))
+                                                            .filter(p => p.importo > 0);
+    const perditaAnno = num(perdite.perdita_anno);
+    if (perditaAnno > 0) {
+      const dataCost = (progetto.meta || {}).data_costituzione;
+      if (isEntroPrimi3Esercizi(annoN, dataCost, regoleAnno)) {
+        pieneN1.push({ anno: annoN, importo: arr(perditaAnno) });
+      } else {
+        limitateN1.push({ anno: annoN, importo: arr(perditaAnno) });
+      }
+    }
+
+    // 2e) ACE
+    const aceN1 = arr(num(ace.residua_a_nuovo));
+
+    // 2f) Crediti d'imposta residui (solo se saldo a credito)
+    const saldoIres = num(ires.saldo_ires);
+    const saldoIrap = num(irap.saldo_irap);
+    const credIresN1 = arr(Math.max(0, -saldoIres));
+    const credIrapN1 = arr(Math.max(0, -saldoIrap));
+
+    const storicoN1 = {
+      plusvalenze_rateizzate: plusN1,
+      manutenzioni_eccedenti_5pct: manutN1,
+      interessi_passivi_riporto: ipRiportoN1,
+      rol_riporto: rolRiportoN1,
+      perdite_piene: pieneN1,
+      perdite_limitate: limitateN1,
+      ace_residua: aceN1,
+      credito_ires_residuo: credIresN1,
+      credito_irap_residuo: credIrapN1
+    };
+
+    // 3) Costruisco progetto nuovo anno N+1
+    const meta = progetto.meta || {};
+    const flag = progetto.flag || {};
+
+    // Per le sezioni IRES/IRAP/CE/CPB/lavoro_irap parto dalla shape esistente
+    // e azzero i numeri, in modo da preservare eventuali campi custom.
+    const ceN1 = azzeraNumeri(progetto.ce || {});
+    const iresN1 = azzeraNumeri(progetto.ires || {});
+    const irapN1 = azzeraNumeri(progetto.irap || {});
+    const cpbN1 = azzeraNumeri(progetto.cpb || {});
+
+    // Crediti residui dall'anno chiuso entrano come credito_anno_prec_residuo
+    if (iresN1 && typeof iresN1 === 'object') {
+      iresN1.credito_anno_prec_residuo = credIresN1;
+    }
+    if (irapN1 && typeof irapN1 === 'object') {
+      irapN1.credito_anno_prec_residuo = credIrapN1;
+    }
+
+    const lavoroIrapN1 = costruisciLavoroIrapAnnoSuccessivo(progetto.lavoro_irap, calcoloOutput);
+
+    const progettoNuovoAnno = {
+      meta: Object.assign({}, meta, {
+        anno_imposta: annoN1,
+        anno_versamento: annoN1 + 1,
+        creato: oggi,
+        modificato: oggi,
+        stato: 'in_lavorazione',
+        chiuso: false
+      }),
+      flag: deepClone(flag),
+      ce: ceN1,
+      lavoro_irap: lavoroIrapN1,
+      ires: iresN1,
+      irap: irapN1,
+      cpb: cpbN1,
+      storico: storicoN1
+    };
+
+    return { progettoChiuso: progettoChiuso, progettoNuovoAnno: progettoNuovoAnno };
+  }
+
   global.ImposteEngine = {
     calcoloIres: calcoloIres,
     calcoloIrap: calcoloIrap,
     calcolaDeduzioneIrapDaIres: calcolaDeduzioneIrapDaIres,
     calcolaRol: calcolaRol,
     calcoloCompleto: calcoloCompleto,
+    chiudiAnno: chiudiAnno,
     // sotto-funzioni esposte per test
     _internal: {
       num: num,
@@ -1085,7 +1349,11 @@
       calcolaVariazioniIrapDiminuzione: calcolaVariazioniIrapDiminuzione,
       calcolaDeduzioniIrap: calcolaDeduzioniIrap,
       risolviAliquotaIrap: risolviAliquotaIrap,
-      calcolaRol: calcolaRol
+      calcolaRol: calcolaRol,
+      aggiornaPlusvalenze: aggiornaPlusvalenze,
+      aggiornaManutenzioni: aggiornaManutenzioni,
+      isEntroPrimi3Esercizi: isEntroPrimi3Esercizi,
+      costruisciLavoroIrapAnnoSuccessivo: costruisciLavoroIrapAnnoSuccessivo
     }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
