@@ -655,6 +655,9 @@ const Projects = (() => {
     if (meta.modulo === 'ab') {
       return `AB_${nome}_${meta.anno_corrente}.json`;
     }
+    if (meta.modulo === 'imposte') {
+      return `IM_${nome}_${meta.anno_imposta}.json`;
+    }
     return `BP_${nome}_${meta.anno_base}.json`;
   }
 
@@ -754,6 +757,15 @@ const Projects = (() => {
         Array.isArray(dati.meta.anni_storici) &&
         dati.macro_sezioni && dati.storico && dati.mapping !== undefined &&
         dati.budget && dati.consuntivo
+      );
+    }
+
+    // Modulo Imposte (IRES/IRAP/CPB)
+    if (dati.meta.modulo === 'imposte') {
+      return (
+        typeof dati.meta.anno_imposta === 'number' &&
+        dati.flag && dati.ce && dati.ires && dati.irap &&
+        dati.cpb !== undefined && dati.storico
       );
     }
 
@@ -1144,6 +1156,166 @@ const Projects = (() => {
     if (anni) anni.textContent = '3';
   }
 
+  /* ──────────────────────────────────────────────────────────
+     Modulo Imposte — creazione progetto IM
+     ────────────────────────────────────────────────────────── */
+
+  /**
+   * Costruisce la struttura dati di un progetto Imposte coerente con
+   * lo schema descritto in caratteristiche_modulo_imposte.md §17.
+   *
+   *   meta.modulo === 'imposte' è il discriminatore usato in apri/salva
+   *   e dalla UI per scegliere sidebar e routing.
+   */
+  function _creaStrutturaImposte(meta) {
+    const oggi = new Date().toISOString().split('T')[0];
+    const annoImposta = meta.anno_imposta;
+    return {
+      meta: {
+        modulo:            'imposte',
+        cliente:           meta.cliente,
+        p_iva:             meta.p_iva || '',
+        ateco:             meta.ateco || '',
+        regione:           meta.regione || '',
+        anno_imposta:      annoImposta,
+        anno_versamento:   annoImposta + 1,
+        data_costituzione: meta.data_costituzione || '',
+        creato:            oggi,
+        modificato:        oggi,
+        stato:             'in_lavorazione',
+        chiuso:            false
+      },
+      flag: {
+        societa_trasparente:    false,
+        cpb_attivo:             false,
+        soggetto_isa:           true,
+        punteggio_isa:          null,
+        data_versamento_saldo:  '30_giugno'
+      },
+      ce: {
+        risultato_ante_imposte: 0,
+        A_totale: 0, B_totale: 0,
+        B9: 0, B10c: 0, B10d: 0, B12: 0, B13: 0,
+        C_saldo: 0
+      },
+      lavoro_irap: {
+        costo_dip_indeterminato_anno:                     0,
+        costo_dip_indeterminato_anno_prec:                0,
+        costo_amm_cocoo_anno:                             0,
+        costo_amm_cocoo_anno_prec:                        0,
+        saldo_irap_anno_prec_versato:                     0,
+        acconti_irap_anno_versati:                        0,
+        base_imp_irap_anno_prec:                          0,
+        deduzioni_irap_anno_prec_no_occupazionali:        0
+      },
+      ires: {
+        variazioni_aumento:    {},   // RF6..RF31_cod99_altre — popolate dalla UI
+        variazioni_diminuzione:{},   // RF34..RF55_cod99
+        crediti_e_ritenute:    0,
+        detrazioni:            0,
+        credito_anno_prec_residuo: 0,
+        acconti_versati:       0,
+        rol_input: {
+          ip_anno: 0,
+          ia_anno: 0,
+          valori_a_b_fiscali: {
+            A: 0, B: 0, amm_immateriali: 0, amm_materiali: 0,
+            canoni_leasing: 0, dividendi_controllate_estere: 0,
+            altri_componenti_periodi_precedenti: 0
+          }
+        }
+      },
+      irap: {
+        variazioni_aumento:    {},   // IC43..IC51_cod99
+        variazioni_diminuzione:{},   // IC53..IC57_cod99
+        deduzioni: {
+          IS1_inail:                    0,
+          IS4_apprendisti_disabili_rd:  0,
+          IS5_dipendenti_1850:          { n_dipendenti: 0, ricavi_totali: 0 },
+          IS7_costo_personale_indet:    0,
+          IS9_eccedenze:                0
+        },
+        aliquota_override:         null,
+        credito_anno_prec_residuo: 0,
+        acconti_versati:           0
+      },
+      cpb: {
+        reddito_concordato:           0,
+        reddito_ante_cpb_rettificato: 0,
+        var_attive:                   0,
+        var_passive:                  0,
+        vp_concordato:                0,
+        var_attive_irap:              0,
+        var_passive_irap:             0
+      },
+      storico: {
+        plusvalenze_rateizzate:       [],
+        manutenzioni_eccedenti_5pct:  [],
+        interessi_passivi_riporto:    0,
+        rol_riporto:                  0,
+        perdite_piene:                [],
+        perdite_limitate:             [],
+        ace_residua:                  0,
+        credito_ires_residuo:         0,
+        credito_irap_residuo:         0
+      }
+    };
+  }
+
+  function creaImposte() {
+    const clienteEl = document.getElementById('ni-cliente');
+    const pivaEl    = document.getElementById('ni-piva');
+    const atecoEl   = document.getElementById('ni-ateco');
+    const annoEl    = document.getElementById('ni-anno-imposta');
+    const regioneEl = document.getElementById('ni-regione');
+    const dataCostEl = document.getElementById('ni-data-costituzione');
+
+    const cliente   = (clienteEl  && clienteEl.textContent || '').trim();
+    const pIva      = (pivaEl     && pivaEl.textContent || '').trim();
+    const ateco     = (atecoEl    && atecoEl.textContent || '').trim();
+    const annoImp   = parseInt(((annoEl && annoEl.textContent) || '').trim(), 10);
+    const regione   = (regioneEl  && regioneEl.textContent || '').trim();
+    const dataCost  = (dataCostEl && dataCostEl.textContent || '').trim();
+
+    const errori = [];
+    if (!cliente) errori.push('La ragione sociale è obbligatoria.');
+    if (isNaN(annoImp) || annoImp < 2000 || annoImp > 2100) errori.push('Anno d\'imposta non valido.');
+    if (!regione) errori.push('La regione è obbligatoria.');
+    if (dataCost && !/^\d{4}-\d{2}-\d{2}$/.test(dataCost)) {
+      errori.push('Data costituzione: formato atteso YYYY-MM-DD.');
+    }
+
+    if (errori.length > 0) {
+      UI.mostraNotifica(errori.join(' '), 'error');
+      return;
+    }
+
+    const progetto = _creaStrutturaImposte({
+      cliente:           cliente,
+      p_iva:             pIva,
+      ateco:             ateco,
+      anno_imposta:      annoImp,
+      regione:           regione,
+      data_costituzione: dataCost
+    });
+
+    _progettoCorrente = progetto;
+    _modificato = true;
+    _aggiungiRecente(progetto);
+
+    UI.closeModal('modal-nuove-imposte');
+    _resetFormNuoveImposte();
+    UI.onProgettoAperto(progetto);
+  }
+
+  function _resetFormNuoveImposte() {
+    ['ni-cliente', 'ni-piva', 'ni-ateco', 'ni-anno-imposta', 'ni-regione', 'ni-data-costituzione']
+      .forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+      });
+  }
+
   /**
    * Applica al progetto AB corrente l'import CE già parsato e
    * mappato. Sovrascrive sottoconti_ce, mapping e storico.
@@ -1512,7 +1684,9 @@ const Projects = (() => {
     creaMacroareaCustom,
     rinominaMacroareaCustom,
     eliminaMacroareaCustom,
-    salvaAnagraficaAB
+    salvaAnagraficaAB,
+    // Modulo Imposte (IRES/IRAP/CPB)
+    creaImposte
   };
 
 })();

@@ -109,6 +109,67 @@
         <span>Consuntivo</span>
         <span class="sidebar-nav-status" id="nav-status-ab-consuntivo"></span>
       </div>
+
+      <!-- ── Voci Imposte (calcolo IRES/IRAP/CPB) ──────────────── -->
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-anagrafica" data-modulo="imposte" onclick="UI.navigate('imp-anagrafica')">
+        <span class="sidebar-nav-icon">🏢</span>
+        <span>Anagrafica e flag</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-anagrafica"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-conto-economico" data-modulo="imposte" onclick="UI.navigate('imp-conto-economico')">
+        <span class="sidebar-nav-icon">📒</span>
+        <span>Conto economico</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-conto-economico"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-variazioni-ires" data-modulo="imposte" onclick="UI.navigate('imp-variazioni-ires')">
+        <span class="sidebar-nav-icon">±</span>
+        <span>Variazioni IRES</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-variazioni-ires"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-rol" data-modulo="imposte" onclick="UI.navigate('imp-rol')">
+        <span class="sidebar-nav-icon">%</span>
+        <span>Interessi passivi (ROL)</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-rol"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-perdite-ace" data-modulo="imposte" onclick="UI.navigate('imp-perdite-ace')">
+        <span class="sidebar-nav-icon">↻</span>
+        <span>Perdite e ACE</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-perdite-ace"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-cpb" data-modulo="imposte" onclick="UI.navigate('imp-cpb')">
+        <span class="sidebar-nav-icon">⊜</span>
+        <span>Concordato (CPB)</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-cpb"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-irap" data-modulo="imposte" onclick="UI.navigate('imp-irap')">
+        <span class="sidebar-nav-icon">▦</span>
+        <span>IRAP</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-irap"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-deduzione-irap" data-modulo="imposte" onclick="UI.navigate('imp-deduzione-irap')">
+        <span class="sidebar-nav-icon">↘</span>
+        <span>IRAP da IRES</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-deduzione-irap"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-storico" data-modulo="imposte" onclick="UI.navigate('imp-storico')">
+        <span class="sidebar-nav-icon">🗄</span>
+        <span>Storico (riporti)</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-storico"></span>
+      </div>
+
+      <div class="sidebar-nav-item disabled hidden" data-section="imp-riepilogo" data-modulo="imposte" onclick="UI.navigate('imp-riepilogo')">
+        <span class="sidebar-nav-icon">∑</span>
+        <span>Riepilogo &amp; F24</span>
+        <span class="sidebar-nav-status" id="nav-status-imp-riepilogo"></span>
+      </div>
     </div>
 
     <div class="sidebar-footer">v1.0 · Fase 8</div>
@@ -344,6 +405,90 @@
 </div>
 
 <!-- =====================================================
+     MODALE NUOVO CALCOLO IMPOSTE
+     ===================================================== -->
+<div class="modal-overlay hidden" id="modal-nuove-imposte">
+  <div class="modal" style="width:560px">
+    <div class="modal-header">
+      <span class="modal-title">Nuovo calcolo imposte</span>
+      <div class="modal-close" onclick="UI.closeModal('modal-nuove-imposte')">✕</div>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- Cliente -->
+      <div class="form-group">
+        <span class="form-label required">Ragione sociale</span>
+        <div class="form-field"
+             contenteditable="true"
+             id="ni-cliente"
+             data-placeholder="Es. Rossi Srl"
+             spellcheck="false"></div>
+      </div>
+
+      <!-- P.IVA + ATECO -->
+      <div class="form-row">
+        <div class="form-group">
+          <span class="form-label">Partita IVA</span>
+          <div class="form-field"
+               contenteditable="true"
+               id="ni-piva"
+               data-placeholder="Es. 01234567890"
+               spellcheck="false"></div>
+        </div>
+        <div class="form-group">
+          <span class="form-label">Codice ATECO</span>
+          <div class="form-field"
+               contenteditable="true"
+               id="ni-ateco"
+               data-placeholder="Es. 62.01.00"
+               spellcheck="false"></div>
+        </div>
+      </div>
+
+      <!-- Anno d'imposta + Regione -->
+      <div class="form-row">
+        <div class="form-group">
+          <span class="form-label required">Anno d'imposta</span>
+          <div class="form-field"
+               contenteditable="true"
+               id="ni-anno-imposta"
+               data-placeholder="Es. 2025"
+               spellcheck="false"></div>
+          <div class="form-hint">I versamenti saranno dell'anno successivo</div>
+        </div>
+        <div class="form-group">
+          <span class="form-label required">Regione</span>
+          <div class="form-field"
+               contenteditable="true"
+               id="ni-regione"
+               data-placeholder="Es. Marche"
+               spellcheck="false"></div>
+          <div class="form-hint">Per l'aliquota IRAP regionale</div>
+        </div>
+      </div>
+
+      <!-- Data costituzione -->
+      <div class="form-group">
+        <span class="form-label">Data costituzione</span>
+        <div class="form-field"
+             contenteditable="true"
+             id="ni-data-costituzione"
+             data-placeholder="Es. 2018-03-15 (formato YYYY-MM-DD)"
+             spellcheck="false"></div>
+        <div class="form-hint">Serve per riconoscere se le perdite vanno fra le "piene" (primi 3 esercizi)</div>
+      </div>
+
+    </div><!-- /.modal-body -->
+
+    <div class="modal-footer">
+      <div class="btn btn-secondary" onclick="UI.closeModal('modal-nuove-imposte')">Annulla</div>
+      <div class="btn btn-primary" onclick="Projects.creaImposte()">Crea calcolo</div>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
      MODALE MODIFICA DATI CLIENTE
      ===================================================== -->
 <div class="modal-overlay hidden" id="modal-modifica-cliente">
@@ -520,6 +665,11 @@
 <script src="js/modules/ab/engine.js"></script>
 <script src="js/modules/ab/excel-import.js"></script>
 <script src="js/modules/ab/ui.js"></script>
+
+<!-- Modulo Imposte (calcolo IRES/IRAP/CPB) -->
+<script src="js/modules/imposte/regole-loader.js"></script>
+<script src="js/modules/imposte/schema.js"></script>
+<script src="js/modules/imposte/engine.js"></script>
 
 <!-- Core (shell e gestione progetti) -->
 <script src="js/core/projects.js"></script>
