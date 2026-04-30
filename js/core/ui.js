@@ -125,14 +125,20 @@ const UI = (() => {
         BudgetUI.renderConsuntivo();
         break;
       case 'imp-anagrafica':
+        ImposteUI.renderAnagrafica();
+        break;
       case 'imp-conto-economico':
+        ImposteUI.renderContoEconomico();
+        break;
+      case 'imp-storico':
+        ImposteUI.renderStorico();
+        break;
       case 'imp-variazioni-ires':
       case 'imp-rol':
       case 'imp-perdite-ace':
       case 'imp-cpb':
       case 'imp-irap':
       case 'imp-deduzione-irap':
-      case 'imp-storico':
       case 'imp-riepilogo':
         content.innerHTML = _renderPlaceholder(_SEZIONI_HEADER[sezione].titolo);
         break;

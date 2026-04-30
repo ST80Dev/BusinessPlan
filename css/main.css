@@ -3278,3 +3278,224 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
     margin: 10mm;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Modulo Imposte (UI sezioni)
+   ───────────────────────────────────────────────────────────── */
+
+.imp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1080px;
+}
+
+.imp-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+
+.imp-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.imp-subtitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 6px;
+}
+
+.imp-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 24px;
+}
+
+.imp-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.imp-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.imp-form-field {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  min-height: 18px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.imp-form-field:focus {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 2px var(--color-accent-light);
+}
+
+.imp-form-field:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-muted);
+}
+
+.imp-form-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  text-align: right;
+}
+
+.imp-form-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+/* Pill SI/NO o multi-opzione */
+.imp-pill-group {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--color-surface-alt);
+}
+
+.imp-pill {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  border-right: 1px solid var(--color-border);
+  background: transparent;
+  transition: background 0.15s, color 0.15s;
+}
+
+.imp-pill:last-child { border-right: none; }
+.imp-pill:hover     { background: var(--color-surface-hover); }
+
+.imp-pill.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+/* Preview / risultati calcolati */
+.imp-preview { background: var(--color-info-bg); border-color: var(--color-info); }
+
+.imp-preview-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.imp-preview-label {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.imp-preview-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-info);
+}
+
+/* Tabelle storico */
+.imp-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.imp-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+}
+
+.imp-table th:nth-child(n+2) { text-align: right; }
+.imp-table th:last-child     { text-align: center; width: 36px; }
+
+.imp-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.imp-table td:nth-child(n+2) { text-align: right; }
+.imp-table td:last-child     { text-align: center; }
+
+.imp-table tbody tr:last-child td { border-bottom: none; }
+
+.imp-table-empty {
+  text-align: center !important;
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: 14px !important;
+}
+
+.imp-table .imp-form-field {
+  padding: 4px 6px;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.imp-table .imp-form-field:hover { border-color: var(--color-border-light); }
+.imp-table .imp-form-field:focus {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+}
+
+.imp-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.imp-tag-attiva   { background: var(--color-success-bg); color: var(--color-success); }
+.imp-tag-esaurita { background: var(--color-error-bg);   color: var(--color-error);   }
+
+.imp-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.imp-icon-btn:hover {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.imp-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
