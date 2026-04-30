@@ -126,7 +126,9 @@
    *   - RF31_cod99_telefoniche = costo_totale × 20%
    *   - RF15_col1 = STUB (interessi indeducibili da ROL — vedi PR successive)
    */
-  function calcolaVariazioniAumento(progetto, regoleAnno) {
+  function calcolaVariazioniAumento(progetto, regoleAnno, opzioni) {
+    opzioni = opzioni || {};
+    const rolOut = opzioni.rol || null;
     const ires = progetto.ires || {};
     const storico = progetto.storico || {};
     const annoCorrente = num((progetto.meta || {}).anno_imposta) || num(regoleAnno.anno_imposta);
@@ -177,13 +179,17 @@
     dettaglio['RF31_cod99_telefoniche'] = arr(costoTel * (regoleAnno.ires.telefoniche_indeducibili_pct || 0.20));
     // l'input "costo totale" è in input ma non è la variazione: conservo solo il 20%
 
-    // RF15_col1: TODO — interessi passivi indeducibili (richiede ROL).
-    dettaglio['RF15_col1'] = 0;
-    warnings.push({
-      voce: 'RF15_col1',
-      tipo: 'stub',
-      msg: 'Interessi passivi indeducibili (art. 96): non ancora calcolati. Implementazione ROL prevista in PR successiva.'
-    });
+    // RF15_col1: interessi passivi indeducibili da prospetto ROL (art. 96)
+    if (rolOut) {
+      dettaglio['RF15_col1'] = arr(num(rolOut.RF15_col1));
+    } else {
+      dettaglio['RF15_col1'] = 0;
+      warnings.push({
+        voce: 'RF15_col1',
+        tipo: 'stub',
+        msg: 'Interessi passivi indeducibili (art. 96): passare opzioni.rol per il calcolo.'
+      });
+    }
 
     // Totale variazioni in aumento
     const totale = sommaMappa(dettaglio);
@@ -205,7 +211,7 @@
   function calcolaVariazioniDiminuzione(progetto, regoleAnno, opzioni) {
     opzioni = opzioni || {};
     const dedIrap = opzioni.deduzioneIrapDaIres || null;
-    const ipDeducibiliEsPrec = num(opzioni.interessiPassiviEsPrecedentiDeducibili);
+    const rolOut = opzioni.rol || null;
     const ires = progetto.ires || {};
     const storico = progetto.storico || {};
     const annoCorrente = num((progetto.meta || {}).anno_imposta) || num(regoleAnno.anno_imposta);
@@ -262,15 +268,15 @@
       });
     }
 
-    // RF55_cod13: richiede motore ROL (art. 96) — passato come opzione separata
-    if (ipDeducibiliEsPrec > 0) {
-      dettaglio['RF55_cod13'] = arr(ipDeducibiliEsPrec);
+    // RF55_cod13: interessi passivi es. precedenti deducibili (art. 96 c. 5)
+    if (rolOut) {
+      dettaglio['RF55_cod13'] = arr(num(rolOut.RF55_cod13));
     } else {
       dettaglio['RF55_cod13'] = 0;
       warnings.push({
         voce: 'RF55_cod13',
         tipo: 'stub',
-        msg: 'Interessi passivi es. precedenti: richiede motore ROL (art. 96). Verrà implementato nelle PR successive.'
+        msg: 'Interessi passivi es. precedenti deducibili (art. 96): passare opzioni.rol per il calcolo.'
       });
     }
 
@@ -791,6 +797,103 @@
   }
 
   // -------------------------------------------------------------------------
+  // ROL e interessi passivi (art. 96 TUIR)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Calcola il ROL fiscale e la deducibilità degli interessi passivi
+   * secondo l'art. 96 TUIR. Vedi specifica §6.
+   *
+   * Input letti dal progetto:
+   *   - progetto.ires.rol_input.ip_anno         interessi passivi a CE (C17)
+   *   - progetto.ires.rol_input.ia_anno         interessi attivi a CE (C16)
+   *   - progetto.ires.rol_input.valori_a_b_fiscali.{A,B,amm_immateriali,amm_materiali,canoni_leasing}
+   *     (componenti del ROL fiscale)
+   *   - progetto.storico.interessi_passivi_riporto  riporto IP indeducibili
+   *   - progetto.storico.rol_riporto                 eccedenza ROL es. precedenti
+   *
+   * Output rilevanti per il quadro RF:
+   *   - RF15_col1 = MAX(0, IP_indeducibili_totali − IP_riporto_es_prec)
+   *                 (importo "nuovo" indeducibile generato dall'anno corrente)
+   *   - RF55_cod13 = se IP_riporto > 0 e ROL ha capienza che supera l'IP
+   *                  dell'anno → quota di IP del passato dedotta
+   *
+   * Riporti a nuovo per l'anno successivo:
+   *   - ip_indeducibili_riporto_a_nuovo  (RF121 col.3)
+   *   - rol_residuo_riporto_a_nuovo      (RF120 col.3)
+   *
+   * @param {object} progetto
+   * @param {object} regoleAnno
+   * @returns {object}
+   */
+  function calcolaRol(progetto, regoleAnno) {
+    const ires = progetto.ires || {};
+    const rolIn = ires.rol_input || {};
+    const valFisc = rolIn.valori_a_b_fiscali || {};
+    const storico = progetto.storico || {};
+
+    const pctRol = num(regoleAnno.ires && regoleAnno.ires.rol && regoleAnno.ires.rol.pct_deducibile) || 0.30;
+
+    const ipAnno = num(rolIn.ip_anno);
+    const iaAnno = num(rolIn.ia_anno);
+    const ipRiporto = num(storico.interessi_passivi_riporto);
+    const rolRiporto = num(storico.rol_riporto);
+
+    // ROL fiscale (semplificato sui componenti più frequenti)
+    const A = num(valFisc.A);
+    const B = num(valFisc.B);
+    const amm_imm = num(valFisc.amm_immateriali);
+    const amm_mat = num(valFisc.amm_materiali);
+    const canoni = num(valFisc.canoni_leasing);
+    const dividendi_estere = num(valFisc.dividendi_controllate_estere);
+    const altri = num(valFisc.altri_componenti_periodi_precedenti);
+    const rolFiscale = arr(A - B + amm_imm + amm_mat + canoni + dividendi_estere + altri);
+
+    // Algoritmo art. 96
+    // 1) Quota deducibile direttamente da interessi attivi
+    const ipPlusRiporto = ipAnno + ipRiporto;
+    const ipDiretti = arr(Math.min(ipPlusRiporto, iaAnno));        // RF118 col.5
+    const ipEccedenza = arr(Math.max(0, ipPlusRiporto - iaAnno));   // RF118 col.6
+
+    // 2) Capienza ROL e dedotti ulteriormente
+    const rol30 = arr(Math.max(0, rolFiscale) * pctRol);
+    const capacitaRol = arr(rolRiporto + rol30);
+    const ipDedottiDaRol = arr(Math.min(capacitaRol, ipEccedenza));
+    const ipDeducibiliTot = arr(ipDiretti + ipDedottiDaRol);
+
+    // 3) Riporti a nuovo per l'anno successivo
+    const ipIndeducibiliRiporto = arr(Math.max(0, ipEccedenza - ipDedottiDaRol));   // RF121 col.3
+    const rolResiduoRiporto = arr(Math.max(0, capacitaRol - ipEccedenza));          // RF120 col.3
+
+    // 4) Output per il quadro RF
+    //    Replica le formule del foglio Excel cliente:
+    //      RF15_col1 = MAX(0, IP_indeducibili_totali − IP_riporto_es_prec)
+    //      RF55_cod13 = se IP_riporto>0 e IP_deducibili_tot > IP_anno → la differenza
+    const RF15_col1 = arr(Math.max(0, ipIndeducibiliRiporto - ipRiporto));
+    const RF55_cod13 = (ipRiporto > 0)
+      ? arr(Math.max(0, ipDeducibiliTot - ipAnno))
+      : 0;
+
+    return {
+      rol_fiscale: rolFiscale,
+      ip_anno: arr(ipAnno),
+      ia_anno: arr(iaAnno),
+      ip_riporto_es_prec: arr(ipRiporto),
+      rol_riporto_es_prec: arr(rolRiporto),
+      ip_diretti: ipDiretti,
+      ip_eccedenza: ipEccedenza,
+      rol_30pct: rol30,
+      capacita_rol: capacitaRol,
+      ip_dedotti_da_rol: ipDedottiDaRol,
+      ip_deducibili_totali: ipDeducibiliTot,
+      ip_indeducibili_riporto_a_nuovo: ipIndeducibiliRiporto,
+      rol_residuo_riporto_a_nuovo: rolResiduoRiporto,
+      RF15_col1: RF15_col1,
+      RF55_cod13: RF55_cod13
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // Entry point: calcoloIres
   // -------------------------------------------------------------------------
 
@@ -801,8 +904,9 @@
    * @param {object} regoleAnno - regole-anno-<YYYY>.json
    * @param {object} [opzioni] - parametri opzionali calcolati a monte
    *   - opzioni.deduzioneIrapDaIres: { RF55_cod12, RF55_cod33 } per chiudere
-   *     gli stub. Se assente, vengono trattati come 0 con warning.
-   *   - opzioni.interessiPassiviEsPrecentiDeducibili: numero per RF55_cod13.
+   *     gli stub IRAP. Se assente, vengono trattati come 0 con warning.
+   *   - opzioni.rol: output di calcolaRol() con RF15_col1 e RF55_cod13.
+   *     Se assente, vengono trattati come 0 con warning.
    * @returns {object} risultato con tutti i parziali e gli output finali
    */
   function calcoloIres(progetto, regoleAnno, opzioni) {
@@ -825,9 +929,10 @@
 
     const warnings = [];
 
-    // 1) Variazioni in aumento e diminuzione (le diminuzioni accettano opzioni
-    //    per chiudere gli stub RF55_cod12/13/33 quando passate dal motore IRAP/ROL)
-    const varAum = calcolaVariazioniAumento(progetto, regoleAnno);
+    // 1) Variazioni in aumento e diminuzione: le opzioni propagano gli output
+    //    di motore IRAP (deduzioneIrapDaIres) e motore ROL (rol) per chiudere
+    //    gli stub RF15_col1 / RF55_cod12 / RF55_cod13 / RF55_cod33.
+    const varAum = calcolaVariazioniAumento(progetto, regoleAnno, opzioni);
     const varDim = calcolaVariazioniDiminuzione(progetto, regoleAnno, opzioni);
     warnings.push.apply(warnings, varAum.warnings || []);
     warnings.push.apply(warnings, varDim.warnings || []);
@@ -926,30 +1031,41 @@
   // -------------------------------------------------------------------------
 
   /**
-   * Calcolo completo del progetto: IRAP, deduzione IRAP da IRES, IRES.
-   * Sequenza coerente con la specifica §12: l'IRAP non dipende dall'IRES,
-   * la deduzione IRAP da IRES dipende dall'output IRAP, l'IRES dipende
-   * dalla deduzione.
+   * Calcolo completo del progetto: IRAP, deduzione IRAP da IRES, ROL, IRES.
+   *
+   * Sequenza coerente con la specifica §6, §10, §12:
+   *   1) IRAP — non dipende da IRES né da ROL
+   *   2) Deduzione IRAP da IRES — dipende da output IRAP
+   *   3) ROL (art. 96) — non dipende da IRES (lavora su CE e storico)
+   *   4) IRES — dipende da entrambi gli output sopra (per chiudere gli stub
+   *      RF15_col1, RF55_cod12/13/33)
    *
    * @param {object} progetto
    * @param {object} regoleAnno
    * @param {object} aliquoteIrap
-   * @returns {{ irap: object, deduzioneIrapDaIres: object, ires: object }}
+   * @returns {{ irap: object, deduzione_irap_da_ires: object, rol: object, ires: object }}
    */
   function calcoloCompleto(progetto, regoleAnno, aliquoteIrap) {
     const irap = calcoloIrap(progetto, regoleAnno, aliquoteIrap);
     const dedIrapDaIres = calcolaDeduzioneIrapDaIres(progetto, irap, regoleAnno);
+    const rol = calcolaRol(progetto, regoleAnno);
     const ires = calcoloIres(progetto, regoleAnno, {
-      deduzioneIrapDaIres: dedIrapDaIres
-      // interessiPassiviEsPrecentiDeducibili sarà aggiunto quando arriverà ROL
+      deduzioneIrapDaIres: dedIrapDaIres,
+      rol: rol
     });
-    return { irap: irap, deduzione_irap_da_ires: dedIrapDaIres, ires: ires };
+    return {
+      irap: irap,
+      deduzione_irap_da_ires: dedIrapDaIres,
+      rol: rol,
+      ires: ires
+    };
   }
 
   global.ImposteEngine = {
     calcoloIres: calcoloIres,
     calcoloIrap: calcoloIrap,
     calcolaDeduzioneIrapDaIres: calcolaDeduzioneIrapDaIres,
+    calcolaRol: calcolaRol,
     calcoloCompleto: calcoloCompleto,
     // sotto-funzioni esposte per test
     _internal: {
@@ -968,7 +1084,8 @@
       calcolaVariazioniIrapAumento: calcolaVariazioniIrapAumento,
       calcolaVariazioniIrapDiminuzione: calcolaVariazioniIrapDiminuzione,
       calcolaDeduzioniIrap: calcolaDeduzioniIrap,
-      risolviAliquotaIrap: risolviAliquotaIrap
+      risolviAliquotaIrap: risolviAliquotaIrap,
+      calcolaRol: calcolaRol
     }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
