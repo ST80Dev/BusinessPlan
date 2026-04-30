@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "anno_imposta": 2025,
+    "descrizione": "Aliquote IRAP per regione e categoria di soggetto. Base nazionale 3,90% (art. 16 D.Lgs. 446/1997); le Regioni possono maggiorare fino a +0,92% per le società di capitali ordinarie. Per i settori particolari (banche, assicurazioni, agricoltura, ecc.) si applicano aliquote dedicate.",
+    "ultima_revisione": "2026-04-30",
+    "fonte": "Tabelle MEF / Dipartimento Finanze + leggi regionali",
+    "_AVVERTENZA": "MVP: tabella popolata solo per Marche, Emilia-Romagna e DEFAULT. Per altre regioni il modulo restituisce DEFAULT (3,90%) con avviso. L'utente può sovrascrivere a livello di progetto. Verificare annualmente le maggiorazioni effettive."
+  },
+
+  "categorie": {
+    "ordinaria": "Società di capitali, enti commerciali, soggetti generici",
+    "agricoltura": "Imprese agricole",
+    "banche_assicurazioni": "Banche, intermediari finanziari, imprese di assicurazione",
+    "concessionari": "Imprese concessionarie di servizi pubblici"
+  },
+
+  "regioni": {
+    "DEFAULT": {
+      "ordinaria": 0.039,
+      "_note": "Aliquota base nazionale ex art. 16 D.Lgs. 446/1997. Da usare come fallback quando la regione non è nella tabella; il modulo deve mostrare un avviso 'verificare aliquota effettiva regionale'."
+    },
+
+    "Marche": {
+      "ordinaria": 0.0473,
+      "_note": "3,90% base + 0,83% maggiorazione regionale per soggetti ordinari (allineato al foglio Excel cliente). Verificare a ogni anno d'imposta."
+    },
+
+    "Emilia-Romagna": {
+      "ordinaria": 0.039,
+      "_note": "Aliquota base 3,90% per soggetti ordinari (nessuna maggiorazione regionale). Verificare a ogni anno d'imposta."
+    }
+  }
+}

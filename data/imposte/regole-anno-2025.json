@@ -1,0 +1,117 @@
+{
+  "_meta": {
+    "anno_imposta": 2025,
+    "anno_versamento": 2026,
+    "descrizione": "Parametri normativi per il calcolo delle imposte d'esercizio (IRES, IRAP, CPB) di SRL ordinarie. Riferimenti: TUIR (DPR 917/1986), D.Lgs. 446/1997, D.Lgs. 13/2024, DPR 435/2001. Vedi caratteristiche_modulo_imposte.md.",
+    "ultima_revisione": "2026-04-30",
+    "fonte": "Legge di Bilancio 2025 (L. 207/2024) + istruzioni Mod. REDDITI SC 2025 + istruzioni Mod. IRAP 2025"
+  },
+
+  "ires": {
+    "aliquota": 0.24,
+    "perdite": {
+      "limite_pct_perdite_limitate": 0.80,
+      "perdite_piene_n_esercizi_iniziali": 3,
+      "ordine_utilizzo": "piene_prima",
+      "_riferimento": "Art. 84 TUIR; ordine 'piene prima' come da foglio Excel cliente (Circ. AdE 25/E del 16/06/2012 lascia libertà di scelta)"
+    },
+    "rateizzazione_plusvalenze": {
+      "n_max_esercizi": 5,
+      "_riferimento": "Art. 86 c. 4 TUIR: rateazione fino a 5 esercizi se possesso > 3 anni"
+    },
+    "manutenzioni_eccedenti_5pct": {
+      "soglia_pct_costo_beni_amm": 0.05,
+      "n_esercizi_riporto": 5,
+      "_riferimento": "Art. 102 c. 6 TUIR"
+    },
+    "telefoniche_indeducibili_pct": 0.20,
+    "rappresentanza_vitto_alloggio_deducibile_pct": 0.75,
+    "_riferimento_rappresentanza": "Art. 108 c. 2 TUIR + art. 109 c. 5",
+    "auto": {
+      "deducibile_pct_generale": 0.20,
+      "deducibile_pct_agenti_rappresentanti": 0.80,
+      "_riferimento": "Art. 164 TUIR"
+    },
+    "rol": {
+      "pct_deducibile": 0.30,
+      "_riferimento": "Art. 96 TUIR: interessi passivi netti deducibili nel limite del 30% del ROL fiscale"
+    }
+  },
+
+  "irap": {
+    "aliquota_base_nazionale": 0.039,
+    "_riferimento_aliquota": "Art. 16 D.Lgs. 446/1997. Per le aliquote regionali effettive vedi aliquote-irap-2025.json",
+    "deduzione_forfettaria_base": {
+      "importo": 8000,
+      "soglia_VP_max": 180759.91,
+      "_riferimento": "Art. 11 c. 4-bis D.Lgs. 446/1997"
+    },
+    "deduzione_per_dipendente": {
+      "importo": 1850,
+      "soglia_ricavi_max": 400000,
+      "_riferimento": "Art. 11 c. 4-bis.1 D.Lgs. 446/1997"
+    },
+    "voci_CE_escluse_da_base": ["B9", "B10c", "B10d", "B12", "B13"],
+    "_riferimento_voci_escluse": "Art. 5 D.Lgs. 446/1997: base = A - B esclusi B9, B10 lett. c) e d), B12, B13",
+    "deduzione_irap_da_ires": {
+      "forfettaria_pct_oneri_finanziari": 0.10,
+      "_riferimento_forfettaria": "Art. 6 D.L. 185/2008: spettante solo se voce C) bilancio UE ha saldo negativo",
+      "_riferimento_analitica": "Art. 2 D.L. 201/2011: quota IRAP riferibile al costo del personale dipendente, deducibile dall'IRES",
+      "_vincolo": "Art. 2 c. 1-quater D.L. 201/2011: analitica e forfettaria non cumulabili sulla stessa quota di IRAP"
+    }
+  },
+
+  "acconti": {
+    "soglia_minima": 103,
+    "_riferimento_soglia": "Art. 17 c. 3 DPR 435/2001",
+    "isa": {
+      "I_acconto_pct": 0.50,
+      "II_acconto_pct": 0.50,
+      "_riferimento": "Art. 58 D.L. 124/2019 (entrato a regime per soggetti ISA)"
+    },
+    "non_isa": {
+      "I_acconto_pct": 0.40,
+      "II_acconto_pct": 0.60,
+      "_riferimento": "L. 23/03/1977 n. 97 e art. 17 DPR 435/2001"
+    },
+    "metodo": "storico",
+    "maggiorazione_versamento_posticipato": 0.004,
+    "_riferimento_maggiorazione": "Art. 17 c. 2 DPR 435/2001: 0,40% per versamento dal 1° al 30 luglio"
+  },
+
+  "cpb": {
+    "reddito_minimo_concordato_rettificato": 2000,
+    "_riferimento_reddito_minimo": "Art. 21 c. 1 D.Lgs. 13/2024",
+    "imposta_sostitutiva_aliquote": [
+      { "isa_min": 8.0, "isa_max": null, "aliquota": 0.10 },
+      { "isa_min": 6.0, "isa_max": 8.0,  "aliquota": 0.12 },
+      { "isa_min": null, "isa_max": 6.0, "aliquota": 0.15 }
+    ],
+    "_riferimento_aliquote_sostitutiva": "Art. 20-bis D.Lgs. 13/2024",
+    "variazioni_ammesse": {
+      "_riferimento": "Artt. 15-16-17 D.Lgs. 13/2024",
+      "attive": ["plusvalenze", "sopravvenienze attive", "redditi da partecipazioni"],
+      "passive": ["minusvalenze", "sopravvenienze passive", "perdite su crediti", "perdite da partecipazioni"]
+    }
+  },
+
+  "codici_tributo": {
+    "ires_saldo": "2003",
+    "ires_acconto_1": "2001",
+    "ires_acconto_2": "2002",
+    "irap_saldo": "3800",
+    "irap_acconto_1": "3812",
+    "irap_acconto_2": "3813",
+    "cpb_sostitutiva_saldo": "4068",
+    "cpb_sostitutiva_acconto_1": "4069",
+    "cpb_sostitutiva_acconto_2": "4070",
+    "_nota": "Codici tributo CPB da risoluzione AdE — verificare a ogni anno d'imposta"
+  },
+
+  "scadenze": {
+    "saldo_e_I_acconto": "2026-06-30",
+    "saldo_e_I_acconto_posticipato": "2026-07-30",
+    "II_acconto": "2026-11-30",
+    "_riferimento": "Art. 17 DPR 435/2001"
+  }
+}
