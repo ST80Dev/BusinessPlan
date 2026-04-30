@@ -124,6 +124,18 @@ const UI = (() => {
       case 'ab-consuntivo':
         BudgetUI.renderConsuntivo();
         break;
+      case 'imp-anagrafica':
+      case 'imp-conto-economico':
+      case 'imp-variazioni-ires':
+      case 'imp-rol':
+      case 'imp-perdite-ace':
+      case 'imp-cpb':
+      case 'imp-irap':
+      case 'imp-deduzione-irap':
+      case 'imp-storico':
+      case 'imp-riepilogo':
+        content.innerHTML = _renderPlaceholder(_SEZIONI_HEADER[sezione].titolo);
+        break;
       default:
         content.innerHTML = '';
     }
@@ -148,7 +160,17 @@ const UI = (() => {
     'ab-mappatura':    { titolo: 'Mappatura sottoconti → macroaree',     sub: 'Trascina i sottoconti sui box della mini-CE per riassegnarli; multi-selezione con Shift/Ctrl.' },
     'ab-storico':      { titolo: 'Storico CE per macroarea',             sub: 'Importi per anno e media % sul fatturato — base per la proiezione del budget.' },
     'ab-budget':       { titolo: 'Budget anno',                          sub: 'Proietta i costi sull\'anno corrente partendo dal fatturato ipotizzato e dalle medie storiche.' },
-    'ab-consuntivo':   { titolo: 'Consuntivo & preconsuntivo',           sub: 'Inserisci il fatturato realizzato per periodo: il sistema proietta a fine anno e confronta col budget.' }
+    'ab-consuntivo':   { titolo: 'Consuntivo & preconsuntivo',           sub: 'Inserisci il fatturato realizzato per periodo: il sistema proietta a fine anno e confronta col budget.' },
+    'imp-anagrafica':       { titolo: 'Anagrafica e flag',                            sub: 'Cliente, regione, anno d\'imposta e flag di scenario (trasparente, CPB, ISA).' },
+    'imp-conto-economico':  { titolo: 'Conto economico',                              sub: 'Risultato ante imposte e voci A/B necessarie per la base IRAP.' },
+    'imp-variazioni-ires':  { titolo: 'Variazioni IRES',                              sub: 'Variazioni in aumento (RF6-RF31) e diminuzione (RF34-RF55) al risultato civilistico.' },
+    'imp-rol':              { titolo: 'Interessi passivi (ROL)',                      sub: 'Prospetto art. 96 TUIR: ROL fiscale, deducibilità interessi, riporti a nuovo.' },
+    'imp-perdite-ace':      { titolo: 'Perdite e ACE',                                sub: 'Stock perdite piene/limitate (art. 84) ed eccedenza ACE residua.' },
+    'imp-cpb':              { titolo: 'Concordato Preventivo Biennale',               sub: 'Reddito concordato rettificato e imposta sostitutiva (D.Lgs. 13/2024).' },
+    'imp-irap':             { titolo: 'IRAP — variazioni e deduzioni',                sub: 'Variazioni IC43-IC57, cuneo fiscale, deduzione forfettaria, aliquota regionale.' },
+    'imp-deduzione-irap':   { titolo: 'Deduzione IRAP da IRES',                       sub: 'Quota analitica costo personale + 10% forfettaria su oneri finanziari.' },
+    'imp-storico':          { titolo: 'Storico (riporti pluriennali)',                sub: 'Plus rateizzate, manutenzioni 5%, ROL/IP, perdite, ACE, crediti residui.' },
+    'imp-riepilogo':        { titolo: 'Riepilogo & F24',                              sub: 'Sintesi imposte, F24 alle scadenze 30/06-30/07-30/11, scritture contabili.' }
   };
 
   function _aggiornaHeaderSezione(sezione) {
@@ -201,6 +223,13 @@ const UI = (() => {
       badges.innerHTML = `
         <span class="header-badge header-badge-scenario">Analisi Costi &amp; Budget</span>
         <span class="header-badge header-badge-anno">Anno: ${progetto.meta.anno_corrente}</span>
+      `;
+    } else if (progetto.meta.modulo === 'imposte') {
+      const flag = progetto.flag || {};
+      const scenarioLabel = flag.cpb_attivo ? 'CPB' : (flag.societa_trasparente ? 'Trasparente' : 'Calcolo Imposte');
+      badges.innerHTML = `
+        <span class="header-badge header-badge-scenario">${_escapeHtml(scenarioLabel)}</span>
+        <span class="header-badge header-badge-anno">Anno d'imposta: ${progetto.meta.anno_imposta}</span>
       `;
     } else {
       const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
@@ -299,6 +328,15 @@ const UI = (() => {
           aprilLabel: 'Apri file JSON',
           apriOnclick: "Projects.apriProgetto()"
         })}
+        ${_renderModuleCard({
+          tipo: 'imposte',
+          titolo: 'Calcolo Imposte SRL',
+          descrizione: 'IRES, IRAP, imposta sostitutiva CPB e relativi acconti. Quadri RF/IC, ROL art. 96, perdite, ACE residua, F24.',
+          ctaLabel: '+ Nuovo calcolo',
+          ctaOnclick: "UI.openModal('modal-nuove-imposte')",
+          aprilLabel: 'Apri file JSON',
+          apriOnclick: "Projects.apriProgetto()"
+        })}
       </div>
     `;
 
@@ -343,23 +381,33 @@ const UI = (() => {
     if (metaEl) {
       if (modulo === 'ab') {
         metaEl.textContent = `Analisi Costi · ${progetto.meta.anno_corrente}`;
+      } else if (modulo === 'imposte') {
+        const reg = progetto.meta.regione ? ` · ${progetto.meta.regione}` : '';
+        metaEl.textContent = `Imposte · ${progetto.meta.anno_imposta}${reg}`;
       } else {
         const scenarioLabels = { sp_ce: 'SP + CE', sp_only: 'Solo SP', costituenda: 'Costituenda' };
         metaEl.textContent = `${progetto.meta.anno_base} · ${scenarioLabels[progetto.meta.scenario] || progetto.meta.scenario}`;
       }
     }
 
-    // Pulsante modifica anagrafica: visibile per BP e AB, l'etichetta
-    // ed il modale aperto cambiano in base al modulo.
+    // Pulsante modifica anagrafica: visibile per BP, AB e Imposte. L'etichetta
+    // e il modale aperto cambiano in base al modulo.
     const editEl = document.getElementById('sidebar-project-edit');
     if (editEl) {
-      editEl.classList.remove('hidden');
-      if (modulo === 'ab') {
-        editEl.textContent = '✎ Anagrafica';
-        editEl.title = 'Modifica ragione sociale, anno e note libere mostrate negli export';
+      if (modulo === 'imposte') {
+        // L'anagrafica del progetto Imposte si modifica direttamente nella
+        // sezione "Anagrafica e flag" (non c'è un modale dedicato): nascondo
+        // il pulsante per ora.
+        editEl.classList.add('hidden');
       } else {
-        editEl.textContent = '✎ Modifica dati base';
-        editEl.title = 'Modifica ragione sociale, anno base e orizzonte anni';
+        editEl.classList.remove('hidden');
+        if (modulo === 'ab') {
+          editEl.textContent = '✎ Anagrafica';
+          editEl.title = 'Modifica ragione sociale, anno e note libere mostrate negli export';
+        } else {
+          editEl.textContent = '✎ Modifica dati base';
+          editEl.title = 'Modifica ragione sociale, anno base e orizzonte anni';
+        }
       }
     }
 
@@ -376,8 +424,9 @@ const UI = (() => {
     _aggiornaIndicatoriSidebar();
 
     // Naviga alla prima sezione del modulo
-    if (modulo === 'ab') navigate('ab-importa-ce');
-    else                 navigate('dati-partenza');
+    if (modulo === 'ab')      navigate('ab-importa-ce');
+    else if (modulo === 'imposte') navigate('imp-anagrafica');
+    else                     navigate('dati-partenza');
 
     mostraNotifica('Progetto "' + progetto.meta.cliente + '" aperto.', 'success');
   }
@@ -5315,6 +5364,7 @@ const UI = (() => {
     // sidebar sono nascoste e non hanno semantica di completezza paragonabile:
     // saltiamo per evitare di leggere `progetto.driver` che non esiste.
     if (p.meta && p.meta.modulo === 'ab') return;
+    if (p.meta && p.meta.modulo === 'imposte') return;
     var sezioni = ['dati-partenza', 'driver', 'eventi'];
     for (var i = 0; i < sezioni.length; i++) {
       var el = document.getElementById('nav-status-' + sezioni[i]);
