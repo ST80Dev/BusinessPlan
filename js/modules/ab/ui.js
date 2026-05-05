@@ -16,9 +16,10 @@ const BudgetUI = (() => {
 
   /* Dati transitori dell'ultimo import (in memoria, non in progetto
      finché l'utente non clicca "Applica"). */
-  let _lastParsed  = null;
-  let _lastMapping = null;
-  let _lastStorico = null;
+  let _lastParsed       = null;
+  let _lastMapping      = null;
+  let _lastStorico      = null;
+  let _lastPreservati   = 0;  // # scelte manuali di mappatura preservate dal precedente import
 
   /* ──────────────────────────────────────────────────────────
      Helpers di formato
@@ -156,13 +157,44 @@ const BudgetUI = (() => {
         }
       }
 
+      // Re-import su progetto già popolato: per i codici già visti in
+      // un import precedente, le scelte dell'utente (assegnazione manuale
+      // a una macroarea, oppure rimozione esplicita della mappatura
+      // dallo Step "Mappatura sottoconti") hanno priorità su default e
+      // sigle del file. I codici non presenti nei sottoconti precedenti
+      // (= conti nuovi) restano gestiti dal default + sigle. Il conteggio
+      // dei "non mappati" mostrato nel sommario continuerà quindi a
+      // segnalare i nuovi conti che richiedono attenzione.
+      const progettoCorr = Projects.getProgetto();
+      let preservati = 0;
+      if (progettoCorr && Array.isArray(progettoCorr.sottoconti_ce) && progettoCorr.sottoconti_ce.length > 0) {
+        const codiciVecchi = new Set(progettoCorr.sottoconti_ce.map(s => s.codice));
+        const oldMapping   = progettoCorr.mapping || {};
+        for (const s of parsed.sottoconti) {
+          if (!codiciVecchi.has(s.codice)) continue;
+          const oldTarget = oldMapping[s.codice];
+          const newTarget = mapping[s.codice];
+          if (oldTarget) {
+            if (newTarget !== oldTarget) preservati++;
+            mapping[s.codice] = oldTarget;
+          } else if (newTarget !== undefined) {
+            // Codice già visto e lasciato esplicitamente non mappato:
+            // la decisione dell'utente ("non lo voglio classificato")
+            // prevale sul default.
+            preservati++;
+            delete mapping[s.codice];
+          }
+        }
+      }
+
       const storico = ExcelImport.calcolaStorico(parsed, mapping, macroAree);
 
-      _lastParsed = parsed;
-      _lastMapping = mapping;
-      _lastStorico = storico;
+      _lastParsed     = parsed;
+      _lastMapping    = mapping;
+      _lastStorico    = storico;
+      _lastPreservati = preservati;
 
-      _renderSummary(parsed, mapping, storico, macroAree, fileName);
+      _renderSummary(parsed, mapping, storico, macroAree, fileName, preservati);
     } catch (err) {
       console.error(err);
       UI.mostraNotifica('Errore nel parsing del file: ' + err.message, 'error');
@@ -172,7 +204,7 @@ const BudgetUI = (() => {
   /* ──────────────────────────────────────────────────────────
      Anteprima import
      ────────────────────────────────────────────────────────── */
-  function _renderSummary(parsed, mapping, storico, macroAree, fileName) {
+  function _renderSummary(parsed, mapping, storico, macroAree, fileName, preservati) {
     const sumEl = document.getElementById('ab-import-summary');
     if (!sumEl) return;
     sumEl.classList.remove('hidden');
@@ -226,6 +258,9 @@ const BudgetUI = (() => {
         '</div>';
     }
 
+    if (preservati && preservati > 0) {
+      warnHtml += `<div class="ab-import-info">↺ ${preservati} scelte manuali di mappatura preservate dal precedente import.</div>`;
+    }
     if (numNonMap > 0) {
       warnHtml += `<div class="ab-import-warn">⚠ ${numNonMap} sottoconti non sono stati mappati automaticamente. Sarà possibile mapparli a mano dalla sezione "Mappatura sottoconti".</div>`;
     }
@@ -256,9 +291,10 @@ const BudgetUI = (() => {
   }
 
   function annullaImport() {
-    _lastParsed = null;
-    _lastMapping = null;
-    _lastStorico = null;
+    _lastParsed     = null;
+    _lastMapping    = null;
+    _lastStorico    = null;
+    _lastPreservati = 0;
     const sumEl = document.getElementById('ab-import-summary');
     if (sumEl) {
       sumEl.classList.add('hidden');
