@@ -83,16 +83,32 @@ const ExcelImport = (() => {
        DareAvere1 | <anno1> | DareAvere2 | <anno2> | Perc1 |
        DareAvere3 | <anno3> | Perc2
 
+     Sono supportati due formati di intestazione per gli importi:
+
+     Caso A — header con anno esplicito:
+       "2023", "2024", "2025" come header delle colonne saldo;
+       la colonna D/A è quella immediatamente a sinistra.
+
+     Caso B — formato gestionale nativo:
+       "Saldo1"/"Saldo2"/"Saldo3" come header delle colonne saldo,
+       "DareAvere1/2/3" per i flag D/A,
+       "DataBilancio1/2/3" per la data di chiusura (es. 31/12/2023)
+       da cui si desume l'anno. È il formato in cui escono i bilanci
+       di verifica direttamente dal gestionale, senza rinomina manuale.
+
      Il riconoscimento è euristico: cerchiamo le label "CodiceConto" e
      "Descrizione conto"; gli anni sono colonne con header numerico
-     a 4 cifre tra 1990 e 2100; le DareAvere sono le colonne a sinistra
-     di ciascuna colonna anno e contengono solo "D"/"A"/"".
+     a 4 cifre tra 1990 e 2100 (Caso A) oppure ricavati dalle date
+     in DataBilancio<N> (Caso B).
      ────────────────────────────────────────────────────────── */
   function _trovaHeader(rows) {
     for (let r = 0; r < Math.min(rows.length, 30); r++) {
       const row = rows[r];
       let colCodice = -1, colDescr = -1, colM = -1, colSM = -1;
       const colAnni = [];
+      const colSaldoIdx       = {}; // { '1': colIdx, '2': ..., '3': ... }
+      const colDataBilIdx     = {};
+      const colDareAvereIdx   = {};
 
       for (let c = 0; c < row.length; c++) {
         const v = String(row[c] || '').trim();
@@ -104,13 +120,82 @@ const ExcelImport = (() => {
         // "Macro"/"Macroarea" e "Sotto Macro"/"sotto-macroarea".
         if (v === 'M' || /^macro(area)?$/i.test(v)) colM = c;
         if (/^sm$/i.test(v) || /^sotto[\s_-]?macro(area)?$/i.test(v)) colSM = c;
+
+        // Caso B: header del gestionale (Saldo<N>, DataBilancio<N>, DareAvere<N>)
+        let m;
+        if ((m = /^saldo\s*(\d+)$/i.exec(v)))             colSaldoIdx[m[1]]     = c;
+        else if ((m = /^databilancio\s*(\d+)$/i.exec(v))) colDataBilIdx[m[1]]   = c;
+        else if ((m = /^dare\s*avere\s*(\d+)$/i.exec(v))) colDareAvereIdx[m[1]] = c;
       }
 
-      if (colCodice >= 0 && colDescr >= 0 && colAnni.length > 0) {
-        // Inferisci colonna D/A: prima colonna a sinistra di ciascun anno
+      if (colCodice < 0 || colDescr < 0) continue;
+
+      // Caso A: anno presente come header numerico
+      if (colAnni.length > 0) {
         for (const a of colAnni) a.colDA = a.col - 1;
         return { rigaHeader: r, colCodice, colDescr, colM, colSM, anni: colAnni };
       }
+
+      // Caso B: formato gestionale, anno desunto da DataBilancio<N>
+      const indici = Object.keys(colSaldoIdx);
+      if (indici.length > 0) {
+        const colAnniNativo = [];
+        for (const idx of indici) {
+          const colSaldo = colSaldoIdx[idx];
+          const colDA    = (colDareAvereIdx[idx] !== undefined)
+            ? colDareAvereIdx[idx]
+            : colSaldo - 1;
+          const colData  = colDataBilIdx[idx];
+          const anno     = (colData !== undefined)
+            ? _estraiAnnoDaColonnaData(rows, r, colData)
+            : null;
+          if (!anno) continue;
+          colAnniNativo.push({ col: colSaldo, colDA, anno });
+        }
+        if (colAnniNativo.length > 0) {
+          return { rigaHeader: r, colCodice, colDescr, colM, colSM, anni: colAnniNativo };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Estrae l'anno da una colonna DataBilancio<N> scansionando le
+   * prime righe dati. Le celle data nei file xlsx sono tipicamente
+   * numeri seriali Excel (giorni dal 1899-12-30); supportiamo anche
+   * stringhe testuali in formato dd/mm/yyyy, dd-mm-yyyy o yyyy-mm-dd
+   * per i file esportati come testo.
+   */
+  function _estraiAnnoDaColonnaData(rows, headerRow, col) {
+    const limit = Math.min(rows.length, headerRow + 200);
+    for (let r = headerRow + 1; r < limit; r++) {
+      const row = rows[r];
+      if (!row) continue;
+      const cell = row[col];
+      if (cell == null || cell === '') continue;
+
+      // Seriale Excel (giorni dal 30/12/1899)
+      if (typeof cell === 'number' && cell > 10000) {
+        const ms = Date.UTC(1899, 11, 30) + cell * 86400000;
+        const y  = new Date(ms).getUTCFullYear();
+        if (y >= 1990 && y <= 2100) return y;
+      }
+
+      const s = String(cell).trim();
+      let m;
+      // dd/mm/yyyy o dd-mm-yyyy o dd.mm.yyyy
+      if ((m = /(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/.exec(s))) {
+        const y = parseInt(m[3], 10);
+        if (y >= 1990 && y <= 2100) return y;
+      }
+      // yyyy-mm-dd (ISO)
+      if ((m = /^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/.exec(s))) {
+        const y = parseInt(m[1], 10);
+        if (y >= 1990 && y <= 2100) return y;
+      }
+      // Solo anno
+      if (/^(19|20)\d{2}$/.test(s)) return parseInt(s, 10);
     }
     return null;
   }
