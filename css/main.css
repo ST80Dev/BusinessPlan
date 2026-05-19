@@ -1850,6 +1850,125 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   justify-content: flex-end;
 }
 
+/* ── Modale anteprima classificazione mastri (Step pre-import) ── */
+.ab-cls-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  padding: 8px 12px;
+  background: var(--color-surface-alt);
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+.ab-cls-meta strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.ab-cls-help {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-info-bg);
+  border-left: 3px solid var(--color-info);
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+.ab-cls-tab {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ab-cls-tab th,
+.ab-cls-tab td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border-light);
+  text-align: left;
+  vertical-align: middle;
+}
+.ab-cls-tab thead th {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.ab-cls-tab th.num,
+.ab-cls-tab td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ab-cls-cod {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  width: 70px;
+}
+.ab-cls-descr {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+}
+.ab-cls-num {
+  width: 60px;
+  color: var(--color-text-secondary);
+}
+.ab-cls-sel { width: 180px; }
+.ab-cls-rim { width: 130px; text-align: center; }
+
+.ab-cls-select {
+  width: 100%;
+  font-size: 13px;
+  padding: 4px 6px;
+}
+
+/* Righe colorate per classificazione */
+.ab-cls-row-sp     { background: var(--color-surface-alt); }
+.ab-cls-row-sp     .ab-cls-cod,
+.ab-cls-row-sp     .ab-cls-descr { color: var(--color-text-muted); }
+.ab-cls-row-ce     { background: var(--color-surface); }
+.ab-cls-row-ignora { background: var(--color-bg); opacity: 0.6; }
+
+/* Checkbox custom (no input nativi nel codice del progetto) */
+.ab-cls-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--color-surface);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-accent);
+  user-select: none;
+  margin: 0 auto;
+}
+.ab-cls-checkbox.checked {
+  background: var(--color-accent-light);
+  border-color: var(--color-accent);
+}
+.ab-cls-checkbox.disabled {
+  background: var(--color-surface-alt);
+  border-color: var(--color-border-light);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* Tabella storico/anteprima per macroarea */
 .ab-storico { padding: 8px 24px 24px; max-width: 1100px; }
 .ab-storico h2 { font-size: 20px; margin: 0 0 16px 0; }

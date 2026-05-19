@@ -651,6 +651,23 @@
 </div>
 
 <!-- =====================================================
+     MODALE ANTEPRIMA CLASSIFICAZIONE MASTRI (AB import)
+     ===================================================== -->
+<div class="modal-overlay hidden" id="modal-ab-classifica-mastri">
+  <div class="modal" style="width:820px;max-height:90vh">
+    <div class="modal-header">
+      <span class="modal-title">Anteprima import — classificazione mastri</span>
+      <div class="modal-close" onclick="BudgetUI.annullaModaleClassifica()">✕</div>
+    </div>
+    <div class="modal-body" id="ab-classifica-body" style="max-height:60vh;overflow:auto"></div>
+    <div class="modal-footer">
+      <div class="btn btn-secondary" onclick="BudgetUI.annullaModaleClassifica()">Annulla</div>
+      <div class="btn btn-primary" onclick="BudgetUI.confermaModaleClassifica()">Conferma e importa</div>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================
      SCRIPT — ordine di caricamento importante
      ===================================================== -->
 <!-- Librerie vendored -->

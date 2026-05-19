@@ -16,10 +16,17 @@ const BudgetUI = (() => {
 
   /* Dati transitori dell'ultimo import (in memoria, non in progetto
      finché l'utente non clicca "Applica"). */
-  let _lastParsed       = null;
-  let _lastMapping      = null;
-  let _lastStorico      = null;
-  let _lastPreservati   = 0;  // # scelte manuali di mappatura preservate dal precedente import
+  let _lastParsed             = null;
+  let _lastMapping            = null;
+  let _lastStorico            = null;
+  let _lastPreservati         = 0;  // # scelte manuali di mappatura preservate dal precedente import
+  let _lastClassificazione    = null; // mappa { codiceMastro: 'sp'|'ce'|'ignora' } dell'ultima conferma
+  let _lastMastriRimanenze    = null; // string[] mastri marcati come variazione rimanenze
+
+  /* Stato della modale di classificazione mastri (Step "anteprima
+     mastri" prima del parse vero e proprio). Popolato da
+     _processaArrayBuffer e consumato da confermaModaleClassifica. */
+  let _modaleClassifica = null; // { analisi, fileName, classificazione, mastriRimanenze }
 
   /* ──────────────────────────────────────────────────────────
      Helpers di formato
@@ -137,7 +144,193 @@ const BudgetUI = (() => {
   async function _processaArrayBuffer(buf, fileName) {
     try {
       const { rows } = await XlsxMini.readXlsx(buf);
-      const parsed = ExcelImport.parseBilancioVerifica(rows);
+      const analisi = ExcelImport.analizzaMastri(rows);
+
+      // Nessuna decisione automatica: l'operatore conferma sempre la
+      // classificazione dei mastri nella modale di anteprima, anche
+      // sui file "tipici". Sui re-import del medesimo cliente la
+      // modale ripropone la scelta precedente (vedi
+      // meta.classificazione_mastri).
+      _aperturaModaleClassifica(analisi, fileName);
+    } catch (err) {
+      console.error(err);
+      UI.mostraNotifica('Errore nel parsing del file: ' + err.message, 'error');
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     MODALE ANTEPRIMA CLASSIFICAZIONE MASTRI
+
+     Sostituisce la vecchia logica pivot-based (54/00/000) con una
+     scelta esplicita per ciascun mastro del file. Funziona anche su
+     bilanci di SNC/affitti con SP minimale e su file in cui le righe
+     SP non sono in cima al foglio.
+
+     Stato precompilato sul re-import: se il progetto corrente ha già
+     una scelta (`meta.classificazione_mastri`, `meta.mastri_rimanenze`)
+     i dropdown e i toggle ripartono da lì invece che dai default.
+     ────────────────────────────────────────────────────────── */
+
+  function _aperturaModaleClassifica(analisi, fileName) {
+    const progetto = Projects.getProgetto();
+    const sceltePrec = (progetto && progetto.meta && progetto.meta.classificazione_mastri) || {};
+    const rimPrec    = (progetto && progetto.meta && progetto.meta.mastri_rimanenze)
+      ? progetto.meta.mastri_rimanenze.slice()
+      : ExcelImport.MASTRI_VARIAZIONE_RIMANENZE.slice();
+
+    const classificazione = {};
+    analisi.mastri.forEach(m => {
+      classificazione[m.codice] = sceltePrec[m.codice] || m.classificazione_default;
+    });
+
+    // Mastri rimanenze: tieni solo quelli effettivamente presenti nel file
+    const codiciPresenti = new Set(analisi.mastri.map(m => m.codice));
+    const mastriRimanenze = rimPrec.filter(c => codiciPresenti.has(c));
+
+    _modaleClassifica = { analisi, fileName, classificazione, mastriRimanenze };
+    _renderModaleClassifica();
+    UI.openModal('modal-ab-classifica-mastri');
+  }
+
+  function _renderModaleClassifica() {
+    const body = document.getElementById('ab-classifica-body');
+    if (!body || !_modaleClassifica) return;
+
+    const { analisi, fileName, classificazione, mastriRimanenze } = _modaleClassifica;
+    const rimSet = new Set(mastriRimanenze);
+
+    let rows = '';
+    analisi.mastri.forEach(m => {
+      const cls    = classificazione[m.codice];
+      const isRim  = rimSet.has(m.codice);
+      const isCE   = (cls === 'ce');
+      const rowCls = 'ab-cls-row ab-cls-row-' + cls;
+      rows += `
+        <tr class="${rowCls}">
+          <td class="ab-cls-cod">${_escapeHtml(m.codice)}</td>
+          <td class="ab-cls-descr" title="${_escapeHtml(m.descrizione_rappresentativa)}">${_escapeHtml(m.descrizione_rappresentativa || '—')}</td>
+          <td class="ab-cls-num num">${m.numero_sottoconti}</td>
+          <td class="ab-cls-sel">
+            <select class="form-select ab-cls-select" data-mastro="${_escapeHtml(m.codice)}"
+                    onchange="BudgetUI.classificaMastroChange(this)">
+              <option value="sp"     ${cls==='sp'    ?'selected':''}>SP (escluso)</option>
+              <option value="ce"     ${cls==='ce'    ?'selected':''}>CE (importato)</option>
+              <option value="ignora" ${cls==='ignora'?'selected':''}>Ignora</option>
+            </select>
+          </td>
+          <td class="ab-cls-rim">
+            <div class="ab-cls-checkbox ${isRim?'checked':''} ${isCE?'':'disabled'}"
+                 data-mastro="${_escapeHtml(m.codice)}"
+                 onclick="BudgetUI.toggleRimanenze('${_escapeHtml(m.codice)}')"
+                 title="${isCE?'Mastro di variazione rimanenze (doppia entry D/A)':'Disponibile solo per mastri CE'}">
+              ${isRim ? '✓' : ''}
+            </div>
+          </td>
+        </tr>`;
+    });
+
+    body.innerHTML = `
+      <div class="ab-cls-meta">
+        <div><strong>File:</strong> ${_escapeHtml(fileName || '—')}</div>
+        <div><strong>Ditta:</strong> ${_escapeHtml(analisi.ditta || '—')}</div>
+        <div><strong>Anni:</strong> ${analisi.anni.join(', ') || '—'}</div>
+        <div><strong>Mastri trovati:</strong> ${analisi.mastri.length}</div>
+      </div>
+
+      <div class="ab-cls-help">
+        Il default propone <strong>01–57 → SP</strong> e <strong>58+ → CE</strong> secondo la
+        numerazione standard del piano dei conti italiano. Modifica la classificazione
+        di un mastro se nel piano del tuo cliente compare un'eccezione (es. SP
+        oltre il 57 o conti CE sotto il 58). La spunta "Variazione rim." identifica i mastri
+        in doppia entry D/A da cui si calcolano rimanenze iniziali/finali.
+      </div>
+
+      <table class="ab-cls-tab">
+        <thead>
+          <tr>
+            <th>Mastro</th>
+            <th>Descrizione esempio</th>
+            <th class="num"># cti</th>
+            <th>Classificazione</th>
+            <th>Variazione rim.</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  /**
+   * Handler dropdown classificazione: aggiorna lo stato e ridipinge
+   * la riga (la disabilitazione del toggle rimanenze dipende dalla
+   * classe scelta).
+   */
+  function classificaMastroChange(selEl) {
+    if (!_modaleClassifica) return;
+    const codice = selEl.getAttribute('data-mastro');
+    const valore = selEl.value;
+    _modaleClassifica.classificazione[codice] = valore;
+    // Se sposto fuori da CE, rimuovo l'eventuale flag rimanenze
+    if (valore !== 'ce') {
+      const idx = _modaleClassifica.mastriRimanenze.indexOf(codice);
+      if (idx >= 0) _modaleClassifica.mastriRimanenze.splice(idx, 1);
+    }
+    _renderModaleClassifica();
+  }
+
+  /**
+   * Toggle "variazione rimanenze" per un mastro. Attivo solo se il
+   * mastro è classificato CE: i sottoconti del mastro contribuiranno
+   * a rimanenze_iniziali (somma Dare) e rimanenze_finali (somma Avere)
+   * invece che alle macroaree normali.
+   */
+  function toggleRimanenze(codice) {
+    if (!_modaleClassifica) return;
+    if (_modaleClassifica.classificazione[codice] !== 'ce') return;
+    const arr = _modaleClassifica.mastriRimanenze;
+    const i   = arr.indexOf(codice);
+    if (i >= 0) arr.splice(i, 1); else arr.push(codice);
+    _renderModaleClassifica();
+  }
+
+  function annullaModaleClassifica() {
+    _modaleClassifica = null;
+    UI.closeModal('modal-ab-classifica-mastri');
+  }
+
+  /**
+   * Conferma la classificazione e prosegue con il flusso di import
+   * pre-esistente (default mapping, preservazione scelte manuali,
+   * anteprima storico). Salva la scelta in `meta.classificazione_mastri`
+   * e `meta.mastri_rimanenze` per pre-popolare la modale al prossimo
+   * import dello stesso progetto.
+   */
+  function confermaModaleClassifica() {
+    if (!_modaleClassifica) return;
+    const { analisi, fileName, classificazione, mastriRimanenze } = _modaleClassifica;
+
+    const parsed = ExcelImport.applicaClassificazione(analisi, classificazione, mastriRimanenze);
+
+    // La scelta viene tenuta in memoria e persistita solo quando
+    // l'utente clicca "Applica al progetto" (vedi applicaImport):
+    // così se l'anteprima storico viene annullata, il progetto non
+    // viene modificato.
+    _lastClassificazione = Object.assign({}, classificazione);
+    _lastMastriRimanenze = mastriRimanenze.slice();
+
+    UI.closeModal('modal-ab-classifica-mastri');
+    _modaleClassifica = null;
+
+    _proseguiImport(parsed, fileName);
+  }
+
+  /**
+   * Fase finale dell'import: identica al flusso pre-modale.
+   * Calcola mapping default, preserva scelte manuali da import
+   * precedente, calcola storico, mostra anteprima.
+   */
+  function _proseguiImport(parsed, fileName) {
+    try {
       const macroAree = BudgetEngine.MACROAREE_AB;
 
       // Mapping iniziale = default euristico per tutti i sottoconti.
@@ -291,10 +484,12 @@ const BudgetUI = (() => {
   }
 
   function annullaImport() {
-    _lastParsed     = null;
-    _lastMapping    = null;
-    _lastStorico    = null;
-    _lastPreservati = 0;
+    _lastParsed          = null;
+    _lastMapping         = null;
+    _lastStorico         = null;
+    _lastPreservati      = 0;
+    _lastClassificazione = null;
+    _lastMastriRimanenze = null;
     const sumEl = document.getElementById('ab-import-summary');
     if (sumEl) {
       sumEl.classList.add('hidden');
@@ -308,6 +503,18 @@ const BudgetUI = (() => {
       return;
     }
     Projects.applicaImportCE(_lastParsed, _lastMapping, _lastStorico);
+
+    // Salva la classificazione mastri scelta nella modale: serve a
+    // pre-popolare la modale al prossimo re-import dello stesso
+    // cliente. Lo facciamo qui (e non in confermaModaleClassifica)
+    // così se l'utente annulla l'anteprima storico il progetto non
+    // resta sporco.
+    const progetto = Projects.getProgetto();
+    if (progetto && progetto.meta) {
+      if (_lastClassificazione) progetto.meta.classificazione_mastri = _lastClassificazione;
+      if (_lastMastriRimanenze) progetto.meta.mastri_rimanenze       = _lastMastriRimanenze;
+    }
+
     UI.mostraNotifica('Import applicato. Sottoconti, mapping e storico aggiornati.', 'success');
     annullaImport();
     UI.aggiornaStatusBar('modificato');
@@ -2452,6 +2659,10 @@ const BudgetUI = (() => {
     caricaFixture:      caricaFixture,
     annullaImport:      annullaImport,
     applicaImport:      applicaImport,
+    classificaMastroChange:    classificaMastroChange,
+    toggleRimanenze:           toggleRimanenze,
+    annullaModaleClassifica:   annullaModaleClassifica,
+    confermaModaleClassifica:  confermaModaleClassifica,
     cambiaMacroarea:    cambiaMacroarea,
     budgetBlur:         budgetBlur,
     budgetKeyDown:      budgetKeyDown,
