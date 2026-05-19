@@ -2379,10 +2379,21 @@ const BudgetUI = (() => {
    */
   function _buildPdfPeriodCols(pre) {
     if (pre.frequenza === 'trimestrale') {
-      const labels = ['1° trim. (gen-mar)','2° trim. (apr-giu)','3° trim. (lug-set)','4° trim. (ott-dic)'];
+      // Etichetta su due righe per non far esplodere la larghezza
+      // delle 4 colonne nella pagina PDF: il numero del trimestre
+      // sopra ("1° trim."), il range mesi sotto in font ridotto
+      // ("gen-mar"). Mantiene l'informazione completa stando in ~9
+      // caratteri di larghezza tipografica massima.
+      const labels = [
+        { label: '1° trim.', subLabel: 'gen-mar' },
+        { label: '2° trim.', subLabel: 'apr-giu' },
+        { label: '3° trim.', subLabel: 'lug-set' },
+        { label: '4° trim.', subLabel: 'ott-dic' }
+      ];
       return pre.periodi_keys.map((k, i) => ({
         key: k,
-        label: labels[i],
+        label: labels[i].label,
+        subLabel: labels[i].subLabel,
         chiuso: !!(pre.per_periodo[k] && pre.per_periodo[k].inserito),
         valori: pre.per_periodo[k] ? pre.per_periodo[k].valori : {},
         totali: pre.per_periodo[k] || {}
@@ -2582,7 +2593,8 @@ const BudgetUI = (() => {
     // Costruzione testata della tabella periodi
     const periodHeaders = cols.map(col => {
       const stato = col.chiuso ? '' : '<div class="ab-pdf-col-stato">non compilato</div>';
-      return `<th class="num">${_escapeHtml(col.label)}${stato}</th>`;
+      const sub   = col.subLabel ? `<div class="ab-pdf-col-sublabel">${_escapeHtml(col.subLabel)}</div>` : '';
+      return `<th class="num">${_escapeHtml(col.label)}${sub}${stato}</th>`;
     }).join('');
 
     const sottotitolo = pre.frequenza === 'trimestrale'
