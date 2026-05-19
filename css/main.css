@@ -3633,3 +3633,196 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   display: flex;
   gap: 8px;
 }
+
+/* ──────────────────────────────────────────────────────────────────────
+   AB Consuntivo — Stagionalità ricavi
+
+   La riga "Ricavi attesi (€)" appare in modalità "Stagionalizzata" subito
+   sotto la riga Ricavi e contiene celle editabili per periodo. Stilizzata
+   in chiaro per distinguerla dalle righe consuntivo reali.
+   ────────────────────────────────────────────────────────────────────── */
+
+.ab-consuntivo-atteso-row td {
+  background: var(--color-warning-bg);
+  border-top: 1px dashed var(--color-warning);
+  border-bottom: 1px dashed var(--color-warning);
+}
+.ab-consuntivo-atteso-row .ab-consuntivo-atteso-label {
+  color: var(--color-warning);
+  font-style: italic;
+  font-weight: 600;
+  margin-right: 8px;
+}
+.ab-consuntivo-atteso-distrib {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--color-warning);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-warning);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ab-consuntivo-atteso-distrib:hover {
+  background: var(--color-warning);
+  color: var(--color-surface);
+}
+.ab-periodo-input-cell.ab-periodo-input-atteso {
+  background: var(--color-surface);
+  border-color: var(--color-warning);
+}
+.ab-periodo-input-cell.ab-periodo-input-atteso:focus {
+  box-shadow: 0 0 0 2px rgba(230,126,34,0.25);
+}
+.ab-col-periodo.ab-col-periodo-atteso {
+  background: var(--color-warning-bg);
+}
+.ab-cell-muted {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Modale generica (overlay + box centrale) usata da "Distribuisci da %".
+   ────────────────────────────────────────────────────────────────────── */
+
+.ab-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(27,58,92,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.ab-modal-box {
+  background: var(--color-surface);
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ab-modal-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ab-modal-head h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-text);
+}
+.ab-modal-close {
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--color-text-muted);
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.ab-modal-close:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+.ab-modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+.ab-modal-foot {
+  padding: 12px 18px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.ab-modal-btn {
+  display: inline-block;
+  padding: 7px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.ab-modal-btn-ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+.ab-modal-btn-ghost:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+.ab-modal-btn-primary {
+  background: var(--color-accent);
+  color: var(--color-surface);
+}
+.ab-modal-btn-primary:hover {
+  background: var(--color-accent-hover);
+}
+.ab-modal-btn-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Tabella della modale Distribuisci %. */
+.ab-distrib-pct-box { width: 420px; }
+.ab-distrib-pct-intro { margin: 0 0 12px 0; font-size: 12px; }
+.ab-distrib-pct-tab {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ab-distrib-pct-tab th,
+.ab-distrib-pct-tab td {
+  padding: 5px 10px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--color-border);
+}
+.ab-distrib-pct-tab thead th {
+  background: var(--color-bg-soft, #F4F7FA);
+  text-align: left;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ab-distrib-pct-tab tfoot th {
+  background: var(--color-bg-soft, #F4F7FA);
+  font-weight: 700;
+}
+.ab-distrib-pct-tab .num { text-align: right; font-family: 'JetBrains Mono', monospace; }
+.ab-distrib-pct-input {
+  display: inline-block;
+  min-width: 60px;
+  padding: 3px 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  cursor: text;
+}
+.ab-distrib-pct-input:hover { border-color: var(--color-accent); }
+.ab-distrib-pct-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-light);
+}
+.ab-distrib-pct-warning {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--color-warning-bg);
+  border-left: 3px solid var(--color-warning);
+  color: var(--color-warning);
+  font-size: 12px;
+  border-radius: 3px;
+}

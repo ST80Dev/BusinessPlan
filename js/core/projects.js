@@ -1397,12 +1397,20 @@ const Projects = (() => {
    * Aggiorna i campi del consuntivo:
    *
    *   field può essere:
-   *     'frequenza'              → value: 'mensile' | 'trimestrale'
-   *                                 (cambia anche reset del fatturato per periodo
-   *                                 perché gli indici cambiano significato)
-   *     'fatturato.<periodo>'    → value: number | null (€ fatturato nel periodo,
-   *                                 periodo è '01'..'12' per mensile o '1'..'4' per
-   *                                 trimestrale)
+   *     'frequenza'                  → value: 'mensile' | 'trimestrale'
+   *                                     (cambia anche reset del fatturato e
+   *                                     dell'atteso per periodo perché gli
+   *                                     indici cambiano significato)
+   *     'fatturato.<periodo>'        → value: number | null (€ fatturato nel
+   *                                     periodo, periodo è '01'..'12' per
+   *                                     mensile o '1'..'4' per trimestrale)
+   *     'modalita_proiezione'        → value: 'lineare' | 'stagionalizzata'
+   *                                     (selezione della logica di proiezione
+   *                                     fine anno: vedi engine.calcolaPreconsuntivo)
+   *     'fatturato_atteso.<periodo>' → value: number | null (€ atteso nel
+   *                                     periodo aperto, usato dalla modalità
+   *                                     stagionalizzata per stimare i periodi
+   *                                     non ancora consuntivati)
    */
   function aggiornaConsuntivo(field, value) {
     if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
@@ -1417,13 +1425,24 @@ const Projects = (() => {
         if (c.frequenza !== value) {
           c.frequenza = value;
           c.fatturato = {};
+          c.fatturato_atteso = {};
         }
+      }
+    } else if (field === 'modalita_proiezione') {
+      if (value === 'lineare' || value === 'stagionalizzata') {
+        c.modalita_proiezione = value;
       }
     } else if (field.indexOf('fatturato.') === 0) {
       const periodo = field.substring('fatturato.'.length);
       const isVuoto = value == null || (typeof value === 'number' && (!isFinite(value) || value === 0));
       if (isVuoto) delete c.fatturato[periodo];
       else         c.fatturato[periodo] = Number(value);
+    } else if (field.indexOf('fatturato_atteso.') === 0) {
+      if (!c.fatturato_atteso) c.fatturato_atteso = {};
+      const periodo = field.substring('fatturato_atteso.'.length);
+      const isVuoto = value == null || (typeof value === 'number' && (!isFinite(value) || value === 0));
+      if (isVuoto) delete c.fatturato_atteso[periodo];
+      else         c.fatturato_atteso[periodo] = Number(value);
     } else {
       return;
     }

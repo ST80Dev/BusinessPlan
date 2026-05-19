@@ -1885,6 +1885,16 @@ const BudgetUI = (() => {
                        onclick="BudgetUI.cambiaFrequenza('trimestrale')">Trimestrale</div>
                 </div>
               </div>
+              <div class="ab-freq-selector"
+                   title="Lineare: la proiezione fine anno estrapola il consuntivato in proporzione al tempo trascorso. Stagionalizzata: per i periodi aperti usa il valore atteso inserito a mano nella riga 'Ricavi attesi', adatto alle attività stagionali.">
+                <span class="text-muted">Distribuzione ricavi:</span>
+                <div class="ab-freq-toggle">
+                  <div class="ab-freq-opt ${pre.modalita_proiezione === 'lineare' ? 'active' : ''}"
+                       onclick="BudgetUI.cambiaModalitaProiezione('lineare')">Lineare</div>
+                  <div class="ab-freq-opt ${pre.modalita_proiezione === 'stagionalizzata' ? 'active' : ''}"
+                       onclick="BudgetUI.cambiaModalitaProiezione('stagionalizzata')">Stagionalizzata</div>
+                </div>
+              </div>
               <div class="ab-consuntivo-stats text-muted">
                 <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
                 <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
@@ -2034,6 +2044,48 @@ const BudgetUI = (() => {
         <td class="num ab-col-stick ab-col-stick-4">${_fmtDelta({ abs: d.abs * segno, pct: d.pct }, r.segnoBuono, true)}</td>
         ${celleP}
       </tr>`;
+
+      // Riga "Ricavi attesi" — visibile solo in modalità stagionalizzata,
+      // posizionata subito sotto la macro ricavi. Le celle per periodo sono
+      // editabili (€ atteso); le colonne sticky mostrano: budget annuale
+      // (riferimento), somma degli attesi inseriti, scostamento vs budget.
+      // Un piccolo bottone "Distribuisci da %" apre una modale che spalma
+      // il fatturato budget sui periodi secondo pesi % che devono fare 100.
+      const isRicaviMacro = r.tipo === 'macro' && r.id === 'ricavi';
+      if (isRicaviMacro && pre.modalita_proiezione === 'stagionalizzata') {
+        const attesoTot   = pre.fatturato_atteso_tot || 0;
+        const budgetFatt  = pre.budget.fatturato || 0;
+        const dAtteso     = _delta(attesoTot, budgetFatt);
+        const celleAtt = periodiKeys.map(k => {
+          const vp = pre.per_periodo[k] || {};
+          const valore = vp.atteso;
+          const display = (typeof valore === 'number' && valore > 0) ? _fmtEuroInt(valore) : '';
+          const periodCls = `num ab-col-periodo ab-col-periodo-atteso`;
+          return `<td class="${periodCls}">
+            <div class="amount-field ab-periodo-input-cell ab-periodo-input-atteso"
+                 contenteditable="true"
+                 data-cons-field="fatturato_atteso.${k}"
+                 data-input-type="euro"
+                 data-placeholder="0"
+                 onblur="BudgetUI.attesoBlur(this)"
+                 onkeydown="BudgetUI.budgetKeyDown(event)">${display}</div>
+          </td>`;
+        }).join('');
+        html += `<tr class="ab-consuntivo-atteso-row">
+          <td class="ab-col-stick ab-col-stick-1">
+            <span class="ab-consuntivo-atteso-label">Ricavi attesi (€)</span>
+            <span class="ab-consuntivo-atteso-distrib"
+                  role="button" tabindex="0"
+                  title="Apri la distribuzione per percentuali: pesi % che sommano 100, applicati al fatturato di budget per riempire i periodi."
+                  onclick="BudgetUI.apriDistribuisciPct()"
+                  onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ Distribuisci da %</span>
+          </td>
+          <td class="num ab-col-stick ab-col-stick-2 ab-cell-muted">${_fmtEuroInt(budgetFatt)}</td>
+          <td class="num ab-col-stick ab-col-stick-3">${attesoTot > 0 ? _fmtEuroInt(attesoTot) : ''}</td>
+          <td class="num ab-col-stick ab-col-stick-4">${attesoTot > 0 ? _fmtDelta(dAtteso, +1, true) : ''}</td>
+          ${celleAtt}
+        </tr>`;
+      }
     }
 
     html += '</tbody></table></div></div>';
@@ -2062,14 +2114,306 @@ const BudgetUI = (() => {
     const cur = progetto.consuntivo && progetto.consuntivo.frequenza;
     if (cur === freq) return;
 
-    // Conferma prima di azzerare i valori inseriti
-    const haDati = progetto.consuntivo && progetto.consuntivo.fatturato &&
-                   Object.values(progetto.consuntivo.fatturato).some(v => v > 0);
-    if (haDati) {
-      if (!confirm('Cambiando frequenza i valori già inseriti verranno azzerati. Procedere?')) return;
+    // Conferma prima di azzerare i valori inseriti (fatturato consuntivo
+    // o attesi stagionalizzati: hanno entrambi indici di periodo distinti
+    // tra mensile e trimestrale).
+    const c = progetto.consuntivo || {};
+    const haCons = c.fatturato && Object.values(c.fatturato).some(v => v > 0);
+    const haAtt  = c.fatturato_atteso && Object.values(c.fatturato_atteso).some(v => v > 0);
+    if (haCons || haAtt) {
+      if (!confirm('Cambiando frequenza i valori già inseriti (consuntivo e attesi) verranno azzerati. Procedere?')) return;
     }
 
     Projects.aggiornaConsuntivo('frequenza', freq);
+    UI.aggiornaStatusBar('modificato');
+    renderConsuntivo();
+  }
+
+  /**
+   * Cambia la modalità di proiezione del fatturato:
+   *   'lineare'         → estrapolazione yt-d / frazione_anno (default)
+   *   'stagionalizzata' → mix consuntivo (periodi chiusi) + attesi inseriti
+   *                       a mano (periodi aperti). Adatto ai casi stagionali.
+   * Il toggle è sempre disponibile: lo switch non azzera i valori, così
+   * l'operatore può confrontare a colpo d'occhio l'effetto sulle KPI.
+   */
+  function cambiaModalitaProiezione(mod) {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+    const cur = (progetto.consuntivo && progetto.consuntivo.modalita_proiezione) || 'lineare';
+    if (cur === mod) return;
+    Projects.aggiornaConsuntivo('modalita_proiezione', mod);
+    UI.aggiornaStatusBar('modificato');
+    renderConsuntivo();
+  }
+
+  /**
+   * Salva il blur di una cella "Ricavi attesi (€)" e ri-rendera il
+   * consuntivo conservando la posizione di scroll orizzontale.
+   */
+  function attesoBlur(el) {
+    const field = el.dataset.consField;
+    const txt = (el.textContent || '').trim();
+    const parsed = _parseEuro(txt);
+    Projects.aggiornaConsuntivo(field, parsed);
+    UI.aggiornaStatusBar('modificato');
+    const scroller = document.querySelector('.ab-consuntivo-tab-scroll');
+    const scrollLeft = scroller ? scroller.scrollLeft : 0;
+    renderConsuntivo();
+    if (scrollLeft) {
+      const newScroller = document.querySelector('.ab-consuntivo-tab-scroll');
+      if (newScroller) newScroller.scrollLeft = scrollLeft;
+    }
+  }
+
+  function distribuisciPctKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      apriDistribuisciPct();
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     MODALE "DISTRIBUISCI DA %"
+
+     Inserimento dei pesi % di stagionalità (12 mesi o 4 trimestri).
+     I pesi devono sommare 100; il salvataggio è bloccato finché la
+     somma non è esattamente 100 (vincolo voluto dall'operatore per
+     evitare distribuzioni accidentalmente parziali). All'applicazione
+     ogni cella "Ricavi attesi" viene riempita con peso% × fatturato
+     di budget; gli importi restano poi editabili a mano per fare
+     ritocchi mirati.
+     ────────────────────────────────────────────────────────── */
+
+  function apriDistribuisciPct() {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+    const cons = progetto.consuntivo || {};
+    const freq = cons.frequenza === 'trimestrale' ? 'trimestrale' : 'mensile';
+    const periodiKeys = freq === 'trimestrale'
+      ? ['1','2','3','4']
+      : ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    const labels = freq === 'trimestrale'
+      ? ['1° trim.','2° trim.','3° trim.','4° trim.']
+      : ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+
+    const budget = BudgetEngine.calcolaBudget(progetto);
+    const fattBudget = budget.fatturato || 0;
+
+    // Pesi iniziali: se ci sono già attesi inseriti, derivarli come
+    // proporzioni della loro somma; altrimenti distribuire uniforme.
+    // In entrambi i casi facciamo assorbire al primo periodo l'eventuale
+    // residuo da arrotondamento al centesimo, così la somma iniziale è
+    // esattamente 100,00% (necessario perché il vincolo di apply è 100%
+    // e la cifra che l'operatore vede è quella troncata al centesimo).
+    const atteso = cons.fatturato_atteso || {};
+    const sommaAtteso = periodiKeys.reduce((s, k) => s + (Number(atteso[k]) || 0), 0);
+    const N = periodiKeys.length;
+    const round2 = x => Math.round(x * 100) / 100;
+    const pesiIniziali = {};
+    if (sommaAtteso > 0) {
+      let accum = 0;
+      periodiKeys.forEach((k, i) => {
+        if (i < N - 1) {
+          pesiIniziali[k] = round2(((Number(atteso[k]) || 0) / sommaAtteso) * 100);
+          accum += pesiIniziali[k];
+        } else {
+          pesiIniziali[k] = round2(100 - accum);
+        }
+      });
+    } else {
+      const base = round2(100 / N);
+      let accum = 0;
+      periodiKeys.forEach((k, i) => {
+        if (i < N - 1) { pesiIniziali[k] = base; accum += base; }
+        else           { pesiIniziali[k] = round2(100 - accum); }
+      });
+    }
+
+    // Costruzione modale (overlay + box centrale)
+    const old = document.getElementById('ab-distrib-pct-modal');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+
+    const overlay = document.createElement('div');
+    overlay.id = 'ab-distrib-pct-modal';
+    overlay.className = 'ab-modal-overlay';
+
+    const _fmtPctInput = p => (Math.round(p * 100) / 100).toString().replace('.', ',');
+
+    const rowsHtml = periodiKeys.map((k, i) => `
+      <tr>
+        <td class="ab-distrib-label">${_escapeHtml(labels[i])}</td>
+        <td class="num">
+          <div class="amount-field ab-distrib-pct-input"
+               contenteditable="true"
+               data-periodo="${k}"
+               data-input-type="pct"
+               onblur="BudgetUI.distribuisciPctBlur(this)"
+               onkeydown="BudgetUI.budgetKeyDown(event)">${_fmtPctInput(pesiIniziali[k])}</div>
+        </td>
+      </tr>`).join('');
+
+    overlay.innerHTML = `
+      <div class="ab-modal-box ab-distrib-pct-box" role="dialog" aria-modal="true" aria-labelledby="ab-distrib-pct-title">
+        <div class="ab-modal-head">
+          <h3 id="ab-distrib-pct-title">Distribuisci ricavi attesi per ${freq === 'trimestrale' ? 'trimestre' : 'mese'}</h3>
+          <span class="ab-modal-close" role="button" tabindex="0"
+                title="Chiudi senza applicare"
+                onclick="BudgetUI.chiudiDistribuisciPct()"
+                onkeydown="BudgetUI.distribuisciPctChiudiKeyDown(event)">✕</span>
+        </div>
+        <div class="ab-modal-body">
+          <p class="text-muted ab-distrib-pct-intro">
+            Inserisci la quota % di ciascun ${freq === 'trimestrale' ? 'trimestre' : 'mese'}. La somma deve fare <strong>100%</strong>.
+            All'applicazione le celle "Ricavi attesi" verranno riempite con <em>peso × fatturato di budget</em>
+            (<strong>${_fmtEuro(fattBudget)}</strong>). Potrai poi ritoccare i singoli importi a mano.
+          </p>
+          <table class="ab-distrib-pct-tab">
+            <thead>
+              <tr><th>${freq === 'trimestrale' ? 'Trimestre' : 'Mese'}</th><th class="num">Peso %</th></tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+            <tfoot>
+              <tr class="ab-distrib-pct-foot">
+                <th>Totale</th>
+                <th class="num"><span id="ab-distrib-pct-sum">0,00</span>%</th>
+              </tr>
+            </tfoot>
+          </table>
+          <div id="ab-distrib-pct-warning" class="ab-distrib-pct-warning" hidden></div>
+        </div>
+        <div class="ab-modal-foot">
+          <span class="ab-modal-btn ab-modal-btn-ghost"
+                role="button" tabindex="0"
+                onclick="BudgetUI.chiudiDistribuisciPct()"
+                onkeydown="BudgetUI.distribuisciPctChiudiKeyDown(event)">Annulla</span>
+          <span class="ab-modal-btn ab-modal-btn-primary"
+                id="ab-distrib-pct-apply"
+                role="button" tabindex="0"
+                onclick="BudgetUI.applicaDistribuisciPct()"
+                onkeydown="BudgetUI.distribuisciPctApplyKeyDown(event)">Applica</span>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    // Bind handler globale per il calcolo della somma e per la
+    // chiusura su Esc/click sull'overlay. Il riferimento al fatturato
+    // budget e ai periodi viene conservato sul dataset del box per
+    // l'apply.
+    const box = overlay.querySelector('.ab-distrib-pct-box');
+    box.dataset.fattBudget = String(fattBudget);
+    box.dataset.frequenza  = freq;
+
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) chiudiDistribuisciPct();
+    });
+    document.addEventListener('keydown', _distribuisciPctEscHandler, true);
+
+    _aggiornaSommaDistribPct();
+  }
+
+  function _distribuisciPctEscHandler(e) {
+    if (e.key === 'Escape') {
+      chiudiDistribuisciPct();
+    }
+  }
+
+  function chiudiDistribuisciPct() {
+    const el = document.getElementById('ab-distrib-pct-modal');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    document.removeEventListener('keydown', _distribuisciPctEscHandler, true);
+  }
+
+  function distribuisciPctChiudiKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      chiudiDistribuisciPct();
+    }
+  }
+  function distribuisciPctApplyKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      applicaDistribuisciPct();
+    }
+  }
+
+  function distribuisciPctBlur(el) {
+    // Normalizza l'input: parse %, ricomponi il display formattato.
+    const parsed = _parsePct(el.textContent || '');
+    const pct = parsed != null ? parsed * 100 : 0;
+    el.textContent = (Math.round(pct * 100) / 100).toString().replace('.', ',');
+    _aggiornaSommaDistribPct();
+  }
+
+  function _aggiornaSommaDistribPct() {
+    const overlay = document.getElementById('ab-distrib-pct-modal');
+    if (!overlay) return;
+    const inputs = overlay.querySelectorAll('.ab-distrib-pct-input');
+    let somma = 0;
+    inputs.forEach(inp => {
+      const p = _parsePct(inp.textContent || '');
+      somma += (p != null ? p * 100 : 0);
+    });
+    const sumEl = overlay.querySelector('#ab-distrib-pct-sum');
+    if (sumEl) sumEl.textContent = (Math.round(somma * 100) / 100).toString().replace('.', ',');
+    const eps = 0.005; // tolleranza arrotondamento al centesimo
+    const valido = Math.abs(somma - 100) < eps;
+    const applyBtn = overlay.querySelector('#ab-distrib-pct-apply');
+    if (applyBtn) {
+      applyBtn.classList.toggle('ab-modal-btn-disabled', !valido);
+      applyBtn.setAttribute('aria-disabled', valido ? 'false' : 'true');
+    }
+    const warnEl = overlay.querySelector('#ab-distrib-pct-warning');
+    if (warnEl) {
+      if (valido) {
+        warnEl.hidden = true;
+        warnEl.textContent = '';
+      } else {
+        warnEl.hidden = false;
+        const delta = 100 - somma;
+        const verso = delta > 0 ? 'mancano' : 'eccedono';
+        warnEl.textContent = `Somma attuale: ${(Math.round(somma * 100) / 100).toString().replace('.', ',')}%. ${verso} ${(Math.round(Math.abs(delta) * 100) / 100).toString().replace('.', ',')} punti per arrivare a 100%.`;
+      }
+    }
+  }
+
+  function applicaDistribuisciPct() {
+    const overlay = document.getElementById('ab-distrib-pct-modal');
+    if (!overlay) return;
+    const box = overlay.querySelector('.ab-distrib-pct-box');
+    const fattBudget = Number(box.dataset.fattBudget) || 0;
+    const inputs = overlay.querySelectorAll('.ab-distrib-pct-input');
+
+    // Verifica vincolo somma = 100% (il bottone Applica è già visivamente
+    // disabilitato in caso contrario, ma proteggiamo anche da chi spara
+    // Invio sulla tastiera saltando il blur dell'ultimo campo).
+    let somma = 0;
+    const pesi = {};
+    inputs.forEach(inp => {
+      const p = _parsePct(inp.textContent || '');
+      const pct = p != null ? p * 100 : 0;
+      pesi[inp.dataset.periodo] = pct;
+      somma += pct;
+    });
+    if (Math.abs(somma - 100) >= 0.005) {
+      // Forza un refresh dell'avviso e blocca l'apply.
+      _aggiornaSommaDistribPct();
+      return;
+    }
+    if (fattBudget <= 0) {
+      alert('Impossibile distribuire: il fatturato di budget è 0. Imposta prima il fatturato ipotizzato nello Step Budget.');
+      return;
+    }
+
+    // Applica: scrive ogni periodo come peso × fatturato budget. Importi
+    // <= 0 sono trattati come "vuoti" da aggiornaConsuntivo (vengono
+    // cancellati dal progetto).
+    Object.keys(pesi).forEach(k => {
+      const euro = Math.round((pesi[k] / 100) * fattBudget);
+      Projects.aggiornaConsuntivo('fatturato_atteso.' + k, euro);
+    });
+
+    chiudiDistribuisciPct();
     UI.aggiornaStatusBar('modificato');
     renderConsuntivo();
   }
@@ -2711,6 +3055,15 @@ const BudgetUI = (() => {
     eliminaNotaKeyDown: eliminaNotaKeyDown,
     consuntivoBlur:     consuntivoBlur,
     cambiaFrequenza:    cambiaFrequenza,
+    cambiaModalitaProiezione:   cambiaModalitaProiezione,
+    attesoBlur:                 attesoBlur,
+    apriDistribuisciPct:        apriDistribuisciPct,
+    chiudiDistribuisciPct:      chiudiDistribuisciPct,
+    distribuisciPctKeyDown:     distribuisciPctKeyDown,
+    distribuisciPctChiudiKeyDown: distribuisciPctChiudiKeyDown,
+    distribuisciPctApplyKeyDown:  distribuisciPctApplyKeyDown,
+    distribuisciPctBlur:        distribuisciPctBlur,
+    applicaDistribuisciPct:     applicaDistribuisciPct,
     esportaPdfBudget:   esportaPdfBudget,
     esportaPdfConsuntivo: esportaPdfConsuntivo
   };
