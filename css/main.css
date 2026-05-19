@@ -3262,6 +3262,16 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   font-weight: 400;
   margin-top: 2px;
 }
+/* Range mesi del trimestre, riga sotto al "1° trim." nelle testate PDF:
+   font ridotto per stare in larghezza nelle 4 colonne. */
+.ab-pdf-col-sublabel {
+  font-size: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  margin-top: 1px;
+}
 .ab-pdf-delta-good { color: var(--color-success); font-weight: 600; }
 .ab-pdf-delta-bad  { color: var(--color-error);   font-weight: 600; }
 
