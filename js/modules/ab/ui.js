@@ -1306,22 +1306,20 @@ const BudgetUI = (() => {
   }
 
   /**
-   * Valore "Base storica" della singola macroarea = default di partenza
-   * del budget in assenza di override:
+   * Valore "Ultimo anno €" della singola macroarea — riferimento storico
+   * fisso, indipendente dal fatturato ipotizzato:
    *   - proventi/oneri straordinari: 0 (natura non ricorrente)
-   *   - ricavi, fissi, imposte: ultimo anno arrotondato al centinaio
-   *   - costi variabili (incluse macroaree custom variabili):
-   *     % media storica × fatturato ipotizzato (dato.base_default)
-   *   - rimanenze (calcolato): media triennale degli importi €
+   *   - rimanenze (calcolato): media storica degli importi €
+   *   - tutti gli altri (ricavi, costi variabili, costi fissi, imposte):
+   *     ultimo esercizio storico arrotondato al centinaio.
    */
   function _baseStoricaVoce(macroSezioni, b, id) {
     const m = (macroSezioni || []).find(x => x.id === id);
     const dato = b.valori[id];
     if (!dato) return 0;
     if (m && m.sezione === 'prov_oneri_straord') return 0;
-    if (m && m.var_fisso === 'variabile' && !m.calcolato) return dato.base_default || 0;
-    const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato;
-    return isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0);
+    if (m && m.calcolato) return dato.media_euro || 0;
+    return dato.ultimo_anno_euro || 0;
   }
 
   /**
@@ -1412,16 +1410,33 @@ const BudgetUI = (() => {
       segno:     { prov_oneri_straord: -1 }
     });
 
-    // Medie triennali in € dei derivati storici, per la nuova colonna
-    // "Media triennale" sulle righe-totale. Sulle righe macroarea
-    // useremo invece dato.media_euro che è già esposto dall'engine.
+    // Medie storiche in € dei derivati per la colonna "Media" sulle
+    // righe-totale. Sulle righe macroarea l'engine espone già
+    // dato.media_euro (con lo stesso filtro). Filtriamo qui agli anni
+    // effettivamente importati (ricavi > 0) per non dividere per il
+    // numero di colonne quando un esercizio non è stato caricato.
     const totaliStorico = _calcolaTotaliStorico(progetto);
-    const anniStor = (progetto.meta && progetto.meta.anni_storici) || [];
+    const anniReali = (b.anni_reali && b.anni_reali.length > 0)
+      ? b.anni_reali
+      : ((progetto.meta && progetto.meta.anni_storici) || []).filter(a => (totaliStorico[a] || {}).fatturato > 0);
     const medieEuroDerivati = {};
     ['fatturato','cdv','totVar','mdc','fissi','totCosti','provOneriStraordNetto','utileAnteImposte','imposte','utileNetto'].forEach(k => {
-      const vals = anniStor.map(a => (totaliStorico[a] || {})[k] || 0);
+      const vals = anniReali.map(a => (totaliStorico[a] || {})[k] || 0);
       medieEuroDerivati[k] = vals.length > 0 ? vals.reduce((s,v) => s+v, 0) / vals.length : 0;
     });
+    // Etichetta dinamica per l'intestazione di colonna: lista compatta
+    // degli anni a due cifre. Es. [2023,2024,2025] -> "'23–'24–'25";
+    // [2024,2025] -> "'24–'25"; [2025] -> "'25" (col header diventa
+    // "Solo '25" perché la media di un solo valore non è significativa).
+    const yy = y => "'" + String(y).slice(-2);
+    const mediaHeader = anniReali.length === 0
+      ? 'Media'
+      : anniReali.length === 1
+        ? 'Solo ' + yy(anniReali[0])
+        : 'Media ' + anniReali.map(yy).join('–');
+    const mediaHeaderTitle = anniReali.length <= 1
+      ? 'Valore dell\'unico anno storico importato (la media non è significativa con un solo esercizio).'
+      : `Media degli importi € sugli anni storici importati (${anniReali.join(', ')}), riferimento informativo per le decisioni di budget.`;
 
     // KPI: differenze percentuali fatturato vs ultimo fatturato storico
     // (arrotondato al centinaio, base del budget teorico) e vs break-even
@@ -1477,9 +1492,9 @@ const BudgetUI = (() => {
           <thead>
             <tr>
               <th>Macroarea</th>
-              <th class="num" title="Media degli importi € sui tre anni storici, riferimento informativo per le decisioni di budget.">Media triennale</th>
-              <th class="num" title="Incidenza % media sul fatturato calcolata come media delle incidenze % di ciascun anno storico.">% storica</th>
-              <th class="num" title="Default del budget in assenza di override: ricavi, fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 (natura non ricorrente); rimanenze = media € storica.">Base (Ult. Anno o %)</th>
+              <th class="num" title="${_escapeHtml(mediaHeaderTitle)}">${_escapeHtml(mediaHeader)}</th>
+              <th class="num" title="Incidenza % media sul fatturato calcolata come media delle incidenze % di ciascun anno storico importato.">% storica</th>
+              <th class="num" title="Riferimento storico (ultimo esercizio importato arrotondato al centinaio per ricavi, costi variabili, costi fissi e imposte; media € per rimanenze; 0 per proventi/oneri straordinari). Indipendente dal fatturato ipotizzato — il quale impatta solo la colonna Budget €.">Ultimo anno €</th>
               <th class="num">Override</th>
               <th class="num">Budget €</th>
               <th class="num">Budget %</th>
@@ -1538,25 +1553,24 @@ const BudgetUI = (() => {
 
       const fonteCls = dato.fonte === 'override' ? 'ab-fonte-override' : 'ab-fonte-storico';
 
-      // Colonna "Base storica" = default del budget in assenza di override:
+      // Colonna "Ultimo anno €" = riferimento storico fisso, indipendente
+      // dal fatturato ipotizzato (che impatta solo la colonna Budget €):
       //   - straordinari: 0 (natura non ricorrente)
-      //   - variabili pure (anche custom): % media × fatturato ipotizzato
-      //   - non var, non calc, non straord (ricavi/fissi/imposte): ultimo
-      //     anno arrotondato al centinaio
       //   - calcolato (rim_ini/rim_fin): media € storica
+      //   - tutti gli altri (ricavi, costi variabili, costi fissi, imposte):
+      //     ultimo esercizio storico importato arrotondato al centinaio.
+      //     I costi variabili usano la stessa logica dei fissi così la
+      //     colonna resta ferma quando si rettifica il fatturato.
       const isStraord = m && m.sezione === 'prov_oneri_straord';
-      const isVarPura = m && m.var_fisso === 'variabile' && !m.calcolato;
-      const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato;
+      const isCalc = m && m.calcolato;
       const baseDisplay = isStraord ? 0
-        : isVarPura ? (dato.base_default || 0)
-        : (isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0));
+        : isCalc ? (dato.media_euro || 0)
+        : (dato.ultimo_anno_euro || 0);
       const baseTitle   = isStraord
         ? 'Default 0 (voce di natura non ricorrente — usare l\'override per forzare un valore)'
-        : isVarPura
-            ? '% media storica × fatturato ipotizzato'
-            : (isNonVarNonCalc
-                ? `Ultimo anno arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`
-                : 'Media triennale');
+        : isCalc
+            ? 'Media storica degli importi €'
+            : `Ultimo anno storico arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`;
       const mediaTriDisplay = (dato.media_euro || 0);
 
       const note = (progetto.budget && progetto.budget.note) || {};
@@ -1566,7 +1580,7 @@ const BudgetUI = (() => {
 
       html += `<tr class="${fonteCls}${notaPresente ? ' ab-budget-row-has-note' : ''}">
         <td>${_escapeHtml(r.label)}</td>
-        <td class="num" title="Media triennale degli importi storici">${_fmtEuroInt(mediaTriDisplay)}</td>
+        <td class="num" title="${_escapeHtml(mediaHeaderTitle)}">${_fmtEuroInt(mediaTriDisplay)}</td>
         <td class="num">${_fmtPct(dato.media_pct)}</td>
         <td class="num" title="${baseTitle}">${_fmtEuroInt(baseDisplay)}</td>
         <td class="num">${_renderOverrideCell(r, dato, progetto, notaPresente, notaAperta)}</td>
@@ -2209,14 +2223,23 @@ const BudgetUI = (() => {
     // Totali "Base storica" (stessa logica della vista a video).
     const baseTot = _calcolaBaseStoricaTotali(progetto, b);
 
-    // Medie triennali in € dei derivati storici per la colonna "Media triennale".
+    // Medie storiche in € dei derivati per la colonna "Media": stesso
+    // filtro della vista a video (solo anni con ricavi > 0).
     const totaliStoricoPdf = _calcolaTotaliStorico(progetto);
-    const anniStorPdf = (progetto.meta && progetto.meta.anni_storici) || [];
+    const anniRealiPdf = (b.anni_reali && b.anni_reali.length > 0)
+      ? b.anni_reali
+      : ((progetto.meta && progetto.meta.anni_storici) || []).filter(a => (totaliStoricoPdf[a] || {}).fatturato > 0);
     const medieEuroDerivPdf = {};
     ['fatturato','cdv','totVar','mdc','fissi','totCosti','provOneriStraordNetto','utileAnteImposte','imposte','utileNetto'].forEach(k => {
-      const vals = anniStorPdf.map(a => (totaliStoricoPdf[a] || {})[k] || 0);
+      const vals = anniRealiPdf.map(a => (totaliStoricoPdf[a] || {})[k] || 0);
       medieEuroDerivPdf[k] = vals.length > 0 ? vals.reduce((s,v) => s+v, 0) / vals.length : 0;
     });
+    const yyPdf = y => "'" + String(y).slice(-2);
+    const mediaHeaderPdf = anniRealiPdf.length === 0
+      ? 'Media'
+      : anniRealiPdf.length === 1
+        ? 'Solo ' + yyPdf(anniRealiPdf[0])
+        : 'Media ' + anniRealiPdf.map(yyPdf).join('–');
 
     // Numerazione note utente: assegniamo l'indice nell'ordine in cui le voci
     // compaiono nel prospetto (più leggibile in piè di pagina).
@@ -2257,11 +2280,10 @@ const BudgetUI = (() => {
       if (r.nascondiSeZero && Math.abs(dato.media_euro) < 0.005 && Math.abs(dato.valore) < 0.005) continue;
 
       const isStraord = m && m.sezione === 'prov_oneri_straord';
-      const isVarPura = m && m.var_fisso === 'variabile' && !m.calcolato;
-      const isNonVarNonCalc = m && m.var_fisso !== 'variabile' && !m.calcolato;
+      const isCalc = m && m.calcolato;
       const baseDisplay = isStraord ? 0
-        : isVarPura ? (dato.base_default || 0)
-        : (isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0));
+        : isCalc ? (dato.media_euro || 0)
+        : (dato.ultimo_anno_euro || 0);
       const mediaTriDisplay = (dato.media_euro || 0);
 
       // Nota utente: se presente, assegna numero progressivo e lo mostra come [n]
@@ -2310,10 +2332,13 @@ const BudgetUI = (() => {
     `;
 
     // Note metodologiche fisse (riprendono i tooltip a video)
+    const annoEsRange = anniRealiPdf.length > 0
+      ? (anniRealiPdf.length === 1 ? anniRealiPdf[0] : `${anniRealiPdf[0]}–${anniRealiPdf[anniRealiPdf.length - 1]}`)
+      : '';
     const noteMetodo = [
-      '<strong>Media triennale</strong> — media in € degli importi storici sui tre anni: riferimento informativo per ponderare correzioni manuali al budget.',
-      '<strong>Base (Ult. Anno o %)</strong> — default di partenza del budget in assenza di override: ricavi, costi fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili (incluse macroaree custom variabili) = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 per natura non ricorrente; rimanenze = media € storica.',
-      '<strong>% storica</strong> — incidenza media sul fatturato calcolata come media delle incidenze % di ciascun anno storico (non come media degli importi diviso media del fatturato).',
+      `<strong>${_escapeHtml(mediaHeaderPdf)}</strong> — media in € degli importi degli esercizi storici importati${annoEsRange ? ' (' + annoEsRange + ')' : ''}: riferimento informativo per ponderare correzioni manuali al budget.`,
+      '<strong>Ultimo anno €</strong> — riferimento storico fisso, indipendente dal fatturato ipotizzato: ricavi, costi variabili, costi fissi e imposte = ultimo esercizio importato arrotondato al centinaio; rimanenze = media € storica; proventi/oneri straordinari = 0 per natura non ricorrente.',
+      '<strong>% storica</strong> — incidenza media sul fatturato calcolata come media delle incidenze % di ciascun anno storico importato (non come media degli importi diviso media del fatturato).',
       '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi e imposte: ultimo anno o override utente. Proventi/oneri straordinari: 0 di default o override utente. Rimanenze: media € storica o override €.',
       '<strong>Costo del venduto</strong> = Mat. prime + Altri costi variabili + Rimanenze iniziali − Rimanenze finali.',
       `<strong>Fatturato di break-even</strong> = (Rim. iniziali − Rim. finali + Σ costi fissi) / (1 − Σ % costi variabili). ${b.break_even != null ? 'Differenza vs ipotizzato: ' + _fmtPctSigned(deltaFattBe || 0) : 'Non calcolabile (denominatore non positivo o costi fissi nulli).'}`
@@ -2325,9 +2350,9 @@ const BudgetUI = (() => {
     html += kpiHtml;
     html += '<table class="ab-pdf-tab"><thead><tr>'
          +    '<th>Macroarea</th>'
-         +    '<th class="num">Media triennale</th>'
+         +    `<th class="num">${_escapeHtml(mediaHeaderPdf)}</th>`
          +    '<th class="num">% storica</th>'
-         +    '<th class="num">Base (Ult. Anno o %)</th>'
+         +    '<th class="num">Ultimo anno €</th>'
          +    '<th class="num">Budget €</th>'
          +    '<th class="num">Budget %</th>'
          +  '</tr></thead><tbody>' + body + '</tbody></table>';
