@@ -1479,8 +1479,8 @@ const BudgetUI = (() => {
               <th>Macroarea</th>
               <th class="num" title="Media degli importi € sui tre anni storici, riferimento informativo per le decisioni di budget.">Media triennale</th>
               <th class="num" title="Incidenza % media sul fatturato calcolata come media delle incidenze % di ciascun anno storico.">% storica</th>
-              <th class="num" title="Default del budget in assenza di override: ricavi, fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 (natura non ricorrente); rimanenze = media € storica.">Base (Ult. Anno o %)</th>
-              <th class="num">Override</th>
+              <th class="num" title="Default del budget in assenza di rettifica: ricavi, fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 (natura non ricorrente); rimanenze = media € storica.">Base (Ult. Anno o %)</th>
+              <th class="num">Rettifica</th>
               <th class="num">Budget €</th>
               <th class="num">Budget %</th>
             </tr>
@@ -1551,7 +1551,7 @@ const BudgetUI = (() => {
         : isVarPura ? (dato.base_default || 0)
         : (isNonVarNonCalc ? (dato.ultimo_anno_euro || 0) : (dato.media_euro || 0));
       const baseTitle   = isStraord
-        ? 'Default 0 (voce di natura non ricorrente — usare l\'override per forzare un valore)'
+        ? 'Default 0 (voce di natura non ricorrente — usare la rettifica per forzare un valore)'
         : isVarPura
             ? '% media storica × fatturato ipotizzato'
             : (isNonVarNonCalc
@@ -2312,9 +2312,9 @@ const BudgetUI = (() => {
     // Note metodologiche fisse (riprendono i tooltip a video)
     const noteMetodo = [
       '<strong>Media triennale</strong> — media in € degli importi storici sui tre anni: riferimento informativo per ponderare correzioni manuali al budget.',
-      '<strong>Base (Ult. Anno o %)</strong> — default di partenza del budget in assenza di override: ricavi, costi fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili (incluse macroaree custom variabili) = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 per natura non ricorrente; rimanenze = media € storica.',
+      '<strong>Base (Ult. Anno o %)</strong> — default di partenza del budget in assenza di rettifica: ricavi, costi fissi e imposte = ultimo anno arrotondato al centinaio; costi variabili (incluse macroaree custom variabili) = % media storica × fatturato ipotizzato; proventi/oneri straordinari = 0 per natura non ricorrente; rimanenze = media € storica.',
       '<strong>% storica</strong> — incidenza media sul fatturato calcolata come media delle incidenze % di ciascun anno storico (non come media degli importi diviso media del fatturato).',
-      '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi e imposte: ultimo anno o override utente. Proventi/oneri straordinari: 0 di default o override utente. Rimanenze: media € storica o override €.',
+      '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi e imposte: ultimo anno o rettifica utente. Proventi/oneri straordinari: 0 di default o rettifica utente. Rimanenze: media € storica o rettifica €.',
       '<strong>Costo del venduto</strong> = Mat. prime + Altri costi variabili + Rimanenze iniziali − Rimanenze finali.',
       `<strong>Fatturato di break-even</strong> = (Rim. iniziali − Rim. finali + Σ costi fissi) / (1 − Σ % costi variabili). ${b.break_even != null ? 'Differenza vs ipotizzato: ' + _fmtPctSigned(deltaFattBe || 0) : 'Non calcolabile (denominatore non positivo o costi fissi nulli).'}`
     ];
