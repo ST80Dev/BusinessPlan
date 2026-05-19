@@ -371,6 +371,212 @@ const ExcelImport = (() => {
   }
 
   /* ──────────────────────────────────────────────────────────
+     Analisi mastri (parser permissivo, indipendente dall'ordine)
+
+     A differenza di `parseBilancioVerifica`, questa funzione NON cerca
+     una riga pivot di confine SP/CE: scansiona tutte le righe foglia
+     del file e le raggruppa per mastro (le prime due cifre del
+     codice). Per ciascun mastro propone una classificazione di
+     default SP/CE basata sulla numerazione standard del piano conti
+     italiano (01–57 = SP, 58+ = CE).
+
+     Il risultato è pensato per alimentare una modale di anteprima in
+     cui l'operatore conferma o modifica la classificazione di ogni
+     mastro prima di procedere con l'import vero e proprio. Funziona
+     anche su file senza il pivot 54/00/000 (es. SNC con SP minimale)
+     e su file in cui le righe SP non sono in cima.
+     ────────────────────────────────────────────────────────── */
+
+  /**
+   * Classificazione di default di un mastro in base al suo codice
+   * numerico, secondo la convenzione tipica dei piani conti italiani.
+   *
+   *   01–57  → 'sp'   (SP attivo + passivo, fino a Ratei/Risconti)
+   *   58+    → 'ce'   (Ricavi, costi, oneri, imposte)
+   *
+   * L'operatore può sempre sovrascrivere la classificazione nella
+   * modale di anteprima: i mastri di chiusura/risultato (90–94 in
+   * alcuni piani) o eventuali eccezioni vanno gestiti manualmente.
+   *
+   * @param {string} codiceMastro - codice mastro a 2 cifre (es. '06', '58')
+   * @returns {'sp'|'ce'}
+   */
+  function _classificaMastroDefault(codiceMastro) {
+    const n = parseInt(codiceMastro, 10);
+    if (!isFinite(n)) return 'sp';
+    return (n <= 57) ? 'sp' : 'ce';
+  }
+
+  /**
+   * Parsea il bilancio di verifica e raggruppa i sottoconti foglia
+   * per mastro, senza decidere a priori dove finisce lo SP e dove
+   * inizia il CE. La classificazione effettiva viene proposta come
+   * default e confermata dall'utente in un secondo momento.
+   *
+   * @param {Array<Array>} rows - matrice celle dal lettore xlsx
+   * @returns {{
+   *   ditta: string,
+   *   anni: number[],
+   *   riga_header: number,
+   *   mastri: Array<{
+   *     codice: string,
+   *     descrizione_rappresentativa: string,
+   *     numero_sottoconti: number,
+   *     classificazione_default: 'sp'|'ce',
+   *     sottoconti: Array<{
+   *       codice: string,
+   *       descrizione: string,
+   *       mastro: string,
+   *       sottomastro: string,
+   *       valori: Object<string,{dare:number,avere:number,netto:number}>
+   *     }>
+   *   }>,
+   *   warnings: string[]
+   * }}
+   */
+  function analizzaMastri(rows) {
+    const warnings = [];
+    const header = _trovaHeader(rows);
+    if (!header) {
+      throw new Error('Excel: intestazione non riconosciuta. Mi aspetto colonne CodiceConto, Descrizione, e almeno un anno.');
+    }
+
+    const ditta = _trovaDitta(rows, header);
+    const anni  = header.anni.map(a => a.anno).sort((a, b) => a - b);
+
+    /* Raggruppamento per mastro. La posizione delle righe nel file
+       è irrilevante: i sottoconti dello stesso mastro confluiscono
+       nel medesimo bucket anche se sparsi (es. mastro SP in fondo
+       al file dopo i mastri CE). */
+    const mastriMap = new Map();
+
+    for (let r = header.rigaHeader + 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row) continue;
+      const codice = String(row[header.colCodice] || '').trim();
+      if (!codice) continue;
+
+      const cls = _classificaCodice(codice);
+      if (cls.livello !== 'sottoconto') continue; // ignora subtotali mastro/conto e righe altro
+
+      const descrizione = String(row[header.colDescr] || '').trim();
+      const codiceMastro = cls.mm;
+
+      const valori = {};
+      for (const a of header.anni) {
+        const da  = String(row[a.colDA] || '').trim().toUpperCase();
+        const v   = Number(row[a.col]);
+        const num = isFinite(v) ? v : 0;
+        const dare  = (da === 'D') ? num : 0;
+        const avere = (da === 'A') ? num : 0;
+        valori[a.anno] = { dare, avere, netto: dare - avere };
+      }
+
+      if (!mastriMap.has(codiceMastro)) {
+        mastriMap.set(codiceMastro, {
+          codice: codiceMastro,
+          descrizione_rappresentativa: descrizione,
+          sottoconti: []
+        });
+      }
+      mastriMap.get(codiceMastro).sottoconti.push({
+        codice,
+        descrizione,
+        mastro: codiceMastro,
+        sottomastro: cls.ss,
+        valori
+      });
+    }
+
+    const mastri = Array.from(mastriMap.values())
+      .sort((a, b) => a.codice.localeCompare(b.codice))
+      .map(m => ({
+        codice: m.codice,
+        descrizione_rappresentativa: m.descrizione_rappresentativa,
+        numero_sottoconti: m.sottoconti.length,
+        classificazione_default: _classificaMastroDefault(m.codice),
+        sottoconti: m.sottoconti
+      }));
+
+    if (mastri.length === 0) {
+      warnings.push('Nessun sottoconto trovato. Verificare il formato del file (codici nel formato XX/SS/CCC).');
+    }
+
+    return {
+      ditta,
+      anni,
+      riga_header: header.rigaHeader,
+      mastri,
+      warnings
+    };
+  }
+
+  /**
+   * Riconduce un risultato di `analizzaMastri` (più la scelta di
+   * classificazione per mastro) al formato classico di
+   * `parseBilancioVerifica`: appiattisce i sottoconti dei mastri
+   * classificati come 'ce' e calcola le rimanenze dalla doppia entry
+   * D/A dei mastri di variazione (`MASTRI_VARIAZIONE_RIMANENZE`).
+   *
+   * Pensato per essere chiamato dopo la modale di anteprima (Step 2):
+   * l'utente conferma la mappa `{ codiceMastro: 'sp'|'ce'|'ignora' }`
+   * e questa funzione produce l'oggetto consumabile dal resto del
+   * modulo AB senza dover rileggere il file.
+   *
+   * @param {Object} analisi  - output di `analizzaMastri`
+   * @param {Object<string,'sp'|'ce'|'ignora'>} classificazione
+   *        - mappa codice mastro → classificazione confermata
+   * @param {string[]} [mastriRimanenze] - override mastri di variazione rimanenze
+   * @returns {Object} stessa forma di `parseBilancioVerifica`
+   */
+  function applicaClassificazione(analisi, classificazione, mastriRimanenze) {
+    const warnings = analisi.warnings ? analisi.warnings.slice() : [];
+    const mastriRim = Array.isArray(mastriRimanenze) && mastriRimanenze.length > 0
+      ? mastriRimanenze
+      : MASTRI_VARIAZIONE_RIMANENZE;
+
+    const sottoconti = [];
+    const rimanenzePerAnno = {};
+    analisi.anni.forEach(a => { rimanenzePerAnno[a] = { iniziali: 0, finali: 0 }; });
+
+    for (const m of analisi.mastri) {
+      const cls = classificazione[m.codice] || m.classificazione_default;
+      if (cls !== 'ce') continue;
+
+      const isRim = mastriRim.indexOf(m.codice) >= 0;
+
+      for (const s of m.sottoconti) {
+        // I sottoconti dei mastri di variazione rimanenze NON entrano
+        // nel feed normale: contribuiscono solo alle rimanenze
+        // iniziali/finali via doppia entry D/A.
+        if (isRim) {
+          for (const anno of analisi.anni) {
+            const v = s.valori[anno];
+            if (!v) continue;
+            rimanenzePerAnno[anno].iniziali += v.dare;
+            rimanenzePerAnno[anno].finali   += v.avere;
+          }
+          continue;
+        }
+        sottoconti.push(s);
+      }
+    }
+
+    if (sottoconti.length === 0) {
+      warnings.push('Nessun sottoconto CE risultante dalla classificazione. Verificare la scelta dei mastri.');
+    }
+
+    return {
+      ditta: analisi.ditta,
+      anni: analisi.anni,
+      pivot_riga: -1, // non applicabile in questo flusso
+      sottoconti,
+      rimanenze: rimanenzePerAnno,
+      warnings
+    };
+  }
+
+  /* ──────────────────────────────────────────────────────────
      Mapping default sottoconto → macroarea
 
      Strategia: il mastro del sottoconto viene cercato nel campo
@@ -490,6 +696,8 @@ const ExcelImport = (() => {
     MASTRI_VARIAZIONE_RIMANENZE,
     SIGLA_TO_MACROAREA,
     parseBilancioVerifica,
+    analizzaMastri,
+    applicaClassificazione,
     defaultMapping,
     calcolaStorico,
     ricalcolaStorico
