@@ -322,7 +322,7 @@ const UI = (() => {
           descrizione: 'Bilancio storico SP/CE → proiezioni pluriennali → SP, CE, rendiconto, dashboard KPI.',
           ctaLabel: '+ Nuovo business plan',
           ctaOnclick: "UI.openModal('modal-nuovo-progetto')",
-          aprilLabel: 'Apri file JSON',
+          aprilLabel: 'Apri file salvato',
           apriOnclick: "Projects.apriProgetto()"
         })}
         ${_renderModuleCard({
@@ -331,7 +331,7 @@ const UI = (() => {
           descrizione: 'CE storico Excel → medie % sul fatturato → budget annuale, fatturato di break-even, monitoraggio consuntivo.',
           ctaLabel: '+ Nuova analisi',
           ctaOnclick: "UI.openModal('modal-nuova-analisi')",
-          aprilLabel: 'Apri file JSON',
+          aprilLabel: 'Apri file salvato',
           apriOnclick: "Projects.apriProgetto()"
         })}
         ${_renderModuleCard({
@@ -340,7 +340,7 @@ const UI = (() => {
           descrizione: 'IRES, IRAP, imposta sostitutiva CPB e relativi acconti. Quadri RF/IC, ROL art. 96, perdite, ACE residua, F24.',
           ctaLabel: '+ Nuovo calcolo',
           ctaOnclick: "UI.openModal('modal-nuove-imposte')",
-          aprilLabel: 'Apri file JSON',
+          aprilLabel: 'Apri file salvato',
           apriOnclick: "Projects.apriProgetto()"
         })}
       </div>
