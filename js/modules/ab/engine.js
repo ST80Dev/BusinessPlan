@@ -383,7 +383,53 @@ const BudgetEngine = (() => {
       .reduce((s, v) => s + (Number(v) || 0), 0);
     const frazione = periodiTotali > 0 ? periodiChiusi / periodiTotali : 0;
 
-    const fattProiettato = frazione > 0 ? (fattConsuntivato / frazione) : budget.fatturato;
+    // Modalità di proiezione del fatturato:
+    //   'lineare'         → estrapolazione yt-d / frazione_anno (default)
+    //   'stagionalizzata' → mix per periodo: dove il consuntivo è chiuso usa
+    //                       il consuntivo, dove è aperto usa il valore atteso
+    //                       inserito a mano (€ per periodo). La proiezione
+    //                       annua è la somma dei 12 (o 4) periodi del mix.
+    //                       Pensata per attività con stagionalità marcata
+    //                       (es. stabilimenti balneari, gelaterie) dove la
+    //                       proiezione lineare sovra/sotto-stima vistosamente.
+    const modalita = cons.modalita_proiezione === 'stagionalizzata'
+      ? 'stagionalizzata' : 'lineare';
+    const fattAtteso = cons.fatturato_atteso || {};
+
+    // Vista per periodo (mese o trimestre): variabili pro-quota sul fatturato
+    // del periodo, fissi pro-rata su 1/N dell'anno. Le righe di proventi/oneri
+    // straordinari e imposte seguono lo stesso pro-rata dei fissi (sono
+    // comunque stime).
+    const periodiKeys = cons.frequenza === 'trimestrale'
+      ? ['1', '2', '3', '4']
+      : ['01','02','03','04','05','06','07','08','09','10','11','12'];
+
+    // Mix per periodo per la modalità stagionalizzata: consuntivo se chiuso,
+    // atteso se aperto. Per coerenza viene calcolato sempre, ma viene usato
+    // per la proiezione solo se modalita === 'stagionalizzata'.
+    const fattMixPerPeriodo = {};
+    const fonteMixPerPeriodo = {}; // 'consuntivo' | 'atteso' | 'vuoto'
+    let attesoTotale = 0;
+    periodiKeys.forEach(k => {
+      const c = Number(fattPerPeriodo[k]) || 0;
+      const a = Number(fattAtteso[k]) || 0;
+      attesoTotale += a;
+      if (c > 0) {
+        fattMixPerPeriodo[k]  = c;
+        fonteMixPerPeriodo[k] = 'consuntivo';
+      } else if (a > 0) {
+        fattMixPerPeriodo[k]  = a;
+        fonteMixPerPeriodo[k] = 'atteso';
+      } else {
+        fattMixPerPeriodo[k]  = 0;
+        fonteMixPerPeriodo[k] = 'vuoto';
+      }
+    });
+    const fattMixTotale = Object.values(fattMixPerPeriodo).reduce((s, v) => s + v, 0);
+
+    const fattProiettato = modalita === 'stagionalizzata'
+      ? fattMixTotale
+      : (frazione > 0 ? (fattConsuntivato / frazione) : budget.fatturato);
 
     function _calcolaVista(fattConsForCosti, fattAnnoCompleto, frazTempo) {
       const valori = {};
@@ -427,13 +473,6 @@ const BudgetEngine = (() => {
     const consuntivato = _calcolaVista(fattConsuntivato, fattConsuntivato, frazione);
     const proiezione   = _calcolaVista(fattConsuntivato, fattProiettato, 1);
 
-    // Vista per periodo (mese o trimestre): variabili pro-quota sul fatturato
-    // del periodo, fissi pro-rata su 1/N dell'anno. Le righe di proventi/oneri
-    // straordinari e imposte seguono lo stesso pro-rata dei fissi (sono
-    // comunque stime).
-    const periodiKeys = cons.frequenza === 'trimestrale'
-      ? ['1', '2', '3', '4']
-      : ['01','02','03','04','05','06','07','08','09','10','11','12'];
     const fraz1Periodo = periodiTotali > 0 ? 1 / periodiTotali : 0;
 
     const perPeriodo = {};
@@ -442,15 +481,20 @@ const BudgetEngine = (() => {
       perPeriodo[k] = _calcolaVista(fattPeriodo, fattPeriodo, fraz1Periodo);
       perPeriodo[k].fatturato_periodo = fattPeriodo;
       perPeriodo[k].inserito = fattPeriodo > 0;
+      perPeriodo[k].atteso   = Number(fattAtteso[k]) || 0;
+      perPeriodo[k].mix      = fattMixPerPeriodo[k];
+      perPeriodo[k].fonte    = fonteMixPerPeriodo[k];
     });
 
     return {
       frequenza:              cons.frequenza,
+      modalita_proiezione:    modalita,
       periodi_totali:         periodiTotali,
       periodi_chiusi:         periodiChiusi,
       periodi_keys:           periodiKeys,
       frazione_anno:          frazione,
       fatturato_consuntivato: fattConsuntivato,
+      fatturato_atteso_tot:   attesoTotale,
       fatturato_proiettato:   fattProiettato,
       consuntivato,
       proiezione,
