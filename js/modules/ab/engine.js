@@ -189,10 +189,19 @@ const BudgetEngine = (() => {
     const ovrPct  = budget.override_pct   || {};
     const ovrEur  = budget.override_fissi || {};
 
+    // Anni "effettivamente importati": quelli con ricavi > 0. Se l'utente
+    // ha importato un file con colonne anno presenti ma solo l'ultimo
+    // realmente popolato (azienda neocostituita, primo esercizio breve,
+    // ecc.), gli altri anni hanno saldi 0 e non devono concorrere alla
+    // media — altrimenti la /N divide per il numero di colonne anziché
+    // per il numero di esercizi reali, schiacciando la media verso il
+    // basso. Stessa euristica già usata per mediePct (riga sotto).
+    const anniReali = anni.filter(a => Number((storico[a] || {}).ricavi) > 0);
+
     // Medie storiche per macroarea (€ e % sul fatturato)
     const medieEuro = {};
     macro.forEach(m => {
-      const valori = anni.map(a => Number((storico[a] || {})[m.id]) || 0);
+      const valori = anniReali.map(a => Number((storico[a] || {})[m.id]) || 0);
       medieEuro[m.id] = valori.length > 0 ? valori.reduce((s, v) => s + v, 0) / valori.length : 0;
     });
 
@@ -320,6 +329,7 @@ const BudgetEngine = (() => {
       fatturato_storico_medio: fatturatoStoricoMedio,
       fatturato_ultimo_arrotondato: fatturatoUltimoArrotondato,
       ultimo_anno: ultimoAnno,
+      anni_reali: anniReali,
       valori,
       cdv, totVar, mdc, fissi, totCosti,
       provOneriStraordNetto, utileAnteImposte, imposte: imposteVal, utileNetto,
