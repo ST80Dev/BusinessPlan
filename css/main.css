@@ -3372,7 +3372,7 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   body.ab-pdf-mode #app { display: none !important; }
   body.ab-pdf-mode #ab-pdf-print {
     display: block;
-    padding: 12mm;
+    padding: 4mm;
     color: var(--color-text-primary);
     background: #FFFFFF;
   }
@@ -3402,9 +3402,14 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
     print-color-adjust: exact;
   }
 
+  /* Margini di stampa ridotti al minimo tipografico utile:
+     5mm @page + 4mm padding del container = 9mm dal bordo carta,
+     contro i 22mm precedenti (10+12). Massimizza la larghezza utile
+     per evitare troncamenti di colonne e impaginazione su due
+     pagine dei prospetti Budget/Consuntivo. */
   @page {
     size: A4 portrait;
-    margin: 10mm;
+    margin: 5mm;
   }
 }
 
