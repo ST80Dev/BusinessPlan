@@ -1894,6 +1894,13 @@ const BudgetUI = (() => {
                   <div class="ab-freq-opt ${pre.modalita_proiezione === 'stagionalizzata' ? 'active' : ''}"
                        onclick="BudgetUI.cambiaModalitaProiezione('stagionalizzata')">Stagionalizzata</div>
                 </div>
+                ${pre.modalita_proiezione === 'stagionalizzata' ? `
+                <span class="ab-distrib-pct-trigger"
+                      role="button" tabindex="0"
+                      title="Apri la distribuzione per percentuali: pesi % che sommano 100, applicati al fatturato di budget per riempire i periodi della riga 'Ricavi attesi'."
+                      onclick="BudgetUI.apriDistribuisciPct()"
+                      onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ Distribuisci da %</span>
+                ` : ''}
               </div>
               <div class="ab-consuntivo-stats text-muted">
                 <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
@@ -2074,11 +2081,6 @@ const BudgetUI = (() => {
         html += `<tr class="ab-consuntivo-atteso-row">
           <td class="ab-col-stick ab-col-stick-1">
             <span class="ab-consuntivo-atteso-label">Ricavi attesi (€)</span>
-            <span class="ab-consuntivo-atteso-distrib"
-                  role="button" tabindex="0"
-                  title="Apri la distribuzione per percentuali: pesi % che sommano 100, applicati al fatturato di budget per riempire i periodi."
-                  onclick="BudgetUI.apriDistribuisciPct()"
-                  onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ Distribuisci da %</span>
           </td>
           <td class="num ab-col-stick ab-col-stick-2 ab-cell-muted">${_fmtEuroInt(budgetFatt)}</td>
           <td class="num ab-col-stick ab-col-stick-3">${attesoTot > 0 ? _fmtEuroInt(attesoTot) : ''}</td>
