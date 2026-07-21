@@ -2899,6 +2899,45 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   min-width: 220px;
 }
 
+/* Importo sottoconto editabile nella mappatura: più compatto della
+   amount-field standard perché convive con più colonne anno. Il bordo
+   compare all'hover per segnalare che la cella è modificabile. */
+.ab-mappatura-tab .ab-sc-valore {
+  min-width: 80px;
+  max-width: 130px;
+  padding: 2px 6px;
+}
+.ab-mappatura-tab .ab-sc-valore:hover:not(:focus) {
+  border-color: var(--color-border);
+  background: var(--color-surface-alt);
+}
+
+/* Colonna azioni + "×" per eliminare un sottoconto importato */
+.ab-mappatura-tab th.ab-sc-azioni-col,
+.ab-mappatura-tab td.ab-sc-azioni {
+  width: 28px;
+  text-align: center;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.ab-sc-elimina {
+  display: inline-block;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+}
+.ab-sc-elimina:hover,
+.ab-sc-elimina:focus {
+  color: var(--color-danger, #c0392b);
+  background: var(--color-surface-alt);
+  outline: none;
+}
+
 .ab-stats-warn strong { color: var(--color-warning); }
 
 .ab-mappatura-selcount {

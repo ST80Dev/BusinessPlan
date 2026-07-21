@@ -1047,7 +1047,9 @@ const BudgetUI = (() => {
             <th class="num">Mastro</th>
     `;
     anni.forEach(a => { html += `<th class="num">${a}</th>`; });
-    html += `<th>Macroarea</th></tr></thead><tbody>`;
+    html += `<th>Macroarea</th>`;
+    if (!readonly) html += `<th class="ab-sc-azioni-col" title="Elimina sottoconto"></th>`;
+    html += `</tr></thead><tbody>`;
 
     for (const s of sottoconti) {
       const dragAttr = readonly ? '' : ' draggable="true"';
@@ -1062,13 +1064,28 @@ const BudgetUI = (() => {
       anni.forEach(a => {
         const v = s.valori && s.valori[a];
         const importo = v ? Math.max(v.dare, v.avere) : 0;
-        html += `<td class="num">${_fmtEuro(importo)}</td>`;
+        if (readonly) {
+          html += `<td class="num">${_fmtEuro(importo)}</td>`;
+        } else {
+          // Importo editabile post-import: modifica la cifra senza
+          // dover ritoccare il file Excel di origine. Il valore viene
+          // riscritto sul lato Dare/Avere prevalente del conto.
+          html += `<td class="num cell-amount"><div class="amount-field ab-sc-valore"
+            contenteditable="true" draggable="false" data-placeholder="0"
+            data-sc-codice="${_escapeHtml(s.codice)}" data-sc-anno="${_escapeHtml(String(a))}"
+            title="Modifica l'importo di questo conto per l'anno ${_escapeHtml(String(a))}"
+            onblur="BudgetUI.valoreSottocontoBlur(this)"
+            onkeydown="BudgetUI.valoreSottocontoKeyDown(event)">${_fmtEuro(importo)}</div></td>`;
+        }
       });
       if (readonly) {
         html += `<td class="ab-mappatura-readonly text-muted">— rimanenze —</td>`;
       } else {
         const cur = (progetto.mapping || {})[s.codice] || '';
         html += `<td>${_dropdownMacroaree(s.codice, cur, macroAree)}</td>`;
+        html += `<td class="ab-sc-azioni"><span class="ab-sc-elimina" role="button" tabindex="0"
+          draggable="false" data-elimina-sc="${_escapeHtml(s.codice)}"
+          title="Elimina questo sottoconto dal progetto">×</span></td>`;
       }
       html += '</tr>';
     }
@@ -1119,6 +1136,14 @@ const BudgetUI = (() => {
         }
         return;
       }
+      // "×" su una riga sottoconto — elimina il conto importato
+      const scDel = ev.target.closest('[data-elimina-sc]');
+      if (scDel) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        _eliminaSottocontoConConferma(scDel.dataset.eliminaSc);
+        return;
+      }
       const cell = ev.target.closest('.ab-cell-codice');
       if (!cell) return;
       const tr = cell.closest('tr.ab-row-draggable');
@@ -1136,6 +1161,16 @@ const BudgetUI = (() => {
         }
         _aggiornaSelCount();
       }
+    });
+
+    // Tastiera: Enter/Spazio sulla "×" di un sottoconto lo elimina
+    // (coerente con l'accessibilità dei box custom).
+    root.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      const scDel = ev.target.closest('[data-elimina-sc]');
+      if (!scDel) return;
+      ev.preventDefault();
+      _eliminaSottocontoConConferma(scDel.dataset.eliminaSc);
     });
 
     // Drag start: se la riga trascinata non è selezionata, il drag
@@ -1254,6 +1289,47 @@ const BudgetUI = (() => {
     Projects.aggiornaMappingSottoconto(codice, macroareaId);
     UI.aggiornaStatusBar('modificato');
     renderMacroSezioni();
+  }
+
+  /**
+   * Blur su una cella importo editabile della mappatura: salva il
+   * nuovo valore sul sottoconto e ricalcola storico + prospetti.
+   */
+  function valoreSottocontoBlur(el) {
+    const codice = el.dataset.scCodice;
+    const anno   = el.dataset.scAnno;
+    if (!codice || !anno) return;
+    const nuovo = _parseEuro((el.textContent || '').trim());
+    if (Projects.aggiornaValoreSottoconto(codice, anno, nuovo)) {
+      UI.aggiornaStatusBar('modificato');
+      renderMacroSezioni();
+    }
+  }
+
+  function valoreSottocontoKeyDown(e) {
+    // Enter/Esc confermano (blur → salvataggio). Blocchiamo il newline.
+    if (e.key === 'Enter' || e.key === 'Escape') {
+      e.preventDefault();
+      e.target.blur();
+    }
+  }
+
+  /**
+   * Elimina un sottoconto importato previa conferma. Usato sia dal
+   * click sulla "×" sia dalla scorciatoia da tastiera (Enter/Spazio).
+   */
+  function _eliminaSottocontoConConferma(codice) {
+    if (!codice) return;
+    const prog = Projects.getProgetto();
+    const sc = (prog && Array.isArray(prog.sottoconti_ce))
+      ? prog.sottoconti_ce.find(x => x.codice === codice)
+      : null;
+    const descr = sc && sc.descrizione ? ' — ' + sc.descrizione : '';
+    if (!confirm(`Eliminare il sottoconto "${codice}${descr}"?\n\nIl conto viene rimosso dal progetto e lo storico ricalcolato. Il file Excel di origine non viene modificato.`)) return;
+    if (Projects.eliminaSottoconto(codice)) {
+      UI.aggiornaStatusBar('modificato');
+      renderMacroSezioni();
+    }
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -3047,6 +3123,8 @@ const BudgetUI = (() => {
     annullaModaleClassifica:   annullaModaleClassifica,
     confermaModaleClassifica:  confermaModaleClassifica,
     cambiaMacroarea:    cambiaMacroarea,
+    valoreSottocontoBlur:    valoreSottocontoBlur,
+    valoreSottocontoKeyDown: valoreSottocontoKeyDown,
     budgetBlur:         budgetBlur,
     budgetKeyDown:      budgetKeyDown,
     toggleNota:         toggleNota,
