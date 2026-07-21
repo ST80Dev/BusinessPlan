@@ -1471,6 +1471,87 @@ const Projects = (() => {
     _modificato = true;
   }
 
+  /**
+   * Modifica l'importo di un sottoconto CE per un anno direttamente
+   * dalla mappatura, senza dover correggere e re-importare il file
+   * Excel di origine (post-import di valori errati o rettifiche su
+   * bilanci passati).
+   *
+   * L'importo passato è il valore "lordo" mostrato in tabella
+   * (Math.max(dare, avere), sempre ≥ 0). Viene riscritto sul lato
+   * contabile prevalente del sottoconto per quell'anno, preservando
+   * la natura Dare/Avere del conto:
+   *   - conto in Avere (o mappato a una macroarea di tipo ricavo)
+   *     → nuovo importo in Avere;
+   *   - altrimenti → in Dare.
+   * `netto = dare − avere` viene aggiornato di conseguenza e lo
+   * storico ricalcolato.
+   *
+   * @param {string} codice
+   * @param {string|number} anno
+   * @param {number|null} nuovoValore  (null/NaN ⇒ 0)
+   * @returns {boolean} true se aggiornato
+   */
+  function aggiornaValoreSottoconto(codice, anno, nuovoValore) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return false;
+    const sc = (_progettoCorrente.sottoconti_ce || []).find(s => s.codice === codice);
+    if (!sc) return false;
+
+    const val = (typeof nuovoValore === 'number' && isFinite(nuovoValore)) ? nuovoValore : 0;
+    const importo = Math.abs(val);
+
+    if (!sc.valori) sc.valori = {};
+    const prec = sc.valori[anno] || { dare: 0, avere: 0, netto: 0 };
+
+    // Lato prevalente da preservare: quello con l'importo maggiore.
+    // Se il valore precedente è nullo/simmetrico, deduci il lato dal
+    // tipo della macroarea mappata (ricavo ⇒ Avere, altrimenti Dare).
+    let lato;
+    if (prec.avere > prec.dare)      lato = 'avere';
+    else if (prec.dare > prec.avere) lato = 'dare';
+    else {
+      const macroId = (_progettoCorrente.mapping || {})[codice];
+      const macro = (_progettoCorrente.macro_sezioni || []).find(m => m.id === macroId);
+      lato = (macro && macro.tipo === 'ricavo') ? 'avere' : 'dare';
+    }
+
+    sc.valori[anno] = (lato === 'avere')
+      ? { dare: 0, avere: importo, netto: -importo }
+      : { dare: importo, avere: 0, netto: importo };
+
+    _progettoCorrente.storico = ExcelImport.ricalcolaStorico(_progettoCorrente);
+    _modificato = true;
+    return true;
+  }
+
+  /**
+   * Rimuove un sottoconto CE dal progetto (es. conto a zero o
+   * duplicato). Elimina anche la sua eventuale mappatura e ricalcola
+   * lo storico. Non tocca il file Excel di origine.
+   *
+   * Nota: i sottoconti dei mastri di variazione rimanenze concorrono
+   * al blocco `rimanenze` calcolato in fase di import; la UI ne
+   * impedisce l'eliminazione (righe read-only), quindi qui non serve
+   * ricalcolare le rimanenze.
+   *
+   * @param {string} codice
+   * @returns {boolean} true se eliminato
+   */
+  function eliminaSottoconto(codice) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return false;
+    const arr = _progettoCorrente.sottoconti_ce;
+    if (!Array.isArray(arr)) return false;
+    const idx = arr.findIndex(s => s.codice === codice);
+    if (idx < 0) return false;
+
+    arr.splice(idx, 1);
+    if (_progettoCorrente.mapping) delete _progettoCorrente.mapping[codice];
+
+    _progettoCorrente.storico = ExcelImport.ricalcolaStorico(_progettoCorrente);
+    _modificato = true;
+    return true;
+  }
+
   /* ──────────────────────────────────────────────────────────
      Macroaree custom (gruppi definiti dall'utente)
 
@@ -1698,6 +1779,8 @@ const Projects = (() => {
     creaAnalisi,
     applicaImportCE,
     aggiornaMappingSottoconto,
+    aggiornaValoreSottoconto,
+    eliminaSottoconto,
     aggiornaBudget,
     aggiornaConsuntivo,
     creaMacroareaCustom,
