@@ -1979,7 +1979,7 @@ const BudgetUI = (() => {
                 ` : ''}
               </div>
               <div class="ab-consuntivo-stats text-muted">
-                <span><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi chiusi</span>
+                <span title="Periodi trascorsi fino all'ultimo mese con ricavo inserito: i mesi intermedi a ricavo zero contano comunque come trascorsi (i loro costi fissi sono conteggiati); i mesi successivi non sono ancora rilevati."><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi trascorsi</span>
                 <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
                 <span>Consuntivato: <strong>${_fmtEuroInt(pre.fatturato_consuntivato)}</strong></span>
               </div>
@@ -2847,12 +2847,12 @@ const BudgetUI = (() => {
       }));
     }
 
-    // Mensile: cumulato gen→ultimo mese compilato
+    // Mensile: cumulato gen→ultimo mese con ricavo (orizzonte consuntivo).
+    // L'orizzonte è calcolato una sola volta dal motore: i mesi intermedi a
+    // ricavo zero rientrano nel cumulato (i loro fissi vanno contati), i mesi
+    // oltre l'orizzonte hanno vista vuota e non concorrono.
     const meseLabels = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-    let lastIdx = -1;
-    pre.periodi_keys.forEach((k, i) => {
-      if (pre.per_periodo[k] && pre.per_periodo[k].inserito) lastIdx = i;
-    });
+    const lastIdx = pre.ultimo_periodo_con_dati;
 
     const valoriCum = {};
     const totaliCum = { fatturato: 0, cdv: 0, totVar: 0, mdc: 0, fissi: 0, totCosti: 0, provOneriStraordNetto: 0, utileAnteImposte: 0, imposte: 0, utileNetto: 0 };
@@ -3017,7 +3017,7 @@ const BudgetUI = (() => {
         <div class="ab-pdf-kpi-card">
           <div class="ab-pdf-kpi-label">Fatturato consuntivato</div>
           <div class="ab-pdf-kpi-value">${_fmtEuroInt(pre.fatturato_consuntivato)} €</div>
-          <div class="ab-pdf-kpi-sub">${pre.periodi_chiusi}/${pre.periodi_totali} periodi · ${(pre.frazione_anno * 100).toFixed(0)}% dell'anno</div>
+          <div class="ab-pdf-kpi-sub">${pre.periodi_chiusi}/${pre.periodi_totali} periodi trascorsi · ${(pre.frazione_anno * 100).toFixed(0)}% dell'anno</div>
         </div>
         <div class="ab-pdf-kpi-card">
           <div class="ab-pdf-kpi-label">Fatturato proiettato fine anno</div>

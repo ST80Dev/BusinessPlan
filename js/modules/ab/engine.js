@@ -359,14 +359,25 @@ const BudgetEngine = (() => {
    * Le rimanenze sono assunte stabili (= budget intero, sia consuntivato
    * che proiettato): il preconsuntivo non chiede saldi SP intermedi.
    *
-   * Quando frazione_anno = 0 (nessun periodo chiuso) la proiezione
-   * fine anno coincide col budget originale e il consuntivato è 0.
+   * ORIZZONTE CONSUNTIVO: la frazione d'anno trascorsa NON è il numero di
+   * mesi con ricavo > 0, ma l'indice dell'ultimo mese con ricavo inserito
+   * (ultimo_periodo_con_dati). Così:
+   *   - un mese intermedio a ricavo 0 (es. gennaio a zero, febbraio
+   *     fatturato) è comunque "trascorso": i suoi costi fissi rientrano nel
+   *     consuntivato;
+   *   - i mesi oltre l'orizzonte non sono ancora rilevati: la loro vista
+   *     per_periodo è vuota (niente costi, niente utile negativo fittizio).
+   *
+   * Quando frazione_anno = 0 (nessun mese con ricavo) la proiezione fine
+   * anno coincide col budget originale e il consuntivato è 0.
    *
    * @param {Object} progetto
    * @returns {Object} { frequenza, periodi_totali, periodi_chiusi,
-   *   frazione_anno, fatturato_consuntivato, fatturato_proiettato,
+   *   ultimo_periodo_con_dati, frazione_anno, fatturato_consuntivato,
+   *   fatturato_proiettato,
    *   consuntivato: { valori: {id: {valore}}, totali: {...} },
    *   proiezione:   { valori: {id: {valore}}, totali: {...} },
+   *   per_periodo:  { key: { ..., futuro } },
    *   budget }
    */
   function calcolaPreconsuntivo(progetto) {
@@ -376,12 +387,31 @@ const BudgetEngine = (() => {
 
     const periodiTotali = cons.frequenza === 'trimestrale' ? 4 : 12;
     const fattPerPeriodo = cons.fatturato || {};
-    const periodiChiusi = Object.keys(fattPerPeriodo)
-      .filter(k => typeof fattPerPeriodo[k] === 'number' && isFinite(fattPerPeriodo[k]) && fattPerPeriodo[k] > 0)
-      .length;
+
+    // Chiavi di periodo (mese o trimestre) in ordine cronologico.
+    const periodiKeys = cons.frequenza === 'trimestrale'
+      ? ['1', '2', '3', '4']
+      : ['01','02','03','04','05','06','07','08','09','10','11','12'];
+
+    // Orizzonte consuntivo: indice dell'ULTIMO periodo con ricavo inserito.
+    // Definisce fin dove l'anno è "trascorso". I mesi 0..orizzonte sono
+    // consuntivati e i loro costi fissi vanno contati anche se il singolo
+    // mese ha ricavo 0 (es. gennaio a zero ma febbraio fatturato); i mesi
+    // oltre l'orizzonte non sono ancora rilevati e non devono generare
+    // costi né un utile (negativo) fittizio.
+    let ultimoPeriodoConDati = -1;
+    periodiKeys.forEach((k, i) => {
+      if (Number(fattPerPeriodo[k]) > 0) ultimoPeriodoConDati = i;
+    });
+    const periodiTrascorsi = ultimoPeriodoConDati + 1;
+
+    // "periodi chiusi" = periodi trascorsi fino all'orizzonte, NON il semplice
+    // conteggio dei mesi con ricavo > 0: un mese intermedio a zero è comunque
+    // trascorso e concorre alla frazione d'anno e ai fissi pro-rata.
+    const periodiChiusi = periodiTrascorsi;
     const fattConsuntivato = Object.values(fattPerPeriodo)
       .reduce((s, v) => s + (Number(v) || 0), 0);
-    const frazione = periodiTotali > 0 ? periodiChiusi / periodiTotali : 0;
+    const frazione = periodiTotali > 0 ? periodiTrascorsi / periodiTotali : 0;
 
     // Modalità di proiezione del fatturato:
     //   'lineare'         → estrapolazione yt-d / frazione_anno (default)
@@ -399,10 +429,8 @@ const BudgetEngine = (() => {
     // Vista per periodo (mese o trimestre): variabili pro-quota sul fatturato
     // del periodo, fissi pro-rata su 1/N dell'anno. Le righe di proventi/oneri
     // straordinari e imposte seguono lo stesso pro-rata dei fissi (sono
-    // comunque stime).
-    const periodiKeys = cons.frequenza === 'trimestrale'
-      ? ['1', '2', '3', '4']
-      : ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    // comunque stime). Le chiavi di periodo (periodiKeys) sono definite in
+    // testa alla funzione, insieme all'orizzonte consuntivo.
 
     // Mix per periodo per la modalità stagionalizzata: consuntivo se chiuso,
     // atteso se aperto. Per coerenza viene calcolato sempre, ma viene usato
@@ -475,12 +503,28 @@ const BudgetEngine = (() => {
 
     const fraz1Periodo = periodiTotali > 0 ? 1 / periodiTotali : 0;
 
+    // Vista vuota per i periodi oltre l'orizzonte: nessun costo/utile, così
+    // nessun consumatore (griglia a schermo, PDF, aggregati) conteggia fissi
+    // fittizi o espone un utile negativo per mesi non ancora rilevati.
+    const _vistaVuota = () => ({
+      valori: {}, fatturato: 0, cdv: 0, totVar: 0, mdc: 0, fissi: 0,
+      totCosti: 0, provOneriStraordNetto: 0, utileAnteImposte: 0,
+      imposte: 0, utileNetto: 0
+    });
+
     const perPeriodo = {};
-    periodiKeys.forEach(k => {
+    periodiKeys.forEach((k, i) => {
       const fattPeriodo = Number(fattPerPeriodo[k]) || 0;
-      perPeriodo[k] = _calcolaVista(fattPeriodo, fattPeriodo, fraz1Periodo);
+      // futuro = oltre l'ultimo mese con ricavo: non ancora rilevato. La cella
+      // editabile del fatturato continua a leggere da cons.fatturato[k], quindi
+      // l'operatore può inserire il mese successivo ed estendere l'orizzonte.
+      const futuro = i > ultimoPeriodoConDati;
+      perPeriodo[k] = futuro
+        ? _vistaVuota()
+        : _calcolaVista(fattPeriodo, fattPeriodo, fraz1Periodo);
       perPeriodo[k].fatturato_periodo = fattPeriodo;
       perPeriodo[k].inserito = fattPeriodo > 0;
+      perPeriodo[k].futuro   = futuro;
       perPeriodo[k].atteso   = Number(fattAtteso[k]) || 0;
       perPeriodo[k].mix      = fattMixPerPeriodo[k];
       perPeriodo[k].fonte    = fonteMixPerPeriodo[k];
@@ -491,6 +535,7 @@ const BudgetEngine = (() => {
       modalita_proiezione:    modalita,
       periodi_totali:         periodiTotali,
       periodi_chiusi:         periodiChiusi,
+      ultimo_periodo_con_dati: ultimoPeriodoConDati,
       periodi_keys:           periodiKeys,
       frazione_anno:          frazione,
       fatturato_consuntivato: fattConsuntivato,
