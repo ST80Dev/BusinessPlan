@@ -103,6 +103,19 @@ const BudgetEngine = (() => {
       }, 0);
   }
 
+  /**
+   * Mese di avvio attività (1-12) letto da meta.mese_avvio.
+   * Default 1 (gennaio) → azienda operativa da inizio anno.
+   * Clampato a [1,12] per robustezza.
+   * @param {Object} progetto
+   * @returns {number}
+   */
+  function _meseAvvio(progetto) {
+    const m = progetto && progetto.meta && Number(progetto.meta.mese_avvio);
+    if (!isFinite(m)) return 1;
+    return Math.min(12, Math.max(1, Math.round(m)));
+  }
+
   /* ──────────────────────────────────────────────────────────
      API pubblica
      ────────────────────────────────────────────────────────── */
@@ -149,6 +162,115 @@ const BudgetEngine = (() => {
       out[macro.id] = _media(valori);
     }
     return out;
+  }
+
+  /**
+   * Costo figurativo del lavoro dei soci.
+   *
+   * In una società i cui unici lavoratori sono i soci non retribuiti, il
+   * costo del personale civilistico è 0: il loro apporto è remunerato
+   * dall'utile. In un'analisi di bilancio gestionale è però prassi
+   * imputare un COSTO FIGURATIVO (costo-opportunità del lavoro dei soci)
+   * per verificare se l'attività è redditizia anche dopo aver remunerato
+   * il loro lavoro a un compenso di mercato.
+   *
+   * Il costo figurativo NON entra nel CE civilistico né incide sulle
+   * imposte (che restano una riga manuale del budget): viene tenuto
+   * separato e usato solo per il "reddito normalizzato".
+   *
+   *   costo_figurativo = Σ (ore × tariffa)  per ogni socio
+   *
+   * @param {Object} progetto - progetto AB (usa progetto.lavoro_soci)
+   * @returns {Object} { attivo, righe:[{id,nome,ore,tariffa,costo}],
+   *                      ore_totali, costo_figurativo }
+   */
+  function calcolaLavoroSoci(progetto) {
+    const ls = (progetto && progetto.lavoro_soci) || {};
+    const attivo = !!ls.attivo;
+    const righeIn = Array.isArray(ls.righe) ? ls.righe : [];
+    let oreTot = 0;
+    let costoTot = 0;
+    const righe = righeIn.map(r => {
+      const ore     = Number(r && r.ore)     || 0;
+      const tariffa = Number(r && r.tariffa) || 0;
+      const costo   = ore * tariffa;
+      oreTot   += ore;
+      costoTot += costo;
+      return { id: r && r.id, nome: (r && r.nome) || '', ore, tariffa, costo };
+    });
+    return {
+      attivo,
+      righe,
+      ore_totali: oreTot,
+      costo_figurativo: attivo ? costoTot : 0
+    };
+  }
+
+  /**
+   * Seed del fatturato di budget a partire dai mesi già inseriti nel
+   * consuntivo dell'anno in corso. Pensato per società NEOCOSTITUITE,
+   * prive di storico, di cui sono noti solo alcuni mesi.
+   *
+   * Rispetta il mese di avvio attività (meta.mese_avvio, 1-12): i mesi
+   * precedenti all'avvio non concorrono al run-rate (l'azienda non
+   * esisteva). Il run-rate mensile è il fatturato consuntivato diviso per
+   * i mesi operativi effettivamente trascorsi.
+   *
+   * Restituisce due orizzonti di annualizzazione:
+   *   - seed_parziale: run-rate × mesi operativi da avvio a dicembre
+   *                    (fedele al primo esercizio reale, che parte a metà anno)
+   *   - seed_regime:   run-rate × 12 (anno intero "a regime")
+   *
+   * @param {Object} progetto - progetto AB
+   * @returns {Object} { disponibile, mese_avvio, frequenza, mesi_attivi,
+   *   mesi_operativi_anno, fatturato_ytd, run_rate_mensile,
+   *   seed_parziale, seed_regime }
+   */
+  function calcolaSeedFatturato(progetto) {
+    const cons = (progetto && progetto.consuntivo) || {};
+    const meseAvvio = _meseAvvio(progetto);
+    const freq = cons.frequenza === 'trimestrale' ? 'trimestrale' : 'mensile';
+    const fatt = cons.fatturato || {};
+
+    const periodiKeys = freq === 'trimestrale'
+      ? ['1', '2', '3', '4']
+      : ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    const mesiPerPeriodo = freq === 'trimestrale' ? 3 : 1;
+    const periodiTotali  = freq === 'trimestrale' ? 4 : 12;
+
+    // Indice del primo periodo operativo (avvio) e mesi operativi da avvio
+    // a fine anno.
+    const primoIdx = freq === 'trimestrale'
+      ? Math.floor((meseAvvio - 1) / 3)
+      : (meseAvvio - 1);
+    const mesiOperativiAnno = (periodiTotali - primoIdx) * mesiPerPeriodo;
+
+    // Ultimo periodo con ricavo inserito (>= primoIdx) e conteggio dei
+    // periodi operativi trascorsi da avvio.
+    let ultimoIdx = -1;
+    periodiKeys.forEach((k, i) => {
+      if (i >= primoIdx && Number(fatt[k]) > 0) ultimoIdx = i;
+    });
+    const periodiTrascorsi = ultimoIdx >= primoIdx ? (ultimoIdx - primoIdx + 1) : 0;
+    const mesiAttivi = periodiTrascorsi * mesiPerPeriodo;
+
+    const fatturatoYtd = periodiKeys.reduce((s, k, i) => {
+      return i >= primoIdx ? s + (Number(fatt[k]) || 0) : s;
+    }, 0);
+
+    const runRate = mesiAttivi > 0 ? fatturatoYtd / mesiAttivi : 0;
+
+    return {
+      disponibile: mesiAttivi > 0 && fatturatoYtd > 0,
+      mese_avvio: meseAvvio,
+      frequenza: freq,
+      mesi_attivi: mesiAttivi,
+      mesi_operativi_anno: mesiOperativiAnno,
+      fatturato_ytd: fatturatoYtd,
+      run_rate_mensile: runRate,
+      seed_parziale: Math.round(runRate * mesiOperativiAnno),
+      seed_regime:   Math.round(runRate * 12)
+    };
   }
 
   /**
@@ -324,6 +446,21 @@ const BudgetEngine = (() => {
     const kRim = v('rim_ini') - v('rim_fin');
     const breakEven = (denom > 0 && (kRim + fissi) > 0) ? (kRim + fissi) / denom : null;
 
+    // Costo figurativo del lavoro dei soci — tenuto SEPARATO dal CE
+    // civilistico (non incluso in fissi/totCosti/utileNetto né nelle
+    // imposte). Serve solo al "reddito normalizzato" e ai KPI di
+    // produttività oraria. Vedi calcolaLavoroSoci.
+    const soci = calcolaLavoroSoci(progetto);
+    const costoFigSoci = soci.costo_figurativo;
+    const redditoNormalizzato = utileNetto - costoFigSoci;
+    // Break-even che remunera anche il lavoro dei soci: ai costi fissi si
+    // aggiunge il costo figurativo (fisso per natura, indipendente dal
+    // fatturato). Non altera il break-even operativo classico sopra.
+    const breakEvenSoci = (denom > 0 && (kRim + fissi + costoFigSoci) > 0)
+      ? (kRim + fissi + costoFigSoci) / denom : null;
+    const ricaviOra = soci.ore_totali > 0 ? fatturato / soci.ore_totali : null;
+    const mdcOra    = soci.ore_totali > 0 ? mdc / soci.ore_totali       : null;
+
     return {
       fatturato,
       fatturato_storico_medio: fatturatoStoricoMedio,
@@ -334,7 +471,14 @@ const BudgetEngine = (() => {
       cdv, totVar, mdc, fissi, totCosti,
       provOneriStraordNetto, utileAnteImposte, imposte: imposteVal, utileNetto,
       somma_pct_var: sommaPctVar,
-      break_even: breakEven
+      break_even: breakEven,
+      // Lavoro soci / reddito normalizzato (fuori dal CE civilistico)
+      lavoro_soci: soci,
+      costo_figurativo_soci: costoFigSoci,
+      reddito_normalizzato: redditoNormalizzato,
+      break_even_soci: breakEvenSoci,
+      ricavi_ora: ricaviOra,
+      mdc_ora: mdcOra
     };
   }
 
@@ -393,25 +537,42 @@ const BudgetEngine = (() => {
       ? ['1', '2', '3', '4']
       : ['01','02','03','04','05','06','07','08','09','10','11','12'];
 
-    // Orizzonte consuntivo: indice dell'ULTIMO periodo con ricavo inserito.
-    // Definisce fin dove l'anno è "trascorso". I mesi 0..orizzonte sono
-    // consuntivati e i loro costi fissi vanno contati anche se il singolo
-    // mese ha ricavo 0 (es. gennaio a zero ma febbraio fatturato); i mesi
-    // oltre l'orizzonte non sono ancora rilevati e non devono generare
-    // costi né un utile (negativo) fittizio.
+    // Mese di avvio attività: i periodi precedenti all'avvio non esistono
+    // (azienda non ancora costituita) e NON devono essere contati come
+    // trascorsi — altrimenti il run-rate del fatturato viene diluito e i
+    // fissi pro-rata gonfiati. `primoPeriodoIdx` è l'indice del primo
+    // periodo operativo; `periodiOperativi` è quanti periodi vanno da
+    // avvio a fine anno (denominatore della frazione d'anno operativa).
+    // Con mese_avvio = 1 (default) primoPeriodoIdx = 0 e periodiOperativi
+    // = periodiTotali: comportamento identico alla versione precedente.
+    const meseAvvio = _meseAvvio(progetto);
+    const primoPeriodoIdx = cons.frequenza === 'trimestrale'
+      ? Math.floor((meseAvvio - 1) / 3)
+      : (meseAvvio - 1);
+    const periodiOperativi = periodiTotali - primoPeriodoIdx;
+
+    // Orizzonte consuntivo: indice dell'ULTIMO periodo operativo con ricavo
+    // inserito. Definisce fin dove l'anno è "trascorso". I periodi da avvio
+    // all'orizzonte sono consuntivati e i loro costi fissi vanno contati anche
+    // se il singolo mese ha ricavo 0 (es. avvio ad aprile, aprile a zero ma
+    // maggio fatturato); i periodi oltre l'orizzonte — e quelli prima
+    // dell'avvio — non generano costi né un utile (negativo) fittizio.
     let ultimoPeriodoConDati = -1;
     periodiKeys.forEach((k, i) => {
-      if (Number(fattPerPeriodo[k]) > 0) ultimoPeriodoConDati = i;
+      if (i >= primoPeriodoIdx && Number(fattPerPeriodo[k]) > 0) ultimoPeriodoConDati = i;
     });
-    const periodiTrascorsi = ultimoPeriodoConDati + 1;
+    const periodiTrascorsi = ultimoPeriodoConDati >= primoPeriodoIdx
+      ? (ultimoPeriodoConDati - primoPeriodoIdx + 1) : 0;
 
-    // "periodi chiusi" = periodi trascorsi fino all'orizzonte, NON il semplice
-    // conteggio dei mesi con ricavo > 0: un mese intermedio a zero è comunque
-    // trascorso e concorre alla frazione d'anno e ai fissi pro-rata.
+    // "periodi chiusi" = periodi operativi trascorsi da avvio fino
+    // all'orizzonte, NON il semplice conteggio dei mesi con ricavo > 0: un
+    // mese intermedio a zero è comunque trascorso e concorre alla frazione
+    // d'anno e ai fissi pro-rata.
     const periodiChiusi = periodiTrascorsi;
-    const fattConsuntivato = Object.values(fattPerPeriodo)
-      .reduce((s, v) => s + (Number(v) || 0), 0);
-    const frazione = periodiTotali > 0 ? periodiTrascorsi / periodiTotali : 0;
+    const fattConsuntivato = periodiKeys.reduce((s, k, i) => {
+      return i >= primoPeriodoIdx ? s + (Number(fattPerPeriodo[k]) || 0) : s;
+    }, 0);
+    const frazione = periodiOperativi > 0 ? periodiTrascorsi / periodiOperativi : 0;
 
     // Modalità di proiezione del fatturato:
     //   'lineare'         → estrapolazione yt-d / frazione_anno (default)
@@ -438,7 +599,13 @@ const BudgetEngine = (() => {
     const fattMixPerPeriodo = {};
     const fonteMixPerPeriodo = {}; // 'consuntivo' | 'atteso' | 'vuoto'
     let attesoTotale = 0;
-    periodiKeys.forEach(k => {
+    periodiKeys.forEach((k, i) => {
+      // Periodi precedenti all'avvio: azienda non ancora operativa → 0.
+      if (i < primoPeriodoIdx) {
+        fattMixPerPeriodo[k]  = 0;
+        fonteMixPerPeriodo[k] = 'vuoto';
+        return;
+      }
       const c = Number(fattPerPeriodo[k]) || 0;
       const a = Number(fattAtteso[k]) || 0;
       attesoTotale += a;
@@ -501,7 +668,7 @@ const BudgetEngine = (() => {
     const consuntivato = _calcolaVista(fattConsuntivato, fattConsuntivato, frazione);
     const proiezione   = _calcolaVista(fattConsuntivato, fattProiettato, 1);
 
-    const fraz1Periodo = periodiTotali > 0 ? 1 / periodiTotali : 0;
+    const fraz1Periodo = periodiOperativi > 0 ? 1 / periodiOperativi : 0;
 
     // Vista vuota per i periodi oltre l'orizzonte: nessun costo/utile, così
     // nessun consumatore (griglia a schermo, PDF, aggregati) conteggia fissi
@@ -515,15 +682,19 @@ const BudgetEngine = (() => {
     const perPeriodo = {};
     periodiKeys.forEach((k, i) => {
       const fattPeriodo = Number(fattPerPeriodo[k]) || 0;
-      // futuro = oltre l'ultimo mese con ricavo: non ancora rilevato. La cella
-      // editabile del fatturato continua a leggere da cons.fatturato[k], quindi
-      // l'operatore può inserire il mese successivo ed estendere l'orizzonte.
-      const futuro = i > ultimoPeriodoConDati;
-      perPeriodo[k] = futuro
+      // pre_avvio = periodo precedente all'avvio attività: azienda non ancora
+      //   costituita, la cella fatturato è non editabile e non genera costi.
+      // futuro    = oltre l'ultimo mese con ricavo: non ancora rilevato. La cella
+      //   editabile del fatturato continua a leggere da cons.fatturato[k], quindi
+      //   l'operatore può inserire il mese successivo ed estendere l'orizzonte.
+      const preAvvio = i < primoPeriodoIdx;
+      const futuro   = !preAvvio && i > ultimoPeriodoConDati;
+      perPeriodo[k] = (preAvvio || futuro)
         ? _vistaVuota()
         : _calcolaVista(fattPeriodo, fattPeriodo, fraz1Periodo);
       perPeriodo[k].fatturato_periodo = fattPeriodo;
       perPeriodo[k].inserito = fattPeriodo > 0;
+      perPeriodo[k].pre_avvio = preAvvio;
       perPeriodo[k].futuro   = futuro;
       perPeriodo[k].atteso   = Number(fattAtteso[k]) || 0;
       perPeriodo[k].mix      = fattMixPerPeriodo[k];
@@ -533,6 +704,9 @@ const BudgetEngine = (() => {
     return {
       frequenza:              cons.frequenza,
       modalita_proiezione:    modalita,
+      mese_avvio:             meseAvvio,
+      primo_periodo_idx:      primoPeriodoIdx,
+      periodi_operativi:      periodiOperativi,
       periodi_totali:         periodiTotali,
       periodi_chiusi:         periodiChiusi,
       ultimo_periodo_con_dati: ultimoPeriodoConDati,
@@ -552,6 +726,8 @@ const BudgetEngine = (() => {
     MACROAREE_AB:       MACROAREE_AB,
     calcolaPctMedie:    calcolaPctMedie,
     calcolaMedieEuro:   calcolaMedieEuro,
+    calcolaLavoroSoci:  calcolaLavoroSoci,
+    calcolaSeedFatturato: calcolaSeedFatturato,
     calcolaBudget:      calcolaBudget,
     calcolaPreconsuntivo: calcolaPreconsuntivo
   };

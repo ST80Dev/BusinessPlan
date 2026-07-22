@@ -2633,6 +2633,15 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-col-periodo-chiuso {
   background: rgba(55,138,221,0.06);
 }
+/* Colonne dei periodi precedenti all'avvio attività: azienda non ancora
+   operativa. Mute e non compilabili (rese con "—" dal renderer). */
+.ab-col-periodo-preavvio {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+}
+thead .ab-col-periodo-preavvio {
+  opacity: 0.6;
+}
 
 /* Sfondi opachi per le righe speciali sulle celle sticky (necessario perché
    position:sticky richiede un background non-trasparente sul td stesso per
@@ -3154,6 +3163,265 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-mappatura.ab-dnd-active .ab-mini-box[data-drop-macro] {
   outline: 1px dashed var(--color-accent);
   outline-offset: -3px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AB — Seed budget (società senza storico) + Reddito normalizzato soci
+   ══════════════════════════════════════════════════════════════ */
+
+/* Pannello seed: annualizzazione del fatturato dai mesi in corso */
+.ab-seed-panel {
+  border: 1px solid var(--color-info);
+  background: var(--color-info-bg);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.ab-seed-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ab-seed-title {
+  font-weight: 700;
+  color: var(--color-info);
+  font-size: 14px;
+}
+.ab-seed-hint {
+  font-size: 12px;
+}
+.ab-seed-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+.ab-seed-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ab-seed-label {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+.ab-seed-select {
+  min-width: 130px;
+}
+.ab-seed-info {
+  font-size: 12px;
+}
+.ab-seed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: auto;
+}
+.ab-seed-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.ab-seed-btn:hover,
+.ab-seed-btn:focus {
+  background: var(--color-accent-light);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent-light);
+}
+.ab-seed-btn-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.ab-seed-btn-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+/* Blocco Reddito normalizzato — lavoro dei soci */
+.ab-soci-block {
+  margin-top: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--color-surface-alt);
+}
+.ab-soci-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.ab-soci-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--color-text-primary);
+}
+.ab-soci-switch {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  user-select: none;
+}
+.ab-soci-switch:focus { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.ab-soci-switch-on {
+  background: var(--color-success-bg);
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+.ab-soci-desc {
+  font-size: 12px;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.ab-soci-tab {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+.ab-soci-tab th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--color-text-muted);
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+.ab-soci-tab th.num { text-align: right; }
+.ab-soci-tab td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: middle;
+}
+.ab-soci-costo {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ab-soci-empty td {
+  font-size: 12px;
+  padding: 8px;
+}
+.ab-soci-input {
+  padding: 4px 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  min-height: 22px;
+  cursor: text;
+}
+.ab-soci-input-nome {
+  text-align: left;
+  font-family: 'DM Sans', sans-serif;
+}
+.ab-soci-input:hover { border-color: var(--color-accent); }
+.ab-soci-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-light);
+}
+.ab-soci-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-muted);
+}
+.ab-soci-del { text-align: center; width: 36px; }
+.ab-soci-del-btn {
+  cursor: pointer;
+  opacity: 0.6;
+  font-size: 14px;
+}
+.ab-soci-del-btn:hover,
+.ab-soci-del-btn:focus { opacity: 1; outline: none; }
+.ab-soci-add {
+  display: inline-block;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-accent);
+  padding: 4px 2px;
+  user-select: none;
+}
+.ab-soci-add:hover,
+.ab-soci-add:focus { text-decoration: underline; outline: none; }
+
+.ab-soci-summary {
+  margin-top: 12px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 8px;
+  max-width: 420px;
+}
+.ab-soci-sum-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+.ab-soci-sum-row .num {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.ab-soci-sum-tot {
+  font-weight: 700;
+  font-size: 15px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+}
+.ab-soci-sum-tot.ab-kpi-verde { color: var(--color-success); }
+.ab-soci-sum-tot.ab-kpi-rosso { color: var(--color-error); }
+
+.ab-soci-kpi-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.ab-soci-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  min-width: 110px;
+}
+.ab-soci-kpi-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--color-text-muted);
+}
+.ab-soci-kpi-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 /* ── Toolbar pulsante "Esporta PDF" sopra Budget e Consuntivo AB ─── */

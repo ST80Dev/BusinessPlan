@@ -44,6 +44,12 @@ const BudgetUI = (() => {
     return Math.round(n).toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: 'always' });
   }
 
+  // Numero intero puro (ore, conteggi) con separatore migliaia, senza valuta.
+  function _fmtNum0(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return '';
+    return Math.round(n).toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: 'always' });
+  }
+
   function _escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
@@ -1440,6 +1446,7 @@ const BudgetUI = (() => {
     }
 
     const b = BudgetEngine.calcolaBudget(progetto);
+    const seed = BudgetEngine.calcolaSeedFatturato(progetto);
     const annoCorrente = progetto.meta.anno_corrente;
 
     // Schema righe del prospetto budget — layout compatto allineato al
@@ -1563,6 +1570,8 @@ const BudgetUI = (() => {
             </div>
           </div>
         </div>
+
+        ${_renderSeedPanel(progetto, seed, b)}
 
         <table class="ab-storico-tab ab-storico-prospetto ab-budget-tab">
           <thead>
@@ -1702,8 +1711,179 @@ const BudgetUI = (() => {
       }
     }
 
-    html += '</tbody></table></div>';
+    html += '</tbody></table>';
+    html += _renderSociBlock(progetto, b);
+    html += '</div>';
     c.innerHTML = html;
+  }
+
+  /**
+   * Pannello "Budget da dati in corso d'anno" — seed del fatturato per
+   * società senza storico. Visibile solo quando ci sono mesi consuntivati
+   * (seed.disponibile). Consente di scegliere il mese di avvio attività e
+   * di annualizzare il run-rate su due orizzonti (primo anno parziale /
+   * anno a regime), scrivendo il valore su fatturato_ipotizzato.
+   */
+  function _renderSeedPanel(progetto, seed, b) {
+    if (!seed || !seed.disponibile) return '';
+
+    const meseAvvio = seed.mese_avvio || 1;
+    const opts = _MESI.map((nome, i) =>
+      `<option value="${i + 1}"${(i + 1) === meseAvvio ? ' selected' : ''}>${nome}</option>`
+    ).join('');
+
+    // Se l'avvio è a gennaio, primo-anno e regime coincidono (12 mesi):
+    // mostriamo un solo bottone di annualizzazione. Altrimenti entrambi.
+    const parziale = seed.seed_parziale;
+    const regime   = seed.seed_regime;
+    const unMese   = meseAvvio === 1 || parziale === regime;
+
+    const btnParziale = `<div class="ab-seed-btn" role="button" tabindex="0"
+           title="Imposta il fatturato ipotizzato = run-rate × mesi da avvio a dicembre (${seed.mesi_operativi_anno} mesi)"
+           onclick="BudgetUI.applicaSeed('parziale')"
+           onkeydown="BudgetUI.seedBtnKeyDown(event, 'parziale')">
+        <span class="ab-seed-btn-label">Primo anno (avvio→dic, ${seed.mesi_operativi_anno} mesi)</span>
+        <span class="ab-seed-btn-val">${_fmtEuroInt(parziale)}</span>
+      </div>`;
+    const btnRegime = `<div class="ab-seed-btn" role="button" tabindex="0"
+           title="Imposta il fatturato ipotizzato = run-rate × 12 mesi (anno intero a regime)"
+           onclick="BudgetUI.applicaSeed('regime')"
+           onkeydown="BudgetUI.seedBtnKeyDown(event, 'regime')">
+        <span class="ab-seed-btn-label">${unMese ? 'Annualizza (×12)' : 'Anno a regime (×12)'}</span>
+        <span class="ab-seed-btn-val">${_fmtEuroInt(regime)}</span>
+      </div>`;
+
+    return `
+      <div class="ab-seed-panel">
+        <div class="ab-seed-head">
+          <span class="ab-seed-title">Budget da dati in corso d'anno</span>
+          <span class="ab-seed-hint text-muted">Società senza storico: annualizza i mesi già inseriti nel Consuntivo per proporre il fatturato di budget.</span>
+        </div>
+        <div class="ab-seed-body">
+          <div class="ab-seed-field">
+            <label class="ab-seed-label">Mese di avvio attività</label>
+            <select class="form-select ab-seed-select"
+                    onchange="BudgetUI.cambiaMeseAvvio(this.value)">${opts}</select>
+          </div>
+          <div class="ab-seed-info text-muted">
+            Consuntivato <strong>${_fmtEuroInt(seed.fatturato_ytd)}</strong> su <strong>${seed.mesi_attivi}</strong> ${seed.mesi_attivi === 1 ? 'mese' : 'mesi'} operativi → run-rate <strong>${_fmtEuroInt(seed.run_rate_mensile)}</strong>/mese
+          </div>
+          <div class="ab-seed-actions">
+            ${unMese ? btnRegime : btnParziale + btnRegime}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Blocco "Reddito normalizzato — lavoro dei soci". Imputa un costo
+   * figurativo (ore × tariffa) al lavoro dei soci non retribuiti, tenuto
+   * SEPARATO dal CE civilistico e dalle imposte. Mostra:
+   *   Utile netto − costo figurativo = reddito normalizzato
+   * più i KPI di produttività oraria (ricavi/ora, MdC/ora) e il break-even
+   * che remunera anche i soci. Tutti i valori derivano dall'engine
+   * (b.lavoro_soci, b.reddito_normalizzato, ...).
+   */
+  function _renderSociBlock(progetto, b) {
+    const soci = b.lavoro_soci || { attivo: false, righe: [], ore_totali: 0, costo_figurativo: 0 };
+    const attivo = soci.attivo;
+    const righe = soci.righe || [];
+
+    let righeHtml = '';
+    righe.forEach(r => {
+      const id = _escapeHtml(r.id);
+      righeHtml += `<tr class="ab-soci-riga">
+        <td>
+          <div class="amount-field ab-soci-input ab-soci-input-nome"
+               contenteditable="true"
+               data-socio-id="${id}" data-socio-campo="nome"
+               data-placeholder="Nome socio"
+               onblur="BudgetUI.socioBlur(this)"
+               onkeydown="BudgetUI.budgetKeyDown(event)">${_escapeHtml(r.nome || '')}</div>
+        </td>
+        <td class="num">
+          <div class="amount-field ab-soci-input"
+               contenteditable="true"
+               data-socio-id="${id}" data-socio-campo="ore"
+               data-placeholder="0"
+               onblur="BudgetUI.socioBlur(this)"
+               onkeydown="BudgetUI.budgetKeyDown(event)">${r.ore ? _fmtNum0(r.ore) : ''}</div>
+        </td>
+        <td class="num">
+          <div class="amount-field ab-soci-input"
+               contenteditable="true"
+               data-socio-id="${id}" data-socio-campo="tariffa"
+               data-placeholder="0"
+               onblur="BudgetUI.socioBlur(this)"
+               onkeydown="BudgetUI.budgetKeyDown(event)">${r.tariffa ? _fmtEuro(r.tariffa) : ''}</div>
+        </td>
+        <td class="num ab-soci-costo">${_fmtEuroInt(r.costo || 0)}</td>
+        <td class="ab-soci-del">
+          <span class="ab-soci-del-btn" role="button" tabindex="0"
+                title="Elimina questo socio"
+                onclick="BudgetUI.eliminaSocio('${id}')"
+                onkeydown="BudgetUI.eliminaSocioKeyDown(event, '${id}')">🗑</span>
+        </td>
+      </tr>`;
+    });
+
+    const costo = soci.costo_figurativo || 0;
+    const reddito = b.reddito_normalizzato;
+    const redditoCls = reddito >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso';
+
+    const kpiOra = (attivo && soci.ore_totali > 0) ? `
+      <div class="ab-soci-kpi-row">
+        <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Ore totali</span><span class="ab-soci-kpi-val">${_fmtNum0(soci.ore_totali)}</span></div>
+        <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Ricavi / ora</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.ricavi_ora)}</span></div>
+        <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">MdC / ora</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.mdc_ora)}</span></div>
+        <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Break-even coi soci</span><span class="ab-soci-kpi-val">${b.break_even_soci != null ? _fmtEuroInt(b.break_even_soci) : '—'}</span></div>
+      </div>` : '';
+
+    const corpo = attivo ? `
+      <div class="ab-soci-desc text-muted">Costo figurativo del lavoro dei soci (ore × tariffa oraria). Non entra nel Conto Economico civilistico né incide sulle imposte: serve solo a valutare la redditività al netto di un giusto compenso al lavoro dei soci.</div>
+      <table class="ab-soci-tab">
+        <thead>
+          <tr>
+            <th>Socio</th>
+            <th class="num">Ore</th>
+            <th class="num">€/ora</th>
+            <th class="num">Costo figurativo</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${righeHtml || `<tr class="ab-soci-empty"><td colspan="5" class="text-muted">Nessun socio inserito. Aggiungi un socio per conteggiare il costo figurativo del lavoro.</td></tr>`}
+        </tbody>
+      </table>
+      <div class="ab-soci-add" role="button" tabindex="0"
+           onclick="BudgetUI.aggiungiSocio()"
+           onkeydown="BudgetUI.aggiungiSocioKeyDown(event)">+ Aggiungi socio</div>
+
+      <div class="ab-soci-summary">
+        <div class="ab-soci-sum-row"><span>Utile netto (da budget)</span><span class="num">${_fmtEuroInt(b.utileNetto)}</span></div>
+        <div class="ab-soci-sum-row"><span>− Costo figurativo lavoro soci</span><span class="num">${_fmtEuroInt(costo)}</span></div>
+        <div class="ab-soci-sum-row ab-soci-sum-tot ${redditoCls}"><span>= Reddito normalizzato</span><span class="num">${_fmtEuroInt(reddito)}</span></div>
+      </div>
+      ${kpiOra}
+    ` : `
+      <div class="ab-soci-desc text-muted">Per società i cui unici lavoratori sono i soci non retribuiti (costo del personale civilistico = 0), attiva questo blocco per imputare un costo figurativo al loro lavoro (ore × tariffa) e ottenere il reddito normalizzato. Non modifica il CE né le imposte.</div>
+      <div class="ab-soci-add" role="button" tabindex="0"
+           onclick="BudgetUI.aggiungiSocio()"
+           onkeydown="BudgetUI.aggiungiSocioKeyDown(event)">+ Aggiungi socio e attiva</div>
+    `;
+
+    return `
+      <div class="ab-soci-block">
+        <div class="ab-soci-head">
+          <div class="ab-soci-title">Reddito normalizzato — lavoro dei soci</div>
+          <div class="ab-soci-switch ${attivo ? 'ab-soci-switch-on' : ''}"
+               role="button" tabindex="0"
+               title="${attivo ? 'Disattiva il conteggio del costo figurativo' : 'Attiva il conteggio del costo figurativo'}"
+               onclick="BudgetUI.toggleLavoroSoci()"
+               onkeydown="BudgetUI.toggleLavoroSociKeyDown(event)">${attivo ? 'Attivo' : 'Disattivato'}</div>
+        </div>
+        ${corpo}
+      </div>`;
   }
 
   /**
@@ -1816,6 +1996,108 @@ const BudgetUI = (() => {
       e.preventDefault();
       e.target.blur();
     }
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Seed budget (società senza storico) + lavoro soci
+     ────────────────────────────────────────────────────────── */
+
+  /** Cambia il mese di avvio attività e ricalcola il budget. */
+  function cambiaMeseAvvio(value) {
+    const m = parseInt(value, 10);
+    Projects.aggiornaMetaAB('mese_avvio', m);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+  }
+
+  /**
+   * Applica il seed del fatturato: scrive su fatturato_ipotizzato il valore
+   * annualizzato dai mesi consuntivati. modo = 'parziale' (avvio→dic) |
+   * 'regime' (×12). Chiede conferma se sovrascrive un valore già impostato.
+   */
+  function applicaSeed(modo) {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+    const seed = BudgetEngine.calcolaSeedFatturato(progetto);
+    if (!seed.disponibile) return;
+    const val = modo === 'parziale' ? seed.seed_parziale : seed.seed_regime;
+    const cur = progetto.budget && progetto.budget.fatturato_ipotizzato;
+    if (typeof cur === 'number' && isFinite(cur) && cur > 0 && cur !== val) {
+      if (!confirm(`Il fatturato ipotizzato attuale (${_fmtEuroInt(cur)} €) verrà sostituito con ${_fmtEuroInt(val)} €. Procedere?`)) return;
+    }
+    Projects.aggiornaBudget('fatturato_ipotizzato', val);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+  }
+
+  function seedBtnKeyDown(e, modo) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      applicaSeed(modo);
+    }
+  }
+
+  /** Attiva/disattiva il blocco costo figurativo soci. */
+  function toggleLavoroSoci() {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+    const cur = progetto.lavoro_soci && progetto.lavoro_soci.attivo;
+    Projects.lavoroSociToggle(!cur);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+  }
+
+  function toggleLavoroSociKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleLavoroSoci();
+    }
+  }
+
+  /** Aggiunge una riga socio e mette il focus sul nome. */
+  function aggiungiSocio() {
+    const id = Projects.lavoroSociAddRiga();
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+    if (id) {
+      const el = document.querySelector('[data-socio-id="' + id + '"][data-socio-campo="nome"]');
+      if (el) el.focus();
+    }
+  }
+
+  function aggiungiSocioKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      aggiungiSocio();
+    }
+  }
+
+  /** Elimina una riga socio. */
+  function eliminaSocio(id) {
+    Projects.lavoroSociRemoveRiga(id);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+  }
+
+  function eliminaSocioKeyDown(e, id) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      eliminaSocio(id);
+    }
+  }
+
+  /**
+   * Salva il blur di una cella socio. campo = 'nome' (testo) |
+   * 'ore' | 'tariffa' (numeri, parse € tollerante ai separatori).
+   */
+  function socioBlur(el) {
+    const id = el.dataset.socioId;
+    const campo = el.dataset.socioCampo;
+    const txt = (el.textContent || '').trim();
+    const val = campo === 'nome' ? txt : _parseEuro(txt);
+    Projects.lavoroSociUpdateRiga(id, campo, val);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
   }
 
   /**
@@ -1946,6 +2228,13 @@ const BudgetUI = (() => {
       : ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
     const periodiKeys = pre.periodi_keys;
 
+    // Opzioni mese di avvio attività (1-12). Con avvio > gennaio i mesi
+    // precedenti sono "pre-avvio": non editabili e non conteggiati.
+    const avvioOpts = _MESI.map((nome, i) =>
+      `<option value="${i + 1}"${(i + 1) === pre.mese_avvio ? ' selected' : ''}>${nome}</option>`
+    ).join('');
+    const denomOperativi = pre.periodi_operativi != null ? pre.periodi_operativi : pre.periodi_totali;
+
     let html = `
       <div class="ab-consuntivo">
 
@@ -1978,8 +2267,14 @@ const BudgetUI = (() => {
                       onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ Distribuisci da %</span>
                 ` : ''}
               </div>
+              <div class="ab-freq-selector"
+                   title="Mese di avvio attività. Per società costituite in corso d'anno: i mesi precedenti non esistono e non concorrono al calcolo (run-rate e costi pro-rata partono dall'avvio).">
+                <span class="text-muted">Avvio attività:</span>
+                <select class="form-select ab-avvio-select"
+                        onchange="BudgetUI.cambiaMeseAvvioConsuntivo(this.value)">${avvioOpts}</select>
+              </div>
               <div class="ab-consuntivo-stats text-muted">
-                <span title="Periodi trascorsi fino all'ultimo mese con ricavo inserito: i mesi intermedi a ricavo zero contano comunque come trascorsi (i loro costi fissi sono conteggiati); i mesi successivi non sono ancora rilevati."><strong>${pre.periodi_chiusi}</strong> / ${pre.periodi_totali} periodi trascorsi</span>
+                <span title="Periodi operativi trascorsi da avvio fino all'ultimo mese con ricavo inserito: i mesi intermedi a ricavo zero contano comunque come trascorsi (i loro costi fissi sono conteggiati); i mesi precedenti all'avvio e quelli successivi all'orizzonte non sono conteggiati."><strong>${pre.periodi_chiusi}</strong> / ${denomOperativi} periodi operativi</span>
                 <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
                 <span>Consuntivato: <strong>${_fmtEuroInt(pre.fatturato_consuntivato)}</strong></span>
               </div>
@@ -2014,8 +2309,10 @@ const BudgetUI = (() => {
               <th class="num ab-col-stick ab-col-stick-3">Proiezione fine anno</th>
               <th class="num ab-col-stick ab-col-stick-4">Δ vs budget</th>
               ${periodiKeys.map((k, i) => {
-                const isChiuso = pre.per_periodo[k] && pre.per_periodo[k].inserito;
-                return `<th class="num ab-col-periodo ${isChiuso ? 'ab-col-periodo-chiuso' : ''}" title="${_escapeHtml(periodi[i])}">${_escapeHtml(periodiBrevi[i])}</th>`;
+                const vp = pre.per_periodo[k] || {};
+                const isChiuso = vp.inserito;
+                const preAvvio = vp.pre_avvio;
+                return `<th class="num ab-col-periodo ${preAvvio ? 'ab-col-periodo-preavvio' : ''} ${isChiuso ? 'ab-col-periodo-chiuso' : ''}" title="${preAvvio ? 'Precedente all\'avvio attività' : _escapeHtml(periodi[i])}">${_escapeHtml(periodiBrevi[i])}</th>`;
               }).join('')}
             </tr>
           </thead>
@@ -2102,7 +2399,12 @@ const BudgetUI = (() => {
       const celleP = periodiKeys.map(k => {
         const vp = pre.per_periodo[k] || {};
         const isChiuso = vp.inserito;
-        const periodCls = `num ab-col-periodo ${isChiuso ? 'ab-col-periodo-chiuso' : ''}`;
+        const preAvvio = vp.pre_avvio;
+        const periodCls = `num ab-col-periodo ${preAvvio ? 'ab-col-periodo-preavvio' : ''} ${isChiuso ? 'ab-col-periodo-chiuso' : ''}`;
+        // Mesi precedenti all'avvio: cella non editabile e non valorizzata.
+        if (preAvvio) {
+          return `<td class="${periodCls}" title="Precedente all'avvio attività">—</td>`;
+        }
         if (isFatturato) {
           const valore = cons.fatturato && cons.fatturato[k];
           const display = (typeof valore === 'number' && valore > 0) ? _fmtEuroInt(valore) : '';
@@ -2141,6 +2443,10 @@ const BudgetUI = (() => {
         const dAtteso     = _delta(attesoTot, budgetFatt);
         const celleAtt = periodiKeys.map(k => {
           const vp = pre.per_periodo[k] || {};
+          // Mesi precedenti all'avvio: cella attesa non editabile.
+          if (vp.pre_avvio) {
+            return `<td class="num ab-col-periodo ab-col-periodo-preavvio ab-col-periodo-atteso" title="Precedente all'avvio attività">—</td>`;
+          }
           const valore = vp.atteso;
           const display = (typeof valore === 'number' && valore > 0) ? _fmtEuroInt(valore) : '';
           const periodCls = `num ab-col-periodo ab-col-periodo-atteso`;
@@ -2177,6 +2483,23 @@ const BudgetUI = (() => {
     Projects.aggiornaConsuntivo(field, parsed);
     UI.aggiornaStatusBar('modificato');
     // Preserva la posizione di scroll orizzontale tra un re-render e l'altro
+    const scroller = document.querySelector('.ab-consuntivo-tab-scroll');
+    const scrollLeft = scroller ? scroller.scrollLeft : 0;
+    renderConsuntivo();
+    if (scrollLeft) {
+      const newScroller = document.querySelector('.ab-consuntivo-tab-scroll');
+      if (newScroller) newScroller.scrollLeft = scrollLeft;
+    }
+  }
+
+  /**
+   * Cambia il mese di avvio attività dalla vista Consuntivo, preservando
+   * lo scroll orizzontale della tabella.
+   */
+  function cambiaMeseAvvioConsuntivo(value) {
+    const m = parseInt(value, 10);
+    Projects.aggiornaMetaAB('mese_avvio', m);
+    UI.aggiornaStatusBar('modificato');
     const scroller = document.querySelector('.ab-consuntivo-tab-scroll');
     const scrollLeft = scroller ? scroller.scrollLeft : 0;
     renderConsuntivo();
@@ -3127,6 +3450,16 @@ const BudgetUI = (() => {
     valoreSottocontoKeyDown: valoreSottocontoKeyDown,
     budgetBlur:         budgetBlur,
     budgetKeyDown:      budgetKeyDown,
+    cambiaMeseAvvio:    cambiaMeseAvvio,
+    applicaSeed:        applicaSeed,
+    seedBtnKeyDown:     seedBtnKeyDown,
+    toggleLavoroSoci:   toggleLavoroSoci,
+    toggleLavoroSociKeyDown: toggleLavoroSociKeyDown,
+    aggiungiSocio:      aggiungiSocio,
+    aggiungiSocioKeyDown: aggiungiSocioKeyDown,
+    eliminaSocio:       eliminaSocio,
+    eliminaSocioKeyDown: eliminaSocioKeyDown,
+    socioBlur:          socioBlur,
     toggleNota:         toggleNota,
     notaToggleKeyDown:  notaToggleKeyDown,
     notaBlur:           notaBlur,
@@ -3134,6 +3467,7 @@ const BudgetUI = (() => {
     eliminaNota:        eliminaNota,
     eliminaNotaKeyDown: eliminaNotaKeyDown,
     consuntivoBlur:     consuntivoBlur,
+    cambiaMeseAvvioConsuntivo: cambiaMeseAvvioConsuntivo,
     cambiaFrequenza:    cambiaFrequenza,
     cambiaModalitaProiezione:   cambiaModalitaProiezione,
     attesoBlur:                 attesoBlur,
