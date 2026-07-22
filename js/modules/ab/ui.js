@@ -1486,6 +1486,29 @@ const BudgetUI = (() => {
       segno:     { prov_oneri_straord: -1 }
     });
 
+    // Comportamento per voce (Fisso/Variabile) — il tipo di input della
+    // riga (€ vs %) e la presenza del toggle F/V dipendono dal var_fisso
+    // *corrente* della voce, non dal valore statico dello schema. Una voce
+    // di costo (sezioni variabili/fissi, non calcolata) può essere
+    // stagionalizzata a piacere: se 'variabile' si edita in % sul
+    // fatturato, se 'fisso' in € — restando nel suo gruppo di
+    // appartenenza (e quindi nel/fuori dal costo del venduto per
+    // costruzione). Vedi Projects.impostaComportamentoMacro.
+    righe.forEach(r => {
+      if (r.tipo !== 'macro') return;
+      const m = (progetto.macro_sezioni || []).find(x => x.id === r.id);
+      if (!m) return;
+      const togglable = m.tipo === 'costo'
+        && (m.sezione === 'variabili' || m.sezione === 'fissi')
+        && !m.calcolato;
+      if (!togglable) return;
+      r.togglable = true;
+      r.varFisso  = m.var_fisso;
+      r.sezione   = m.sezione;
+      // Input coerente col comportamento: variabile → %, fisso → €.
+      r.inputType = m.var_fisso === 'variabile' ? 'pct' : 'euro';
+    });
+
     // Medie storiche in € dei derivati per la colonna "Media" sulle
     // righe-totale. Sulle righe macroarea l'engine espone già
     // dato.media_euro (con lo stesso filtro). Filtriamo qui agli anni
@@ -1654,8 +1677,20 @@ const BudgetUI = (() => {
       const notaPresente = notaTesto.length > 0;
       const notaAperta = _budgetNoteAperte.has(r.id);
 
+      // Badge "var"/"fisso": mostrato solo quando il comportamento
+      // diverge dalla convenzione del gruppo (voce nei Fissi trattata da
+      // variabile, o nei Variabili trattata da fissa). Spiega a colpo
+      // d'occhio perché una riga dei Costi fissi scala col fatturato (o
+      // viceversa).
+      const _diverge = r.togglable && (
+        (r.sezione === 'fissi'     && r.varFisso === 'variabile') ||
+        (r.sezione === 'variabili' && r.varFisso === 'fisso'));
+      const badge = !_diverge ? '' : (r.varFisso === 'variabile'
+        ? `<span class="ab-budget-badge ab-budget-badge-var" title="Comportamento variabile: stagionalizzato coi ricavi (% sul fatturato), pur restando nel gruppo Costi fissi e fuori dal costo del venduto.">var</span>`
+        : `<span class="ab-budget-badge ab-budget-badge-fix" title="Comportamento fisso: importo € pro-rata sul tempo, pur restando nel gruppo Costi variabili (dentro il costo del venduto).">fisso</span>`);
+
       html += `<tr class="${fonteCls}${notaPresente ? ' ab-budget-row-has-note' : ''}">
-        <td>${_escapeHtml(r.label)}</td>
+        <td>${_escapeHtml(r.label)}${badge}</td>
         <td class="num" title="${_escapeHtml(mediaHeaderTitle)}">${_fmtEuroInt(mediaTriDisplay)}</td>
         <td class="num">${_fmtPct(dato.media_pct)}</td>
         <td class="num" title="${baseTitle}">${_fmtEuroInt(baseDisplay)}</td>
@@ -1717,6 +1752,7 @@ const BudgetUI = (() => {
    */
   function _renderOverrideCell(r, dato, progetto, notaPresente, notaAperta) {
     const inputHtml = _renderOverrideInput(r, dato, progetto);
+    const fvHtml = r.togglable ? _renderFvToggle(r) : '';
     const cls = 'ab-budget-nota-toggle'
       + (notaPresente ? ' ab-budget-nota-toggle-piena' : '')
       + (notaAperta   ? ' ab-budget-nota-toggle-aperta' : '');
@@ -1730,6 +1766,7 @@ const BudgetUI = (() => {
       ? 'Chiudi nota'
       : (notaPresente ? 'Apri nota presente' : 'Aggiungi nota');
     return `<div class="ab-budget-override-wrap">
+      ${fvHtml}
       ${inputHtml}
       <span class="${cls}"
             role="button"
@@ -1738,6 +1775,34 @@ const BudgetUI = (() => {
             aria-label="${aria}"
             onclick="BudgetUI.toggleNota('${_escapeHtml(r.id)}')"
             onkeydown="BudgetUI.notaToggleKeyDown(event, '${_escapeHtml(r.id)}')">${icona}</span>
+    </div>`;
+  }
+
+  /**
+   * Controllo segmentato F/V per il comportamento della voce di costo.
+   *   F = fisso     (importo € pro-rata sul tempo)
+   *   V = variabile (stagionalizzato coi ricavi, % sul fatturato)
+   * Cambia solo il comportamento di calcolo: la voce resta nel suo gruppo
+   * (Variabili/Fissi) e quindi la sua appartenenza al costo del venduto
+   * non cambia. Vedi Projects.impostaComportamentoMacro e il badge di
+   * divergenza sulla riga.
+   */
+  function _renderFvToggle(r) {
+    const isVar = r.varFisso === 'variabile';
+    const idEsc = _escapeHtml(r.id);
+    return `<div class="ab-fv" role="group" aria-label="Comportamento costo: fisso o variabile">
+      <span class="ab-fv-seg${!isVar ? ' ab-fv-seg-active' : ''}"
+            role="button" tabindex="0"
+            title="Tratta come costo fisso: importo € ancorato allo storico, pro-rata sul tempo"
+            aria-label="Fisso" aria-pressed="${!isVar}"
+            onclick="BudgetUI.impostaComportamento('${idEsc}','fisso')"
+            onkeydown="BudgetUI.comportamentoKeyDown(event,'${idEsc}','fisso')">F</span>
+      <span class="ab-fv-seg${isVar ? ' ab-fv-seg-active' : ''}"
+            role="button" tabindex="0"
+            title="Tratta come variabile stagionalizzato: % sul fatturato, scala coi ricavi"
+            aria-label="Variabile" aria-pressed="${isVar}"
+            onclick="BudgetUI.impostaComportamento('${idEsc}','variabile')"
+            onkeydown="BudgetUI.comportamentoKeyDown(event,'${idEsc}','variabile')">V</span>
     </div>`;
   }
 
@@ -1815,6 +1880,32 @@ const BudgetUI = (() => {
     if (e.key === 'Escape') {
       e.preventDefault();
       e.target.blur();
+    }
+  }
+
+  /**
+   * Imposta il comportamento (Fisso/Variabile) di una voce di costo dal
+   * toggle F/V del budget. Forza il blur del campo attivo prima del
+   * re-render (regola UI del progetto), così eventuali override appena
+   * digitati non vengono persi. L'override € e quello % restano
+   * memorizzati separatamente per id: cambiando comportamento si passa
+   * dall'uno all'altro senza perdere il valore inserito nell'altra unità.
+   */
+  function impostaComportamento(macroId, varFisso) {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    const ok = Projects.impostaComportamentoMacro(macroId, varFisso);
+    if (ok) {
+      UI.aggiornaStatusBar('modificato');
+      renderBudget();
+    }
+  }
+
+  function comportamentoKeyDown(e, macroId, varFisso) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      impostaComportamento(macroId, varFisso);
     }
   }
 
@@ -3127,6 +3218,8 @@ const BudgetUI = (() => {
     valoreSottocontoKeyDown: valoreSottocontoKeyDown,
     budgetBlur:         budgetBlur,
     budgetKeyDown:      budgetKeyDown,
+    impostaComportamento:  impostaComportamento,
+    comportamentoKeyDown:  comportamentoKeyDown,
     toggleNota:         toggleNota,
     notaToggleKeyDown:  notaToggleKeyDown,
     notaBlur:           notaBlur,

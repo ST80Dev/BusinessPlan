@@ -1658,6 +1658,42 @@ const Projects = (() => {
   }
 
   /**
+   * Imposta il comportamento di calcolo di una voce di costo:
+   *   'variabile' → stagionalizzata coi ricavi (valore = % × fatturato)
+   *   'fisso'     → importo € ancorato all'ultimo anno, pro-rata sul tempo
+   *
+   * NON tocca la `sezione` della voce: la collocazione visiva (gruppo
+   * Variabili/Fissi) e quindi l'appartenenza al costo del venduto
+   * restano invariate. Cambia solo il comportamento economico, così una
+   * voce classificata tra i Fissi può essere trattata come variabile
+   * stagionalizzata senza entrare nel costo del venduto (e viceversa).
+   * Il break-even tiene già conto del comportamento effettivo
+   * (vedi ab/engine.js — fissiBE).
+   *
+   * Ammesso solo su voci di costo delle sezioni 'variabili'/'fissi' non
+   * calcolate (esclusi Ricavi, Rimanenze, Proventi/Oneri straordinari,
+   * Imposte, dove il comportamento non è applicabile).
+   *
+   * @param {string} id        - id macroarea
+   * @param {string} varFisso  - 'variabile' | 'fisso'
+   * @returns {boolean} true se aggiornata, false altrimenti
+   */
+  function impostaComportamentoMacro(id, varFisso) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return false;
+    if (varFisso !== 'variabile' && varFisso !== 'fisso') return false;
+    const m = (_progettoCorrente.macro_sezioni || []).find(x => x.id === id);
+    if (!m) return false;
+    // Solo costi delle sezioni sopra la linea, non calcolati.
+    if (m.tipo !== 'costo') return false;
+    if (m.sezione !== 'variabili' && m.sezione !== 'fissi') return false;
+    if (m.calcolato) return false;
+    if (m.var_fisso === varFisso) return false;
+    m.var_fisso = varFisso;
+    _modificato = true;
+    return true;
+  }
+
+  /**
    * Aggiorna l'anagrafica del progetto AB (cliente, settore, anno
    * corrente, note libere). Le note sono lette dal DOM via
    * UI.leggiNoteAnagraficaCorrenti().
@@ -1786,6 +1822,7 @@ const Projects = (() => {
     creaMacroareaCustom,
     rinominaMacroareaCustom,
     eliminaMacroareaCustom,
+    impostaComportamentoMacro,
     salvaAnagraficaAB,
     // Modulo Imposte (IRES/IRAP/CPB)
     creaImposte
