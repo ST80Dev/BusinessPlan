@@ -66,7 +66,7 @@ La modalità è modificabile in qualsiasi momento: il motore di calcolo è ident
 1. **Importa CE** — caricare il bilancio di verifica Excel: il sistema estrae i sottoconti CE e li pre-mappa alle macroaree
 2. **Mappatura sottoconti** — riassegnare i sottoconti alle macroaree corrette (drag & drop, multi-selezione)
 3. **Storico & medie** — visualizzare gli importi per anno e la media % sul fatturato, base per la proiezione del budget
-4. **Budget anno** — proiettare i costi sull'anno corrente partendo dal fatturato ipotizzato e dalle medie storiche, ottenere fatturato di break-even
+4. **Budget anno** — proiettare i costi sull'anno corrente partendo dal fatturato ipotizzato e dalle medie storiche, ottenere fatturato di break-even. Su ogni voce di costo un toggle **F/V** decide il comportamento di calcolo: **F**isso (importo € ancorato allo storico, ripartito nel tempo) o **V**ariabile (stagionalizzato coi ricavi, % sul fatturato). Il toggle cambia **solo** il comportamento: la voce resta nel suo gruppo di bilancio e quindi la sua appartenenza al costo del venduto non cambia. Così un costo di norma fisso ma di fatto stagionalizzato (es. legato all'andamento dei ricavi) può scalare col fatturato **senza** entrare nel costo del venduto; il fatturato di break-even lo tratta coerentemente da variabile. Un badge **var**/**fisso** segnala le voci il cui comportamento diverge dalla convenzione del gruppo
 5. **Consuntivo** — inserire il fatturato realizzato per periodo: il sistema proietta a fine anno e confronta col budget
 6. **Salvataggio** — il progetto è un file `.json` separato dai progetti BP
 

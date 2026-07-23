@@ -440,11 +440,32 @@ const BudgetEngine = (() => {
     const utileNetto = utileAnteImposte - imposteVal;
 
     // Break-even operativo:
-    //   risultato_op = F * (1 - sommaPctVar) - (rim_ini - rim_fin) - fissi = 0
-    //   F_be = (rim_ini - rim_fin + fissi) / (1 - sommaPctVar)
+    //   risultato_op = F * (1 - sommaPctVar) - (rim_ini - rim_fin) - fissiBE = 0
+    //   F_be = (rim_ini - rim_fin + fissiBE) / (1 - sommaPctVar)
+    //
+    // Attenzione: il numeratore usa `fissiBE`, non `fissi`. Al break-even
+    // ciò che conta è il *comportamento* della voce (var_fisso), non la
+    // sua collocazione di prospetto (sezione):
+    //   - le voci a comportamento variabile (var_fisso='variabile') sono
+    //     già entrate in `sommaPctVar` (ramo variabile-puro sopra) e
+    //     pesano nel denominatore, qualunque sia la loro sezione;
+    //   - le voci a comportamento fisso (var_fisso='fisso') pesano nel
+    //     numeratore, sia che stiano tra i Fissi sia che stiano tra i
+    //     Variabili (es. un costo della sezione variabili trattato come
+    //     fisso).
+    // Sommare il numeratore per `sezione` (come `fissi`) conterebbe due
+    // volte le voci "Fissi ma variabili" e perderebbe le "Variabili ma
+    // fisse". Isoliamo perciò la sola componente a comportamento fisso,
+    // sopra la linea (sezioni variabili/fissi), escluse le rimanenze
+    // (calcolate, già in kRim). Le voci prov_oneri_straord/imposte hanno
+    // var_fisso null e non concorrono per definizione.
     const denom = 1 - sommaPctVar;
     const kRim = v('rim_ini') - v('rim_fin');
-    const breakEven = (denom > 0 && (kRim + fissi) > 0) ? (kRim + fissi) / denom : null;
+    const fissiBE = (macro || [])
+      .filter(m => m.tipo === 'costo' && !m.calcolato && m.var_fisso === 'fisso'
+                && (m.sezione === 'variabili' || m.sezione === 'fissi'))
+      .reduce((s, m) => s + v(m.id), 0);
+    const breakEven = (denom > 0 && (kRim + fissiBE) > 0) ? (kRim + fissiBE) / denom : null;
 
     // Costo figurativo del lavoro dei soci — tenuto SEPARATO dal CE
     // civilistico (non incluso in fissi/totCosti/utileNetto né nelle
@@ -453,11 +474,14 @@ const BudgetEngine = (() => {
     const soci = calcolaLavoroSoci(progetto);
     const costoFigSoci = soci.costo_figurativo;
     const redditoNormalizzato = utileNetto - costoFigSoci;
-    // Break-even che remunera anche il lavoro dei soci: ai costi fissi si
-    // aggiunge il costo figurativo (fisso per natura, indipendente dal
-    // fatturato). Non altera il break-even operativo classico sopra.
-    const breakEvenSoci = (denom > 0 && (kRim + fissi + costoFigSoci) > 0)
-      ? (kRim + fissi + costoFigSoci) / denom : null;
+    // Break-even che remunera anche il lavoro dei soci: al numeratore del
+    // break-even operativo (kRim + fissiBE, componente a comportamento
+    // fisso) si aggiunge il costo figurativo, anch'esso fisso per natura e
+    // indipendente dal fatturato. Usa `fissiBE` (non `fissi`) per restare
+    // coerente col break-even operativo: break_even_soci − break_even =
+    // costoFigSoci / denom.
+    const breakEvenSoci = (denom > 0 && (kRim + fissiBE + costoFigSoci) > 0)
+      ? (kRim + fissiBE + costoFigSoci) / denom : null;
     const ricaviOra = soci.ore_totali > 0 ? fatturato / soci.ore_totali : null;
     const mdcOra    = soci.ore_totali > 0 ? mdc / soci.ore_totali       : null;
 
