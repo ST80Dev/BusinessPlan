@@ -985,8 +985,11 @@ const BudgetUI = (() => {
         if (m.calcolato) {
           // Box readonly: rim. iniziali / rim. finali, hatch pattern
           const inRim = inRimanenze.length;
+          // Non è drop target, ma resta cliccabile per scorrere al gruppo
+          // "In rimanenze" nel main (presente solo se ci sono sottoconti).
+          const scrollAttr = inRim > 0 ? ' data-scroll-target="__rimanenze__" tabindex="0"' : '';
           html += `
-            <div class="ab-mini-box ab-mini-box-readonly" title="Calcolato dai mastri 61/80 (${inRim} sottoconti)">
+            <div class="ab-mini-box ab-mini-box-readonly"${scrollAttr} title="Calcolato dai mastri 61/80 (${inRim} sottoconti)">
               <div class="ab-mini-box-label">${_escapeHtml(m.label)}</div>
               <div class="ab-mini-box-count">=</div>
             </div>
@@ -1150,6 +1153,15 @@ const BudgetUI = (() => {
         _eliminaSottocontoConConferma(scDel.dataset.eliminaSc);
         return;
       }
+      // Click su un box della mini-CE (sidebar sx) → scorri il main
+      // fino al raggruppamento corrispondente. Ignorato se il click
+      // è già stato gestito dai controlli "+ Nuovo gruppo" / "×".
+      const miniBox = ev.target.closest('.ab-mini-box');
+      if (miniBox) {
+        const gruppoId = miniBox.dataset.dropMacro || miniBox.dataset.scrollTarget;
+        if (gruppoId) _scrollToGruppo(gruppoId);
+        return;
+      }
       const cell = ev.target.closest('.ab-cell-codice');
       if (!cell) return;
       const tr = cell.closest('tr.ab-row-draggable');
@@ -1174,9 +1186,20 @@ const BudgetUI = (() => {
     root.addEventListener('keydown', (ev) => {
       if (ev.key !== 'Enter' && ev.key !== ' ') return;
       const scDel = ev.target.closest('[data-elimina-sc]');
-      if (!scDel) return;
-      ev.preventDefault();
-      _eliminaSottocontoConConferma(scDel.dataset.eliminaSc);
+      if (scDel) {
+        ev.preventDefault();
+        _eliminaSottocontoConConferma(scDel.dataset.eliminaSc);
+        return;
+      }
+      // Enter/Spazio su un box della mini-CE → scorri al raggruppamento
+      const miniBox = ev.target.closest('.ab-mini-box');
+      if (miniBox) {
+        const gruppoId = miniBox.dataset.dropMacro || miniBox.dataset.scrollTarget;
+        if (gruppoId) {
+          ev.preventDefault();
+          _scrollToGruppo(gruppoId);
+        }
+      }
     });
 
     // Drag start: se la riga trascinata non è selezionata, il drag
@@ -1253,6 +1276,20 @@ const BudgetUI = (() => {
       }
       renderMacroSezioni();
     });
+  }
+
+  /* Scorre la colonna principale fino al raggruppamento indicato e
+     lo evidenzia brevemente. Chiamato al click/Enter su un box della
+     mini-CE (sidebar sx). Se il gruppo non è presente nel DOM (es.
+     "Non mappati" quando è vuoto) l'operazione è un no-op. */
+  function _scrollToGruppo(gruppoId) {
+    const main = document.querySelector('.ab-mappatura-main');
+    if (!main) return;
+    const target = main.querySelector(`[data-gruppo="${CSS.escape(gruppoId)}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    target.classList.add('ab-gruppo-flash');
+    setTimeout(() => target.classList.remove('ab-gruppo-flash'), 1400);
   }
 
   function _aggiornaSelCount() {

@@ -2905,6 +2905,17 @@ thead .ab-col-periodo-preavvio {
   border-radius: 8px;
   margin-bottom: 14px;
   overflow: hidden;
+  /* Offset per non finire sotto l'header sticky quando si scorre
+     al gruppo cliccando un box della mini-CE. */
+  scroll-margin-top: calc(var(--ab-head-h, 40px) + 12px);
+}
+/* Evidenziazione temporanea al click su un box della mini-CE. */
+.ab-gruppo-flash {
+  animation: ab-gruppo-flash 1.4s ease-out;
+}
+@keyframes ab-gruppo-flash {
+  0%   { box-shadow: 0 0 0 3px var(--color-accent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
 }
 .ab-gruppo-warn {
   border-color: var(--color-warning);
@@ -2976,7 +2987,10 @@ thead .ab-col-periodo-preavvio {
   font-size: 12px;
 }
 .ab-macro-select {
-  min-width: 220px;
+  width: 100%;
+  min-width: 140px;
+  max-width: 190px;
+  box-sizing: border-box;
 }
 
 /* Importo sottoconto editabile nella mappatura: più compatto della
@@ -3184,10 +3198,12 @@ thead .ab-col-periodo-preavvio {
 }
 
 /* Hover/drop feedback su mini-box */
-.ab-mini-box[data-drop-macro] {
+.ab-mini-box[data-drop-macro],
+.ab-mini-box[data-scroll-target] {
   cursor: pointer;
 }
-.ab-mini-box[data-drop-macro]:hover:not(.ab-drop-hover) {
+.ab-mini-box[data-drop-macro]:hover:not(.ab-drop-hover),
+.ab-mini-box[data-scroll-target]:hover {
   background: var(--color-surface-hover);
 }
 .ab-mini-box.ab-drop-hover {
