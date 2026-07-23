@@ -2596,72 +2596,100 @@ const BudgetUI = (() => {
     // "periodi operativi" ne tengono conto nel denominatore.
     const denomOperativi = pre.periodi_operativi != null ? pre.periodi_operativi : pre.periodi_totali;
 
-    let html = `
-      <div class="ab-consuntivo">
+    // Lavoro soci (dal budget): costo figurativo, reddito normalizzato
+    // proiettato e break-even coi soci, esposti come riquadri anche nel
+    // Consuntivo quando il conteggio è attivo.
+    const socis = pre.budget.lavoro_soci || { attivo: false };
+    const sociAttivo = !!socis.attivo;
+    const costoSoci = pre.budget.costo_figurativo_soci || 0;
+    const redditoNormProj = pre.proiezione.utileNetto - costoSoci;
+    const bepSoci = pre.budget.break_even_soci;
+    const deltaBepSoci = (bepSoci != null && bepSoci > 0)
+      ? (pre.fatturato_proiettato - bepSoci) / bepSoci : null;
 
-        <div class="ab-consuntivo-head">
-          <div class="ab-consuntivo-head-left">
-            <div class="ab-consuntivo-controls">
-              <div class="ab-freq-selector">
-                <span class="text-muted">Frequenza:</span>
-                <div class="ab-freq-toggle">
-                  <div class="ab-freq-opt ${pre.frequenza === 'mensile' ? 'active' : ''}"
-                       onclick="BudgetUI.cambiaFrequenza('mensile')">Mensile</div>
-                  <div class="ab-freq-opt ${pre.frequenza === 'trimestrale' ? 'active' : ''}"
-                       onclick="BudgetUI.cambiaFrequenza('trimestrale')">Trimestrale</div>
-                </div>
-              </div>
-              <div class="ab-freq-selector"
-                   title="Lineare: la proiezione fine anno estrapola il consuntivato in proporzione al tempo trascorso. Stagionalizzata: per i periodi aperti usa il valore atteso inserito a mano nella riga 'Ricavi attesi', adatto alle attività stagionali.">
-                <span class="text-muted">Distribuzione ricavi:</span>
-                <div class="ab-freq-toggle">
-                  <div class="ab-freq-opt ${pre.modalita_proiezione === 'lineare' ? 'active' : ''}"
-                       onclick="BudgetUI.cambiaModalitaProiezione('lineare')">Lineare</div>
-                  <div class="ab-freq-opt ${pre.modalita_proiezione === 'stagionalizzata' ? 'active' : ''}"
-                       onclick="BudgetUI.cambiaModalitaProiezione('stagionalizzata')">Stagionalizzata</div>
-                </div>
-                ${pre.modalita_proiezione === 'stagionalizzata' ? `
+    // Toggle segmentato compatto (riusa .ab-freq-toggle/.ab-freq-opt).
+    const _tgl = (opts) => `<div class="ab-freq-toggle">${opts}</div>`;
+    const _opt = (attivo, on, label) => `<div class="ab-freq-opt ${attivo ? 'active' : ''}" ${on}>${label}</div>`;
+
+    const distribPctTrigger = pre.modalita_proiezione === 'stagionalizzata' ? `
                 <span class="ab-distrib-pct-trigger"
                       role="button" tabindex="0"
                       title="Apri la distribuzione per percentuali: pesi % che sommano 100, applicati al fatturato di budget per riempire i periodi della riga 'Ricavi attesi'."
                       onclick="BudgetUI.apriDistribuisciPct()"
-                      onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ Distribuisci da %</span>
-                ` : ''}
-              </div>
-              <div class="ab-freq-selector"
-                   title="Come distribuire il valore di fine anno delle rimanenze sui periodi trascorsi. Lineare: quota proporzionale al tempo trascorso. Stagionalità acquisti: quota proporzionale al fatturato di periodo (gli acquisti seguono il fatturato). La rettifica manuale nelle celle 'Proiezione fine anno' delle rimanenze prevale comunque su entrambe.">
-                <span class="text-muted">Rimanenze:</span>
-                <div class="ab-freq-toggle">
-                  <div class="ab-freq-opt ${pre.rim_distribuzione === 'lineare' ? 'active' : ''}"
-                       onclick="BudgetUI.cambiaRimDistribuzione('lineare')">Lineare</div>
-                  <div class="ab-freq-opt ${pre.rim_distribuzione === 'stagionale' ? 'active' : ''}"
-                       onclick="BudgetUI.cambiaRimDistribuzione('stagionale')">Stagionalità acquisti</div>
-                </div>
-              </div>
-              <div class="ab-consuntivo-stats text-muted">
-                <span title="Periodi operativi trascorsi da avvio fino all'ultimo mese con ricavo inserito: i mesi intermedi a ricavo zero contano comunque come trascorsi (i loro costi fissi sono conteggiati); i mesi precedenti all'avvio e quelli successivi all'orizzonte non sono conteggiati."><strong>${pre.periodi_chiusi}</strong> / ${denomOperativi} periodi operativi</span>
-                <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
-                <span>Consuntivato: <strong>${_fmtEuroInt(pre.fatturato_consuntivato)}</strong></span>
-              </div>
-            </div>
-          </div>
+                      onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ da %</span>` : '';
 
-          <div class="ab-consuntivo-kpi">
-            <div class="ab-budget-kpi-card ab-kpi-verde">
-              <div class="ab-kpi-label">Fatturato proiettato fine anno</div>
+    const sociCards = sociAttivo ? `
+            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio" title="Costo figurativo del lavoro dei soci (ore × tariffa), ragguagliato al periodo. Fuori dal Conto Economico civilistico e dalle imposte.">
+              <div class="ab-kpi-label">Costo figurativo soci</div>
+              <div class="ab-kpi-value">${_fmtKpi(costoSoci)}</div>
+              <div class="ab-kpi-sub">fuori dal CE</div>
+            </div>
+            <div class="ab-budget-kpi-card ab-cons-kpi ${redditoNormProj >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}" title="Utile netto proiettato meno il costo figurativo dei soci: redditività proiettata al netto di un giusto compenso al loro lavoro.">
+              <div class="ab-kpi-label">Reddito normalizz. proiettato</div>
+              <div class="ab-kpi-value">${_fmtKpi(redditoNormProj)}</div>
+              <div class="ab-kpi-sub">utile − costo soci</div>
+            </div>
+            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio" title="Fatturato necessario a coprire i costi e anche un giusto compenso ai soci.">
+              <div class="ab-kpi-label">Break-even coi soci</div>
+              <div class="ab-kpi-value">${_fmtKpi(bepSoci)}</div>
+              <div class="ab-kpi-sub">${deltaBepSoci != null
+                  ? (pre.fatturato_proiettato >= bepSoci
+                      ? _fmtPctSigned(deltaBepSoci) + ' sopra'
+                      : _fmtPctSigned(deltaBepSoci) + ' dal pareggio')
+                  : 'target'}</div>
+            </div>` : '';
+
+    let html = `
+      <div class="ab-consuntivo">
+
+        <div class="ab-consuntivo-head">
+          <div class="ab-consuntivo-bar">
+            <div class="ab-cons-ctrl">
+              <div class="ab-cons-ctrl-label">Frequenza</div>
+              ${_tgl(
+                _opt(pre.frequenza === 'mensile', "onclick=\"BudgetUI.cambiaFrequenza('mensile')\"", 'Mensile') +
+                _opt(pre.frequenza === 'trimestrale', "onclick=\"BudgetUI.cambiaFrequenza('trimestrale')\"", 'Trim.')
+              )}
+            </div>
+            <div class="ab-cons-ctrl"
+                 title="Lineare: la proiezione fine anno estrapola il consuntivato in proporzione al tempo trascorso. Stagionalizzata: per i periodi aperti usa il valore atteso inserito a mano nella riga 'Ricavi attesi', adatto alle attività stagionali.">
+              <div class="ab-cons-ctrl-label">Distrib. ricavi</div>
+              ${_tgl(
+                _opt(pre.modalita_proiezione === 'lineare', "onclick=\"BudgetUI.cambiaModalitaProiezione('lineare')\"", 'Lineare') +
+                _opt(pre.modalita_proiezione === 'stagionalizzata', "onclick=\"BudgetUI.cambiaModalitaProiezione('stagionalizzata')\"", 'Stag.')
+              )}${distribPctTrigger}
+            </div>
+            <div class="ab-cons-ctrl"
+                 title="Come distribuire il valore di fine anno delle rimanenze sui periodi trascorsi. Lineare: quota proporzionale al tempo trascorso. Stagionalità acquisti: quota proporzionale al fatturato di periodo. La rettifica manuale nelle celle 'Proiezione fine anno' delle rimanenze prevale comunque su entrambe.">
+              <div class="ab-cons-ctrl-label">Rimanenze</div>
+              ${_tgl(
+                _opt(pre.rim_distribuzione === 'lineare', "onclick=\"BudgetUI.cambiaRimDistribuzione('lineare')\"", 'Lineare') +
+                _opt(pre.rim_distribuzione === 'stagionale', "onclick=\"BudgetUI.cambiaRimDistribuzione('stagionale')\"", 'Stag.')
+              )}
+            </div>
+
+            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-verde">
+              <div class="ab-kpi-label">Fatturato proiettato</div>
               <div class="ab-kpi-value">${_fmtKpi(pre.fatturato_proiettato)}</div>
               <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.fatturato_proiettato, pre.budget.fatturato), +1)} vs budget</div>
             </div>
-            <div class="ab-budget-kpi-card ${pre.proiezione.utileNetto >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}">
+            <div class="ab-budget-kpi-card ab-cons-kpi ${pre.proiezione.utileNetto >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}">
               <div class="ab-kpi-label">Utile netto proiettato</div>
               <div class="ab-kpi-value">${_fmtKpi(pre.proiezione.utileNetto)}</div>
               <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.proiezione.utileNetto, pre.budget.utileNetto), +1)} vs budget</div>
             </div>
-            <div class="ab-budget-kpi-card ab-kpi-arancio">
+            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio">
               <div class="ab-kpi-label">MdC proiettato</div>
               <div class="ab-kpi-value">${_fmtKpi(pre.proiezione.mdc)}</div>
               <div class="ab-kpi-sub">${_fmtDelta(_delta(pre.proiezione.mdc, pre.budget.mdc), +1)} vs budget</div>
             </div>
+            ${sociCards}
+          </div>
+
+          <div class="ab-consuntivo-stats text-muted">
+            <span title="Periodi operativi trascorsi da avvio fino all'ultimo mese con ricavo inserito: i mesi intermedi a ricavo zero contano comunque come trascorsi (i loro costi fissi sono conteggiati); i mesi precedenti all'avvio e quelli successivi all'orizzonte non sono conteggiati."><strong>${pre.periodi_chiusi}</strong> / ${denomOperativi} periodi operativi</span>
+            <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
+            <span>Consuntivato: <strong>${_fmtEuroInt(pre.fatturato_consuntivato)}</strong></span>
           </div>
         </div>
 
