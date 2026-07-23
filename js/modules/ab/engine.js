@@ -220,6 +220,11 @@ const BudgetEngine = (() => {
       costoTot  += costo;
       return { id: r && r.id, nome: (r && r.nome) || '', ore, ore_effettive: oreEff, tariffa, costo };
     });
+    // Tariffa media ponderata sulle ore = Σ(ore×tariffa)/Σore. Il fattore di
+    // ragguaglio si semplifica (numeratore e denominatore lo condividono),
+    // quindi è invariante rispetto all'orizzonte — coerente col MdC/ora, con
+    // cui va confrontata per capire se il lavoro dei soci "si ripaga".
+    const tariffaMedia = oreEffTot > 0 ? (costoTot / oreEffTot) : 0;
     return {
       attivo,
       righe,
@@ -230,6 +235,7 @@ const BudgetEngine = (() => {
       fattore_ragguaglio: fattore,
       ore_totali: oreTot,
       ore_effettive_totali: oreEffTot,
+      tariffa_media: tariffaMedia,
       costo_figurativo: attivo ? costoTot : 0
     };
   }

@@ -2243,6 +2243,29 @@ const BudgetUI = (() => {
   }
 
   /**
+   * Classifica il MdC/ora rispetto alla tariffa media dei soci: è il KPI che
+   * dice se il lavoro dei soci "si ripaga" a livello di margine. Ogni ora
+   * produce `mdcOra` di margine; ne serve almeno `tariffaMedia` per coprire il
+   * loro compenso, e l'eccedenza va a coprire i costi fissi + utile.
+   * Tre livelli (soglie sul rapporto MdC/ora ÷ tariffa):
+   *   ok   (≥ 1,3): sostenibile con margine per fissi/utile
+   *   warn (1,0–1,3): copre appena il compenso
+   *   bad  (< 1,0): il margine orario non copre nemmeno la tariffa
+   * @returns {{lvl,cls,label}} lvl='na' se dati insufficienti.
+   */
+  function _mdcOraInfo(mdcOra, tariffaMedia) {
+    if (mdcOra == null || !(tariffaMedia > 0)) return { lvl: 'na', cls: '', label: '' };
+    const surplus = mdcOra - tariffaMedia;
+    const ratio   = mdcOra / tariffaMedia;
+    if (ratio >= 1.3) return { lvl: 'ok', cls: 'lvl-ok',
+      label: `Sostenibile — +${_fmtEuroInt(surplus)}/h oltre il compenso soci` };
+    if (ratio >= 1.0) return { lvl: 'warn', cls: 'lvl-warn',
+      label: `Al limite — copre appena il compenso (+${_fmtEuroInt(surplus)}/h)` };
+    return { lvl: 'bad', cls: 'lvl-bad',
+      label: `Critico — ${_fmtEuroInt(Math.abs(surplus))}/h sotto la tariffa soci` };
+  }
+
+  /**
    * Blocco "Reddito normalizzato — lavoro dei soci". Imputa un costo
    * figurativo (ore × tariffa) al lavoro dei soci non retribuiti, tenuto
    * SEPARATO dal CE civilistico e dalle imposte. Mostra:
@@ -2323,11 +2346,19 @@ const BudgetUI = (() => {
     // KPI ore: ore effettive del periodo quando il ragguaglio è attivo.
     const oreKpiVal   = soci.ragguaglio_attivo ? soci.ore_effettive_totali : soci.ore_totali;
     const oreKpiLabel = soci.ragguaglio_attivo ? 'Ore periodo' : 'Ore totali';
+    // MdC/ora vs tariffa media soci → livello + etichetta + colore dinamici.
+    const tariffaMedia = soci.tariffa_media || 0;
+    const mdcInfo = _mdcOraInfo(b.mdc_ora, tariffaMedia);
+    const mdcSub = mdcInfo.lvl !== 'na'
+      ? `<span class="ab-soci-kpi-sub">${mdcInfo.label}</span>` : '';
+    const mdcTitle = tariffaMedia > 0
+      ? `Margine di contribuzione per ora di lavoro dei soci, da confrontare con la tariffa media (${_fmtEuroInt(tariffaMedia)}/h). Sopra la tariffa = il lavoro si ripaga e l'eccedenza copre i costi fissi e l'utile.`
+      : 'Margine di contribuzione per ora di lavoro dei soci.';
     const kpiOra = (attivo && oreKpiVal > 0) ? `
       <div class="ab-soci-kpi-row">
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">${oreKpiLabel}</span><span class="ab-soci-kpi-val">${_fmtNum0(oreKpiVal)}</span></div>
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Ricavi / ora</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.ricavi_ora)}</span></div>
-        <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">MdC / ora</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.mdc_ora)}</span></div>
+        <div class="ab-soci-kpi ab-soci-kpi-mdc ${mdcInfo.cls}" title="${mdcTitle}"><span class="ab-soci-kpi-label">MdC / ora vs tariffa</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.mdc_ora)}</span>${mdcSub}</div>
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Break-even coi soci</span><span class="ab-soci-kpi-val">${b.break_even_soci != null ? _fmtEuroInt(b.break_even_soci) : '—'}</span></div>
       </div>` : '';
 
