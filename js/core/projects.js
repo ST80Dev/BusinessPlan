@@ -1378,6 +1378,96 @@ const Projects = (() => {
   }
 
   /**
+   * Import "infrannuale" per società NEOCOSTITUITE (anni_storici vuoto).
+   *
+   * A differenza di applicaImportCE (che archivia gli anni del file come
+   * storico chiuso), qui l'anno più recente del file è l'ANNO IN CORSO, di
+   * cui sono noti solo alcuni mesi (bilancio di verifica infrannuale). Da
+   * quei dati parziali costruisce:
+   *
+   *   - Budget: incidenze % dei costi variabili (scale-free) come override_pct;
+   *     costi fissi/imposte/proventi proiettati avvio→dic (× fattore) come
+   *     override_fissi; fatturato_ipotizzato = ricavi proiettati avvio→dic.
+   *     fattore = mesi_operativi / mesi_coperti, dove
+   *       mesi_coperti   = mese_riferimento − mese_avvio + 1
+   *       mesi_operativi = 12 − mese_avvio + 1
+   *   - Consuntivo: il fatturato realizzato (ricavi YTD del file) ripartito in
+   *     parti uguali sui mesi avvio→riferimento (poi override manuale).
+   *
+   * `anni_storici` resta vuoto (la società rimane neocostituita); i sottoconti
+   * e il mapping vengono comunque salvati (Mappatura disponibile), lo storico
+   * resta vuoto. Le rimanenze (stock) sono riportate as-is, non proiettate.
+   *
+   * @param {Object} parsed          - output del parser (sottoconti, anni, ...)
+   * @param {Object} mapping         - sottoconto → macroarea
+   * @param {Object} storicoPreview  - { anno: { macro_id: valore } } dell'anteprima
+   * @param {number} meseRiferimento - mese (1-12) fino a cui i dati sono aggiornati
+   */
+  function applicaImportInfrannuale(parsed, mapping, storicoPreview, meseRiferimento) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    const meta = _progettoCorrente.meta;
+    if (!meta.cliente && parsed.ditta) meta.cliente = parsed.ditta;
+
+    // Sottoconti/mapping sì; anni_storici resta vuoto (neocostituita): l'anno
+    // importato è l'anno in corso, non uno storico chiuso.
+    _progettoCorrente.sottoconti_ce = parsed.sottoconti;
+    _progettoCorrente.rimanenze     = parsed.rimanenze;
+    _progettoCorrente.mapping       = mapping;
+    _progettoCorrente.storico       = {};
+    meta.anni_storici               = [];
+
+    const annoCorrente = Math.max.apply(null, parsed.anni);
+    const vals = (storicoPreview && storicoPreview[annoCorrente]) || {};
+    const ricaviYtd = Number(vals.ricavi) || 0;
+
+    const meseAvvio = Math.min(12, Math.max(1, parseInt(meta.mese_avvio, 10) || 1));
+    const meseRif   = Math.min(12, Math.max(meseAvvio, parseInt(meseRiferimento, 10) || meseAvvio));
+    const mesiCoperti   = meseRif - meseAvvio + 1;
+    const mesiOperativi = 12 - meseAvvio + 1;
+    const fattore = mesiCoperti > 0 ? (mesiOperativi / mesiCoperti) : 1;
+
+    // Budget: incidenze % (variabili) e valori proiettati avvio→dic (fissi).
+    const budget = _progettoCorrente.budget
+      || (_progettoCorrente.budget = { fatturato_ipotizzato: null, override_pct: {}, override_fissi: {}, note: {} });
+    budget.override_pct   = {};
+    budget.override_fissi = {};
+    budget.fatturato_ipotizzato = Math.round(ricaviYtd * fattore);
+
+    const macro = _progettoCorrente.macro_sezioni || BudgetEngine.MACROAREE_AB;
+    macro.forEach(function(m) {
+      if (m.id === 'ricavi') return;
+      const v = Number(vals[m.id]) || 0;
+      if (m.var_fisso === 'variabile' && !m.calcolato) {
+        // Incidenza % sul fatturato: indipendente dall'orizzonte.
+        if (ricaviYtd > 0) budget.override_pct[m.id] = v / ricaviYtd;
+      } else if (m.calcolato) {
+        // Rimanenze (stock): valore così com'è, non proiettato.
+        if (v) budget.override_fissi[m.id] = v;
+      } else if (v) {
+        // Fissi / imposte / proventi-oneri: proiezione lineare avvio→dic.
+        budget.override_fissi[m.id] = Math.round(v * fattore);
+      }
+    });
+
+    // Consuntivo: fatturato realizzato ripartito in parti uguali sui mesi
+    // avvio→riferimento (poi override manuale per singolo mese).
+    const cons = _progettoCorrente.consuntivo
+      || (_progettoCorrente.consuntivo = { frequenza: 'mensile', fatturato: {} });
+    cons.frequenza = 'mensile';
+    cons.fatturato = {};
+    const quota = mesiCoperti > 0 ? (ricaviYtd / mesiCoperti) : 0;
+    for (let mm = meseAvvio; mm <= meseRif; mm++) {
+      const key = (mm < 10 ? '0' : '') + mm;
+      if (quota) cons.fatturato[key] = Math.round(quota);
+    }
+
+    // Tracciabilità dell'import infrannuale.
+    meta.import_infrannuale = { anno: annoCorrente, mese_riferimento: meseRif, mesi_coperti: mesiCoperti };
+
+    _modificato = true;
+  }
+
+  /**
    * Aggiorna i campi del budget (fatturato ipotizzato, override e note).
    *
    *   field può essere:
@@ -1966,6 +2056,7 @@ const Projects = (() => {
     // Modulo Analisi Costi & Budget
     creaAnalisi,
     applicaImportCE,
+    applicaImportInfrannuale,
     aggiornaMappingSottoconto,
     aggiornaValoreSottoconto,
     eliminaSottoconto,

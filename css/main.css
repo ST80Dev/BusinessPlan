@@ -1812,6 +1812,26 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   line-height: 1.5;
 }
 
+/* Blocco import infrannuale (società neocostituite) */
+.ab-import-infrannuale {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-accent-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.ab-import-infrannuale .ab-import-info { margin-top: 0; }
+.ab-import-mese-rif {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.ab-import-mese-rif .form-label { margin: 0; font-weight: 600; }
+.ab-import-mese-rif .form-select { min-width: 150px; }
+.ab-import-mese-rif .form-hint { margin: 0; }
+
 .ab-import-summary {
   margin-top: 28px;
   padding: 20px;

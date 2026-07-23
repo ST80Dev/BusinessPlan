@@ -476,6 +476,30 @@ const BudgetUI = (() => {
       parsed.warnings.forEach(w => { warnHtml += `<div class="ab-import-warn">⚠ ${_escapeHtml(w)}</div>`; });
     }
 
+    // Società neocostituita (senza storico): l'import è "infrannuale" — l'anno
+    // più recente del file è l'anno in corso. Chiediamo qui il mese fino a cui
+    // i dati sono aggiornati, così da distribuire il fatturato sui mesi del
+    // consuntivo e proiettare il budget avvio→dic. Vedi applicaImport.
+    const progettoSum = Projects.getProgetto();
+    let infrannualeBlock = '';
+    if (_abSenzaStorico(progettoSum) && Array.isArray(parsed.anni) && parsed.anni.length > 0) {
+      const meseAvvio = Math.min(12, Math.max(1, parseInt(progettoSum.meta.mese_avvio, 10) || 1));
+      const annoCorr  = Math.max.apply(null, parsed.anni);
+      let opts = '';
+      for (let mm = meseAvvio; mm <= 12; mm++) {
+        opts += `<option value="${mm}"${mm === meseAvvio ? ' selected' : ''}>${_MESI[mm - 1]}</option>`;
+      }
+      infrannualeBlock = `
+      <div class="ab-import-infrannuale">
+        <div class="ab-import-info">🆕 <strong>Società neocostituita</strong>: l'anno più recente del file (<strong>${annoCorr}</strong>) è trattato come <strong>anno in corso</strong> (dati infrannuali). Le incidenze % alimentano il budget (proiettato avvio→dicembre) e il fatturato viene distribuito nei mesi del consuntivo.</div>
+        <div class="ab-import-mese-rif">
+          <span class="form-label">Dati aggiornati fino a</span>
+          <select class="form-select" id="ab-import-mese-rif">${opts}</select>
+          <span class="form-hint">Mese fino a cui il bilancio di verifica è aggiornato (avvio attività: ${_MESI[meseAvvio - 1]}).</span>
+        </div>
+      </div>`;
+    }
+
     sumEl.innerHTML = `
       <div class="ab-import-summary-head">
         <h3>Anteprima import — ${_escapeHtml(fileName || '')}</h3>
@@ -488,6 +512,8 @@ const BudgetUI = (() => {
       </div>
 
       ${warnHtml}
+
+      ${infrannualeBlock}
 
       ${tabHtml}
 
@@ -517,23 +543,41 @@ const BudgetUI = (() => {
       UI.mostraNotifica('Nessun import in attesa.', 'error');
       return;
     }
-    Projects.applicaImportCE(_lastParsed, _lastMapping, _lastStorico);
+
+    const progetto = Projects.getProgetto();
+    const neo = _abSenzaStorico(progetto);
+
+    if (neo) {
+      // Import infrannuale: l'anno del file è l'anno in corso. Legge il mese di
+      // riferimento scelto e costruisce budget (incidenze/proiezione) +
+      // consuntivo (fatturato distribuito). anni_storici resta vuoto.
+      const sel = document.getElementById('ab-import-mese-rif');
+      const meseRif = sel ? parseInt(sel.value, 10) : (progetto.meta.mese_avvio || 1);
+      Projects.applicaImportInfrannuale(_lastParsed, _lastMapping, _lastStorico, meseRif);
+    } else {
+      Projects.applicaImportCE(_lastParsed, _lastMapping, _lastStorico);
+    }
 
     // Salva la classificazione mastri scelta nella modale: serve a
     // pre-popolare la modale al prossimo re-import dello stesso
     // cliente. Lo facciamo qui (e non in confermaModaleClassifica)
     // così se l'utente annulla l'anteprima storico il progetto non
     // resta sporco.
-    const progetto = Projects.getProgetto();
     if (progetto && progetto.meta) {
       if (_lastClassificazione) progetto.meta.classificazione_mastri = _lastClassificazione;
       if (_lastMastriRimanenze) progetto.meta.mastri_rimanenze       = _lastMastriRimanenze;
     }
 
-    UI.mostraNotifica('Import applicato. Sottoconti, mapping e storico aggiornati.', 'success');
     annullaImport();
     UI.aggiornaStatusBar('modificato');
-    renderImportaCE();
+    if (neo) {
+      // Dati infrannuali applicati: porta l'operatore al Budget già popolato.
+      UI.mostraNotifica('Import infrannuale applicato: budget e consuntivo popolati dai dati dell\'anno in corso.', 'success');
+      UI.navigate('ab-budget');
+    } else {
+      UI.mostraNotifica('Import applicato. Sottoconti, mapping e storico aggiornati.', 'success');
+      renderImportaCE();
+    }
   }
 
   /* ──────────────────────────────────────────────────────────
