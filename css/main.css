@@ -4113,6 +4113,21 @@ thead .ab-col-periodo-preavvio {
   font-style: italic;
 }
 
+/* Rimanenze: cella di rettifica manuale del valore reale di fine anno
+   (colonna "Proiezione fine anno" di rim_ini/rim_fin). Riusa lo stile
+   .ab-periodo-input-cell; il bordo accent la segnala come editabile e, quando
+   la rettifica è attiva, la cella è evidenziata per distinguerla dal valore
+   calcolato di budget. */
+.ab-rim-override-input {
+  border-color: var(--color-accent);
+}
+.ab-rim-override-input:focus {
+  box-shadow: 0 0 0 2px var(--color-accent-light);
+}
+.ab-rim-override-attivo {
+  background: var(--color-accent-light);
+}
+
 /* ──────────────────────────────────────────────────────────────────────
    Modale generica (overlay + box centrale) usata da "Distribuisci da %".
    ────────────────────────────────────────────────────────────────────── */

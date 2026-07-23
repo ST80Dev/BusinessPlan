@@ -1449,6 +1449,23 @@ const Projects = (() => {
       if (value === 'lineare' || value === 'stagionalizzata') {
         c.modalita_proiezione = value;
       }
+    } else if (field === 'rim_distribuzione') {
+      // Modalità di distribuzione delle rimanenze sui periodi del consuntivo:
+      //   'lineare'    → quota proporzionale al tempo trascorso (default);
+      //   'stagionale' → quota proporzionale agli acquisti (fatturato periodo).
+      if (value === 'lineare' || value === 'stagionale') {
+        c.rim_distribuzione = value;
+      }
+    } else if (field.indexOf('override_rim.') === 0) {
+      // Rettifica manuale del valore di fine anno di una voce rimanenze
+      // (rim_ini / rim_fin). Cella VUOTA (value null) → si torna al valore di
+      // budget. Uno 0 esplicito è invece una rettifica valida (magazzino
+      // azzerato a fine anno), quindi va conservato.
+      if (!c.override_rim) c.override_rim = {};
+      const voce = field.substring('override_rim.'.length);
+      const isVuoto = value == null || (typeof value === 'number' && !isFinite(value));
+      if (isVuoto) delete c.override_rim[voce];
+      else         c.override_rim[voce] = Number(value);
     } else if (field.indexOf('fatturato.') === 0) {
       const periodo = field.substring('fatturato.'.length);
       const isVuoto = value == null || (typeof value === 'number' && (!isFinite(value) || value === 0));

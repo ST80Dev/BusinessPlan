@@ -279,11 +279,19 @@ Basato su ricognizione del codice, non solo sulla pianificazione originale.
 | 4 | Budget anno + fatturato di break-even | ✅ Fatto |
 | 5 | Consuntivo & preconsuntivo (proiezione fine anno vs budget) | ✅ Fatto |
 | 6 | Società senza storico: mese di avvio + seed fatturato dai mesi in corso; costo figurativo lavoro soci (reddito normalizzato) | ✅ Fatto |
+| 7 | Consuntivo — rimanenze: distribuzione lineare / stagionalità acquisti + rettifica manuale di fine anno | ✅ Fatto |
 
 **Note fase 6 (data model e semantica):**
 - `meta.mese_avvio` (1-12): mese di avvio attività. Per società costituite in corso d'anno il preconsuntivo conta solo i **periodi operativi** da avvio a fine anno (i mesi pre-avvio non concorrono a run-rate e fissi pro-rata; sono mostrati "—" e non editabili). Con `mese_avvio = 1` il comportamento è identico al precedente (retrocompatibile).
 - **Seed budget** (`BudgetEngine.calcolaSeedFatturato`): annualizza i mesi già inseriti nel Consuntivo su due orizzonti — primo anno parziale (avvio→dic) e anno a regime (×12) — scrivendo su `fatturato_ipotizzato`. Pensato per aziende prive di storico.
 - **Costo figurativo lavoro soci** (`progetto.lavoro_soci = { attivo, righe:[{id,nome,ore,tariffa}] }`): costo-opportunità del lavoro dei soci non retribuiti = Σ ore×tariffa. Tenuto **fuori dal CE civilistico e dalle imposte**; alimenta solo il *reddito normalizzato* (Utile netto − costo figurativo), i KPI di produttività oraria (ricavi/ora, MdC/ora) e un break-even che remunera anche i soci. Blocco separato in fondo alla vista Budget.
+
+**Note fase 7 (rimanenze nel Consuntivo AB):**
+- Le rimanenze (`rim_ini`/`rim_fin`) sono **stock** (saldi SP), non flussi. Nel Consuntivo due leve indipendenti, entrambe confinate alla sezione **AB → Consuntivo** (dati in `progetto.consuntivo`):
+  - **`consuntivo.rim_distribuzione`** — come il valore di fine anno si distribuisce sui periodi trascorsi (colonna Consuntivato e celle per-periodo): `'lineare'` (default, quota ∝ tempo trascorso = comportamento storico) | `'stagionale'` (quota ∝ acquisti, cioè al fatturato di periodo, dato che gli acquisti sono % del fatturato). Frazione consuntivato stagionale = `fatturato_consuntivato / fatturato_proiettato` (in proiezione lineare coincide con la frazione di tempo; in stagionalizzata riflette il picco).
+  - **`consuntivo.override_rim = { rim_ini?, rim_fin? }`** — rettifica manuale del **valore reale di fine anno** (inventario/valutazione puntuale). Se presente prevale su budget e distribuzione. `0` esplicito è una rettifica valida (magazzino azzerato); cella vuota → si torna al budget. Editabile nelle celle "Proiezione fine anno" delle righe rimanenze.
+- **Retrocompatibile**: `'lineare'` + nessun override ⇒ output del preconsuntivo identico al precedente. La variazione rimanenze (`rim_ini − rim_fin`) confluisce nel costo del venduto → MdC → utile automaticamente, come già avviene per le altre voci calcolate.
+- Engine: `BudgetEngine.calcolaPreconsuntivo` (blocco rimanenze prima di `_calcolaVista`, che ora riceve i valori rim già determinati per vista). UI: toggle "Rimanenze" + celle di rettifica in `BudgetUI.renderConsuntivo` (`cambiaRimDistribuzione`, `rimOverrideBlur`).
 
 ### Shell / Multi-modulo
 
