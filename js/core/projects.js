@@ -733,6 +733,16 @@ const Projects = (() => {
         if (m && m.sezione === 'sotto_linea') m.sezione = 'prov_oneri_straord';
       });
     }
+    // Default retrocompatibili per progetti salvati prima dell'introduzione
+    // del mese di avvio e del costo figurativo del lavoro dei soci.
+    if (dati.meta && (dati.meta.mese_avvio == null || !isFinite(Number(dati.meta.mese_avvio)))) {
+      dati.meta.mese_avvio = 1;
+    }
+    if (!dati.lavoro_soci || typeof dati.lavoro_soci !== 'object') {
+      dati.lavoro_soci = { attivo: false, righe: [] };
+    } else if (!Array.isArray(dati.lavoro_soci.righe)) {
+      dati.lavoro_soci.righe = [];
+    }
     if (Array.isArray(dati.sottoconti_ce) && dati.sottoconti_ce.length > 0
         && typeof ExcelImport !== 'undefined' && ExcelImport.ricalcolaStorico) {
       try {
@@ -1091,6 +1101,9 @@ const Projects = (() => {
         settore:         meta.settore || '',
         anno_corrente:   annoCorr,
         anni_storici:    anniStorici,
+        mese_avvio:      1,    // Mese di avvio attività (1-12). >1 = società
+                               // costituita in corso d'anno (primo esercizio
+                               // parziale). Vedi engine.calcolaPreconsuntivo.
         note_anagrafica: [],   // [{titolo, testo}] — esposte negli export
         creato:          oggi,
         modificato:      oggi,
@@ -1108,6 +1121,10 @@ const Projects = (() => {
       consuntivo: {
         frequenza: 'mensile',     // 'mensile' | 'trimestrale'
         fatturato: {}             // { '01': 1234, '02': ... }
+      },
+      lavoro_soci: {              // Costo figurativo lavoro soci (fuori dal CE
+        attivo: false,            // civilistico — vedi engine.calcolaLavoroSoci)
+        righe:  []                // [{ id, nome, ore, tariffa }]
       }
     };
   }
@@ -1447,6 +1464,96 @@ const Projects = (() => {
       return;
     }
 
+    _modificato = true;
+  }
+
+  /**
+   * Aggiorna un campo di meta del progetto AB.
+   *
+   *   field === 'mese_avvio' → value: number 1-12 (mese di avvio attività;
+   *     clampato a [1,12]). Determina i periodi operativi del consuntivo e
+   *     il seed del budget per società costituite in corso d'anno.
+   */
+  function aggiornaMetaAB(field, value) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    if (field === 'mese_avvio') {
+      const m = Math.round(Number(value));
+      _progettoCorrente.meta.mese_avvio = isFinite(m) ? Math.min(12, Math.max(1, m)) : 1;
+      _modificato = true;
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     Lavoro soci — costo figurativo (modulo AB)
+
+     Struttura: progetto.lavoro_soci = { attivo, righe:[{id,nome,ore,tariffa}] }
+     Il costo figurativo (Σ ore×tariffa) è calcolato dall'engine e resta
+     FUORI dal CE civilistico: alimenta solo il "reddito normalizzato".
+     ────────────────────────────────────────────────────────── */
+
+  function _assicuraLavoroSoci() {
+    if (!_progettoCorrente.lavoro_soci || typeof _progettoCorrente.lavoro_soci !== 'object') {
+      _progettoCorrente.lavoro_soci = { attivo: false, righe: [] };
+    }
+    if (!Array.isArray(_progettoCorrente.lavoro_soci.righe)) {
+      _progettoCorrente.lavoro_soci.righe = [];
+    }
+    return _progettoCorrente.lavoro_soci;
+  }
+
+  // ID socio stabile e privo di collisioni al caricamento: max numerico
+  // esistente + 1 (formato 's<N>').
+  function _nextSocioId(righe) {
+    let max = 0;
+    (righe || []).forEach(function(r) {
+      const n = r && typeof r.id === 'string' ? parseInt(r.id.replace(/^s/, ''), 10) : NaN;
+      if (isFinite(n) && n > max) max = n;
+    });
+    return 's' + (max + 1);
+  }
+
+  /** Attiva/disattiva il conteggio del costo figurativo dei soci. */
+  function lavoroSociToggle(attivo) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    const ls = _assicuraLavoroSoci();
+    ls.attivo = !!attivo;
+    _modificato = true;
+  }
+
+  /** Aggiunge una riga socio vuota e restituisce il suo id. */
+  function lavoroSociAddRiga() {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return null;
+    const ls = _assicuraLavoroSoci();
+    const id = _nextSocioId(ls.righe);
+    ls.righe.push({ id: id, nome: '', ore: 0, tariffa: 0 });
+    ls.attivo = true;   // aggiungere un socio implica attivare il conteggio
+    _modificato = true;
+    return id;
+  }
+
+  /**
+   * Aggiorna un campo di una riga socio.
+   *   campo: 'nome' (string) | 'ore' (number) | 'tariffa' (number €/ora)
+   */
+  function lavoroSociUpdateRiga(id, campo, value) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    const ls = _assicuraLavoroSoci();
+    const riga = ls.righe.find(function(r) { return r.id === id; });
+    if (!riga) return;
+    if (campo === 'nome') {
+      riga.nome = (typeof value === 'string') ? value.trim() : '';
+    } else if (campo === 'ore' || campo === 'tariffa') {
+      const n = Number(value);
+      riga[campo] = isFinite(n) && n >= 0 ? n : 0;
+    }
+    _modificato = true;
+  }
+
+  /** Elimina una riga socio per id. */
+  function lavoroSociRemoveRiga(id) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    const ls = _assicuraLavoroSoci();
+    ls.righe = ls.righe.filter(function(r) { return r.id !== id; });
     _modificato = true;
   }
 
@@ -1819,6 +1926,11 @@ const Projects = (() => {
     eliminaSottoconto,
     aggiornaBudget,
     aggiornaConsuntivo,
+    aggiornaMetaAB,
+    lavoroSociToggle,
+    lavoroSociAddRiga,
+    lavoroSociUpdateRiga,
+    lavoroSociRemoveRiga,
     creaMacroareaCustom,
     rinominaMacroareaCustom,
     eliminaMacroareaCustom,

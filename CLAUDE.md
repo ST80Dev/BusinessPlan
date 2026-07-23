@@ -278,6 +278,12 @@ Basato su ricognizione del codice, non solo sulla pianificazione originale.
 | 3 | Storico CE per macroarea + medie % sul fatturato | ✅ Fatto |
 | 4 | Budget anno + fatturato di break-even | ✅ Fatto |
 | 5 | Consuntivo & preconsuntivo (proiezione fine anno vs budget) | ✅ Fatto |
+| 6 | Società senza storico: mese di avvio + seed fatturato dai mesi in corso; costo figurativo lavoro soci (reddito normalizzato) | ✅ Fatto |
+
+**Note fase 6 (data model e semantica):**
+- `meta.mese_avvio` (1-12): mese di avvio attività. Per società costituite in corso d'anno il preconsuntivo conta solo i **periodi operativi** da avvio a fine anno (i mesi pre-avvio non concorrono a run-rate e fissi pro-rata; sono mostrati "—" e non editabili). Con `mese_avvio = 1` il comportamento è identico al precedente (retrocompatibile).
+- **Seed budget** (`BudgetEngine.calcolaSeedFatturato`): annualizza i mesi già inseriti nel Consuntivo su due orizzonti — primo anno parziale (avvio→dic) e anno a regime (×12) — scrivendo su `fatturato_ipotizzato`. Pensato per aziende prive di storico.
+- **Costo figurativo lavoro soci** (`progetto.lavoro_soci = { attivo, righe:[{id,nome,ore,tariffa}] }`): costo-opportunità del lavoro dei soci non retribuiti = Σ ore×tariffa. Tenuto **fuori dal CE civilistico e dalle imposte**; alimenta solo il *reddito normalizzato* (Utile netto − costo figurativo), i KPI di produttività oraria (ricavi/ora, MdC/ora) e un break-even che remunera anche i soci. Blocco separato in fondo alla vista Budget.
 
 ### Shell / Multi-modulo
 
