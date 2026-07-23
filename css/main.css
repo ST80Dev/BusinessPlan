@@ -3394,6 +3394,21 @@ thead .ab-col-periodo-preavvio {
   margin-bottom: 10px;
   line-height: 1.5;
 }
+/* Barra ragguaglio ore al primo anno parziale */
+.ab-soci-ragguaglio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ab-soci-switch-sm {
+  padding: 2px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
 .ab-soci-tab {
   width: 100%;
   border-collapse: collapse;

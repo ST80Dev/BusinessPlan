@@ -178,30 +178,58 @@ const BudgetEngine = (() => {
    * imposte (che restano una riga manuale del budget): viene tenuto
    * separato e usato solo per il "reddito normalizzato".
    *
-   *   costo_figurativo = Σ (ore × tariffa)  per ogni socio
+   * Le `ore` inserite per ogni socio sono ORE ANNUE A REGIME (12 mesi).
+   * Per le società costituite in corso d'anno (meta.mese_avvio > 1) il primo
+   * esercizio è parziale: se `lavoro_soci.ragguaglio` è attivo (default), le
+   * ore vengono RAGGUAGLIATE ai mesi operativi (avvio→dic) con fattore
+   * mesi_operativi/12, così il costo figurativo è coerente con l'orizzonte
+   * del budget del primo anno. Con avvio a gennaio il fattore è 1 (nessun
+   * effetto, retrocompatibile).
    *
-   * @param {Object} progetto - progetto AB (usa progetto.lavoro_soci)
-   * @returns {Object} { attivo, righe:[{id,nome,ore,tariffa,costo}],
-   *                      ore_totali, costo_figurativo }
+   *   ore_effettive = ore × fattore_ragguaglio
+   *   costo_figurativo = Σ (ore_effettive × tariffa)  per ogni socio
+   *
+   * @param {Object} progetto - progetto AB (usa progetto.lavoro_soci, meta.mese_avvio)
+   * @returns {Object} { attivo, righe:[{id,nome,ore,ore_effettive,tariffa,costo}],
+   *                      ragguaglio, ragguaglio_attivo, mese_avvio, mesi_operativi,
+   *                      fattore_ragguaglio, ore_totali, ore_effettive_totali,
+   *                      costo_figurativo }
    */
   function calcolaLavoroSoci(progetto) {
     const ls = (progetto && progetto.lavoro_soci) || {};
     const attivo = !!ls.attivo;
     const righeIn = Array.isArray(ls.righe) ? ls.righe : [];
+
+    // Ragguaglio al primo anno parziale: default attivo (ls.ragguaglio !== false).
+    const meseAvvio = _meseAvvio(progetto);
+    const mesiOperativi = 12 - meseAvvio + 1;           // avvio=1 → 12; avvio=4 → 9
+    const ragguaglio = ls.ragguaglio !== false;
+    const ragguaglioAttivo = ragguaglio && meseAvvio > 1;
+    const fattore = ragguaglioAttivo ? (mesiOperativi / 12) : 1;
+
     let oreTot = 0;
+    let oreEffTot = 0;
     let costoTot = 0;
     const righe = righeIn.map(r => {
-      const ore     = Number(r && r.ore)     || 0;
+      const ore     = Number(r && r.ore)     || 0;   // ore annue a regime
       const tariffa = Number(r && r.tariffa) || 0;
-      const costo   = ore * tariffa;
-      oreTot   += ore;
-      costoTot += costo;
-      return { id: r && r.id, nome: (r && r.nome) || '', ore, tariffa, costo };
+      const oreEff  = ore * fattore;                 // ore ragguagliate al periodo
+      const costo   = oreEff * tariffa;
+      oreTot    += ore;
+      oreEffTot += oreEff;
+      costoTot  += costo;
+      return { id: r && r.id, nome: (r && r.nome) || '', ore, ore_effettive: oreEff, tariffa, costo };
     });
     return {
       attivo,
       righe,
+      ragguaglio,
+      ragguaglio_attivo: ragguaglioAttivo,
+      mese_avvio: meseAvvio,
+      mesi_operativi: mesiOperativi,
+      fattore_ragguaglio: fattore,
       ore_totali: oreTot,
+      ore_effettive_totali: oreEffTot,
       costo_figurativo: attivo ? costoTot : 0
     };
   }
@@ -482,8 +510,11 @@ const BudgetEngine = (() => {
     // costoFigSoci / denom.
     const breakEvenSoci = (denom > 0 && (kRim + fissiBE + costoFigSoci) > 0)
       ? (kRim + fissiBE + costoFigSoci) / denom : null;
-    const ricaviOra = soci.ore_totali > 0 ? fatturato / soci.ore_totali : null;
-    const mdcOra    = soci.ore_totali > 0 ? mdc / soci.ore_totali       : null;
+    // KPI di produttività oraria sulle ore EFFETTIVE (ragguagliate al periodo
+    // di budget), coerenti con fatturato/MdC del budget.
+    const oreKpi    = soci.ore_effettive_totali;
+    const ricaviOra = oreKpi > 0 ? fatturato / oreKpi : null;
+    const mdcOra    = oreKpi > 0 ? mdc / oreKpi       : null;
 
     return {
       fatturato,

@@ -1797,22 +1797,21 @@ const BudgetUI = (() => {
   }
 
   /**
-   * Pannello "Budget da dati in corso d'anno" — unica sede del MESE DI AVVIO
-   * attività (le basi del budget si impostano qui, non nel Consuntivo) e
-   * seed del fatturato per società senza storico.
+   * Pannello "Basi del budget" — unica sede del MESE DI AVVIO attività (le
+   * basi del budget si impostano qui, non nel Consuntivo) e seed del
+   * fatturato per società senza storico.
    *
-   * Visibilità: mostrato quando la società non ha storico reale (neocostituita)
-   * oppure quando ci sono già mesi consuntivati da annualizzare. Nascosto per
-   * le società con storico consolidato (avvio implicito a gennaio).
-   *
-   * Il selettore del mese di avvio è sempre presente; l'annualizzazione
-   * (run-rate + bottoni parziale/regime) compare solo se ci sono mesi inseriti
-   * nel Consuntivo (seed.disponibile).
+   * Il selettore del mese di avvio è SEMPRE presente sulla pagina Budget
+   * (non deve mai sparire, altrimenti l'operatore non sa dove impostarlo).
+   * L'annualizzazione (run-rate + bottoni parziale/regime) compare solo se
+   * ci sono mesi inseriti nel Consuntivo (seed.disponibile); per le società
+   * senza storico ma senza mesi ancora inseriti compare un invito a
+   * inserirli; per le società con storico consolidato resta solo il
+   * selettore del mese di avvio.
    */
   function _renderSeedPanel(progetto, seed, b) {
     if (!seed) return '';
     const noStorico = !b.anni_reali || b.anni_reali.length === 0;
-    if (!seed.disponibile && !noStorico) return '';
 
     const meseAvvio = seed.mese_avvio || 1;
     const opts = _MESI.map((nome, i) =>
@@ -1840,24 +1839,30 @@ const BudgetUI = (() => {
         <span class="ab-seed-btn-val">${_fmtEuroInt(regime)}</span>
       </div>`;
 
-    // Blocco annualizzazione: solo se ci sono mesi consuntivati. Altrimenti
-    // un invito a inserirli nel Consuntivo.
+    // Blocco annualizzazione:
+    //   - ci sono mesi consuntivati  → run-rate + bottoni parziale/regime
+    //   - società senza storico ma senza mesi → invito a inserirli nel Consuntivo
+    //   - società con storico consolidato → nessuna annualizzazione (solo avvio)
     const annualizza = seed.disponibile ? `
           <div class="ab-seed-info text-muted">
             Consuntivato <strong>${_fmtEuroInt(seed.fatturato_ytd)}</strong> su <strong>${seed.mesi_attivi}</strong> ${seed.mesi_attivi === 1 ? 'mese' : 'mesi'} operativi → run-rate <strong>${_fmtEuroInt(seed.run_rate_mensile)}</strong>/mese
           </div>
           <div class="ab-seed-actions">
             ${unMese ? btnRegime : btnParziale + btnRegime}
-          </div>` : `
+          </div>` : (noStorico ? `
           <div class="ab-seed-info text-muted">
             Inserisci i mesi già fatturati nel <strong>Consuntivo</strong> per annualizzare il fatturato di budget.
-          </div>`;
+          </div>` : '');
+
+    const hint = noStorico
+      ? 'Società senza storico: imposta il mese di avvio attività e, quando disponibili, annualizza i mesi già consuntivati per proporre il fatturato di budget.'
+      : 'Mese di avvio attività: rilevante per le società costituite in corso d\'anno (primo esercizio parziale). Con avvio a gennaio non ha effetto.';
 
     return `
       <div class="ab-seed-panel">
         <div class="ab-seed-head">
-          <span class="ab-seed-title">Budget da dati in corso d'anno</span>
-          <span class="ab-seed-hint text-muted">Società senza storico: imposta il mese di avvio attività e, quando disponibili, annualizza i mesi già consuntivati per proporre il fatturato di budget.</span>
+          <span class="ab-seed-title">Basi del budget</span>
+          <span class="ab-seed-hint text-muted">${hint}</span>
         </div>
         <div class="ab-seed-body">
           <div class="ab-seed-field">
@@ -1926,21 +1931,40 @@ const BudgetUI = (() => {
     const reddito = b.reddito_normalizzato;
     const redditoCls = reddito >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso';
 
-    const kpiOra = (attivo && soci.ore_totali > 0) ? `
+    // Ragguaglio ore al primo anno parziale (solo se avvio > gennaio).
+    const mostraRagguaglio = (soci.mese_avvio || 1) > 1;
+    const fattPct = Math.round((soci.fattore_ragguaglio || 1) * 100);
+    const ragguaglioBar = mostraRagguaglio ? `
+      <div class="ab-soci-ragguaglio">
+        <div class="ab-soci-switch ab-soci-switch-sm ${soci.ragguaglio ? 'ab-soci-switch-on' : ''}"
+             role="button" tabindex="0"
+             title="${soci.ragguaglio ? 'Disattiva il ragguaglio: usa le ore annue intere' : 'Attiva il ragguaglio delle ore al primo anno parziale'}"
+             onclick="BudgetUI.toggleRagguaglioSoci()"
+             onkeydown="BudgetUI.toggleRagguaglioSociKeyDown(event)">${soci.ragguaglio ? 'Ragguaglio ON' : 'Ragguaglio OFF'}</div>
+        <span class="text-muted">${soci.ragguaglio
+          ? `Ore ragguagliate al primo anno (avvio→dic: ${soci.mesi_operativi} mesi → fattore ${fattPct}%). Le ore inserite sono <strong>annue a regime</strong>; il costo figurativo usa le ore del periodo (${_fmtNum0(soci.ore_effettive_totali)} h).`
+          : 'Ore annue a regime intere (nessun ragguaglio al primo anno parziale).'}</span>
+      </div>` : '';
+
+    // KPI ore: ore effettive del periodo quando il ragguaglio è attivo.
+    const oreKpiVal   = soci.ragguaglio_attivo ? soci.ore_effettive_totali : soci.ore_totali;
+    const oreKpiLabel = soci.ragguaglio_attivo ? 'Ore periodo' : 'Ore totali';
+    const kpiOra = (attivo && oreKpiVal > 0) ? `
       <div class="ab-soci-kpi-row">
-        <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Ore totali</span><span class="ab-soci-kpi-val">${_fmtNum0(soci.ore_totali)}</span></div>
+        <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">${oreKpiLabel}</span><span class="ab-soci-kpi-val">${_fmtNum0(oreKpiVal)}</span></div>
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Ricavi / ora</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.ricavi_ora)}</span></div>
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">MdC / ora</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.mdc_ora)}</span></div>
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Break-even coi soci</span><span class="ab-soci-kpi-val">${b.break_even_soci != null ? _fmtEuroInt(b.break_even_soci) : '—'}</span></div>
       </div>` : '';
 
     const corpo = attivo ? `
-      <div class="ab-soci-desc text-muted">Costo figurativo del lavoro dei soci (ore × tariffa oraria). Non entra nel Conto Economico civilistico né incide sulle imposte: serve solo a valutare la redditività al netto di un giusto compenso al lavoro dei soci.</div>
+      <div class="ab-soci-desc text-muted">Costo figurativo del lavoro dei soci (ore annue × tariffa oraria). Non entra nel Conto Economico civilistico né incide sulle imposte: serve solo a valutare la redditività al netto di un giusto compenso al lavoro dei soci.</div>
+      ${ragguaglioBar}
       <table class="ab-soci-tab">
         <thead>
           <tr>
             <th>Socio</th>
-            <th class="num">Ore</th>
+            <th class="num" title="Ore annue a regime (12 mesi). Per il primo anno parziale vengono ragguagliate ai mesi operativi.">Ore/anno</th>
             <th class="num">€/ora</th>
             <th class="num">Costo figurativo</th>
             <th></th>
@@ -2175,6 +2199,24 @@ const BudgetUI = (() => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       toggleLavoroSoci();
+    }
+  }
+
+  /** Attiva/disattiva il ragguaglio delle ore al primo anno parziale. */
+  function toggleRagguaglioSoci() {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+    const cur = !(progetto.lavoro_soci && progetto.lavoro_soci.ragguaglio === false);
+    // cur = stato attuale (default true). Inverte.
+    Projects.lavoroSociRagguaglio(!cur);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+  }
+
+  function toggleRagguaglioSociKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleRagguaglioSoci();
     }
   }
 
@@ -3654,6 +3696,8 @@ const BudgetUI = (() => {
     seedBtnKeyDown:     seedBtnKeyDown,
     toggleLavoroSoci:   toggleLavoroSoci,
     toggleLavoroSociKeyDown: toggleLavoroSociKeyDown,
+    toggleRagguaglioSoci: toggleRagguaglioSoci,
+    toggleRagguaglioSociKeyDown: toggleRagguaglioSociKeyDown,
     aggiungiSocio:      aggiungiSocio,
     aggiungiSocioKeyDown: aggiungiSocioKeyDown,
     eliminaSocio:       eliminaSocio,
