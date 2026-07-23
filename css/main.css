@@ -3636,14 +3636,25 @@ thead .ab-col-periodo-preavvio {
   border-top: 1px solid var(--color-text-primary);
 }
 /* Verde / arancio: i totali "forti" (FATTURATO, UTILE NETTO, TOTALE COSTI)
-   ora si distinguono dalle varianti leggere (MdC, CDV, fissi…) anche in PDF. */
+   ora si distinguono dalle varianti leggere (MdC, CDV, fissi…) anche in PDF.
+   Le righe verdi usano fondo verde saturo + testo bianco: sul verde chiaro
+   precedente i valori (in particolare i delta verdi) restavano illeggibili
+   in stampa. */
 .ab-pdf-tab tr.ab-prospetto-tot-verde td {
-  background: #BFE5CC;
-  color: var(--color-text-primary);
+  background: #388E3C;
+  color: #FFFFFF;
 }
 .ab-pdf-tab tr.ab-prospetto-tot-verde-forte td {
-  background: #7FCC9D;
-  color: var(--color-text-primary);
+  background: #2E7D32;
+  color: #FFFFFF;
+}
+/* Delta (verde/rosso) e testo dentro le righe totali verdi: forzati a bianco,
+   altrimenti il colore del delta finirebbe verde-su-verde. */
+.ab-pdf-tab tr.ab-prospetto-tot-verde .ab-pdf-delta-good,
+.ab-pdf-tab tr.ab-prospetto-tot-verde .ab-pdf-delta-bad,
+.ab-pdf-tab tr.ab-prospetto-tot-verde-forte .ab-pdf-delta-good,
+.ab-pdf-tab tr.ab-prospetto-tot-verde-forte .ab-pdf-delta-bad {
+  color: #FFFFFF;
 }
 .ab-pdf-tab tr.ab-prospetto-tot-arancio td {
   background: #FBD5A6;
