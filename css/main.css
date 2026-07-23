@@ -2983,7 +2983,10 @@ thead .ab-col-periodo-preavvio {
   font-size: 12px;
 }
 .ab-macro-select {
-  min-width: 220px;
+  width: 100%;
+  min-width: 140px;
+  max-width: 190px;
+  box-sizing: border-box;
 }
 
 /* Importo sottoconto editabile nella mappatura: più compatto della
