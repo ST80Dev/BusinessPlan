@@ -1820,12 +1820,34 @@ const Projects = (() => {
    *                                 vuoto ⇒ resta "Non mappato"
    * @returns {{ok:boolean, codice?:string, err?:string}}
    */
+  /**
+   * Genera un codice segnaposto univoco per una voce manuale creata
+   * senza codice (l'operatore potrebbe non conoscerlo prima di
+   * contabilizzare l'anno). Formato "NUOVO-N": senza "/" così non viene
+   * interpretato come mastro; modificabile in seguito via
+   * rinominaSottoconto.
+   */
+  function _generaCodiceManuale() {
+    const arr = (_progettoCorrente && _progettoCorrente.sottoconti_ce) || [];
+    const esistenti = new Set(arr.map(s => s.codice));
+    let n = 1;
+    let cod;
+    do { cod = 'NUOVO-' + n; n++; } while (esistenti.has(cod));
+    return cod;
+  }
+
   function aggiungiSottoconto(codice, descrizione, macroId) {
     if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return { ok: false, err: 'no_ab' };
-    const cod = (codice || '').trim();
-    if (!cod) return { ok: false, err: 'codice_vuoto' };
     if (!Array.isArray(_progettoCorrente.sottoconti_ce)) _progettoCorrente.sottoconti_ce = [];
-    if (_progettoCorrente.sottoconti_ce.some(s => s.codice === cod)) return { ok: false, err: 'duplicato' };
+
+    // Codice opzionale: se assente si genera un segnaposto univoco
+    // ("NUOVO-N"), modificabile in seguito. Se fornito, deve essere univoco.
+    let cod = (codice || '').trim();
+    if (!cod) {
+      cod = _generaCodiceManuale();
+    } else if (_progettoCorrente.sottoconti_ce.some(s => s.codice === cod)) {
+      return { ok: false, err: 'duplicato' };
+    }
 
     // Deduci mastro/sottomastro se il codice è nel formato NN/NN.
     let mastro = '', sottomastro = '';
@@ -1862,6 +1884,72 @@ const Projects = (() => {
     }
     _modificato = true;
     return { ok: true, codice: cod };
+  }
+
+  /**
+   * Rinomina il CODICE di un sottoconto creato a mano (manuale:true).
+   * I sottoconti importati restano immutabili (il codice viene dal file).
+   * Il nuovo codice deve essere univoco; mastro/sottomastro vengono
+   * ri-dedotti (formato NN/NN) e il mapping viene spostato sotto il nuovo
+   * codice. Vietati i mastri di variazione rimanenze (61/80).
+   *
+   * @param {string} oldCodice
+   * @param {string} newCodice
+   * @returns {{ok:boolean, codice?:string, err?:string}}
+   */
+  function rinominaSottoconto(oldCodice, newCodice) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return { ok: false, err: 'no_ab' };
+    const arr = _progettoCorrente.sottoconti_ce || [];
+    const sc = arr.find(s => s.codice === oldCodice);
+    if (!sc) return { ok: false, err: 'inesistente' };
+    if (!sc.manuale) return { ok: false, err: 'non_manuale' };
+
+    const nc = (newCodice || '').trim();
+    if (!nc) return { ok: false, err: 'codice_vuoto' };
+    if (nc === oldCodice) return { ok: true, codice: nc };
+    if (arr.some(s => s.codice === nc)) return { ok: false, err: 'duplicato' };
+
+    let mastro = '', sottomastro = '';
+    const mm = nc.match(/^(\d{1,3})\s*\/\s*(\d{1,4})$/);
+    if (mm) { mastro = mm[1]; sottomastro = mm[2]; }
+    if (typeof ExcelImport !== 'undefined'
+        && Array.isArray(ExcelImport.MASTRI_VARIAZIONE_RIMANENZE)
+        && ExcelImport.MASTRI_VARIAZIONE_RIMANENZE.indexOf(mastro) >= 0) {
+      return { ok: false, err: 'mastro_rimanenze' };
+    }
+
+    sc.codice = nc;
+    sc.mastro = mastro;
+    sc.sottomastro = sottomastro;
+
+    // Sposta l'eventuale mapping sotto il nuovo codice.
+    const map = _progettoCorrente.mapping || {};
+    if (Object.prototype.hasOwnProperty.call(map, oldCodice)) {
+      map[nc] = map[oldCodice];
+      delete map[oldCodice];
+    }
+
+    if (typeof ExcelImport !== 'undefined' && ExcelImport.ricalcolaStorico) {
+      _progettoCorrente.storico = ExcelImport.ricalcolaStorico(_progettoCorrente);
+    }
+    _modificato = true;
+    return { ok: true, codice: nc };
+  }
+
+  /**
+   * Aggiorna la DESCRIZIONE di un sottoconto creato a mano (manuale:true).
+   * Non tocca lo storico (che dipende da importi/mapping, non dal nome).
+   * @param {string} codice
+   * @param {string} descrizione
+   * @returns {boolean} true se aggiornata
+   */
+  function aggiornaDescrizioneSottoconto(codice, descrizione) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return false;
+    const sc = (_progettoCorrente.sottoconti_ce || []).find(s => s.codice === codice);
+    if (!sc || !sc.manuale) return false;
+    sc.descrizione = (descrizione || '').trim();
+    _modificato = true;
+    return true;
   }
 
   /* ──────────────────────────────────────────────────────────
@@ -2131,6 +2219,8 @@ const Projects = (() => {
     aggiornaValoreSottoconto,
     eliminaSottoconto,
     aggiungiSottoconto,
+    rinominaSottoconto,
+    aggiornaDescrizioneSottoconto,
     aggiornaBudget,
     aggiornaConsuntivo,
     aggiornaMetaAB,

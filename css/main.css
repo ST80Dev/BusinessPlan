@@ -3027,6 +3027,67 @@ thead .ab-col-periodo-preavvio {
   color: var(--color-text);
   letter-spacing: 0.2px;
 }
+/* Azioni sul gruppo custom (rinomina / elimina) accanto al titolo. */
+.ab-gruppo-azioni {
+  margin-left: 8px;
+  display: inline-flex;
+  gap: 4px;
+  vertical-align: middle;
+}
+.ab-gruppo-azione {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: var(--color-surface-alt);
+  cursor: pointer;
+  user-select: none;
+}
+.ab-gruppo-azione:hover,
+.ab-gruppo-azione:focus {
+  color: var(--color-accent);
+  outline: none;
+  filter: brightness(0.97);
+}
+.ab-gruppo-azione-del:hover,
+.ab-gruppo-azione-del:focus {
+  color: var(--color-error);
+}
+
+/* Riga sottoconto creata a mano: codice/descrizione editabili. */
+.ab-row-manuale > td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+.ab-sc-edit {
+  min-width: 40px;
+  min-height: 18px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  outline: none;
+  cursor: text;
+}
+.ab-sc-edit:hover {
+  border-color: var(--color-border);
+}
+.ab-sc-edit:focus {
+  border-color: var(--color-accent);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 2px var(--color-accent-light);
+}
+.ab-sc-codice-edit {
+  font-family: 'JetBrains Mono', monospace;
+}
+.ab-sc-edit:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
 .ab-gruppo-count {
   color: var(--color-text-muted);
   font-weight: 400;

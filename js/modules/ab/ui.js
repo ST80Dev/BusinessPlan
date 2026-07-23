@@ -991,8 +991,8 @@ const BudgetUI = (() => {
           <div class="ab-aggiungi-voce" title="Crea una voce di conto a mano (post-import). Utile per costi/voci nuovi dell'anno da budgetare: creala a 0 e valorizzala poi nel Budget con l'override del gruppo.">
             <span class="ab-aggiungi-voce-label">+ Aggiungi voce:</span>
             <div class="ab-nv-field ab-nv-codice" contenteditable="true" draggable="false"
-                 data-placeholder="Codice"
-                 title="Codice conto (univoco). Es. SOCI oppure 68/90"
+                 data-placeholder="Codice (opz.)"
+                 title="Codice conto (univoco). Facoltativo: se vuoto ne viene generato uno provvisorio (NUOVO-N) modificabile poi. Es. SOCI oppure 68/90"
                  onkeydown="BudgetUI.aggiungiVoceKeyDown(event)"></div>
             <div class="ab-nv-field ab-nv-descr" contenteditable="true" draggable="false"
                  data-placeholder="Descrizione"
@@ -1039,7 +1039,8 @@ const BudgetUI = (() => {
           sottoconti: gruppi[m.id] || [],
           macroAree: macroAree,
           progetto: progetto,
-          readonly: false
+          readonly: false,
+          custom: m.custom === true
         });
       });
     });
@@ -1137,7 +1138,7 @@ const BudgetUI = (() => {
   }
 
   function _renderGruppoSottoconti(opts) {
-    const { id, label, descrizione, sottoconti, macroAree, progetto, readonly, evidenza } = opts;
+    const { id, label, descrizione, sottoconti, macroAree, progetto, readonly, evidenza, custom } = opts;
     const evidenzaClass = evidenza === 'warn' ? ' ab-gruppo-warn' : '';
     // Anni delle colonne valore: gli anni storici se presenti; altrimenti (es.
     // società neocostituita con import infrannuale) gli anni effettivamente
@@ -1153,10 +1154,24 @@ const BudgetUI = (() => {
     // Esclusi: gruppo "in rimanenze" (readonly).
     const dropAttr = readonly ? '' : ` data-drop-macro="${_escapeHtml(id)}"`;
 
+    // Azioni sul gruppo — solo per i gruppi custom (i predefiniti sono
+    // bloccati): rinomina e elimina. Consente di rimediare a un nome
+    // sbagliato senza dover ricreare il gruppo.
+    const azioniGruppo = custom
+      ? `<span class="ab-gruppo-azioni">
+           <span class="ab-gruppo-azione" role="button" tabindex="0"
+                 data-rinomina-gruppo="${_escapeHtml(id)}"
+                 title="Rinomina questo gruppo">✎</span>
+           <span class="ab-gruppo-azione ab-gruppo-azione-del" role="button" tabindex="0"
+                 data-elimina-custom="${_escapeHtml(id)}"
+                 title="Elimina questo gruppo (i sottoconti tornano a Non mappati)">×</span>
+         </span>`
+      : '';
+
     let html = `
       <div class="ab-gruppo${evidenzaClass}" data-gruppo="${id}"${dropAttr}>
         <div class="ab-gruppo-head">
-          <div class="ab-gruppo-title">${_escapeHtml(label)} <span class="ab-gruppo-count">(${sottoconti.length})</span></div>
+          <div class="ab-gruppo-title">${_escapeHtml(label)} <span class="ab-gruppo-count">(${sottoconti.length})</span>${azioniGruppo}</div>
           ${descrizione ? `<div class="ab-gruppo-sub text-muted">${_escapeHtml(descrizione)}</div>` : ''}
         </div>
     `;
@@ -1183,11 +1198,24 @@ const BudgetUI = (() => {
     for (const s of sottoconti) {
       const dragAttr = readonly ? '' : ' draggable="true"';
       const codAttr  = readonly ? '' : ` data-drag-codice="${_escapeHtml(s.codice)}"`;
-      const cls      = readonly ? '' : ' ab-row-draggable';
+      // Voce creata a mano: codice e descrizione modificabili (le voci
+      // importate restano immutabili). Marca la riga per lo stile.
+      const manuale  = !readonly && s.manuale === true;
+      const cls      = (readonly ? '' : ' ab-row-draggable') + (manuale ? ' ab-row-manuale' : '');
+      const codCell  = manuale
+        ? `<td class="codice-conto"><div class="ab-sc-edit ab-sc-codice-edit" contenteditable="true" draggable="false"
+             data-sc-codice="${_escapeHtml(s.codice)}" title="Voce manuale — modifica il codice"
+             onblur="BudgetUI.codiceSottocontoBlur(this)" onkeydown="BudgetUI.valoreSottocontoKeyDown(event)">${_escapeHtml(s.codice)}</div></td>`
+        : `<td class="codice-conto ab-cell-codice">${_escapeHtml(s.codice)}</td>`;
+      const descCell = manuale
+        ? `<td><div class="ab-sc-edit ab-sc-descr-edit" contenteditable="true" draggable="false" data-placeholder="(descrizione)"
+             data-sc-codice="${_escapeHtml(s.codice)}" title="Voce manuale — modifica la descrizione"
+             onblur="BudgetUI.descrizioneSottocontoBlur(this)" onkeydown="BudgetUI.valoreSottocontoKeyDown(event)">${_escapeHtml(s.descrizione || '')}</div></td>`
+        : `<td>${_escapeHtml(s.descrizione || '')}</td>`;
       html += `
         <tr${dragAttr} class="${cls.trim()}"${codAttr}>
-          <td class="codice-conto ab-cell-codice">${_escapeHtml(s.codice)}</td>
-          <td>${_escapeHtml(s.descrizione || '')}</td>
+          ${codCell}
+          ${descCell}
           <td class="num codice-conto">${_escapeHtml(s.mastro || '')}</td>
       `;
       anni.forEach(a => {
@@ -1252,6 +1280,14 @@ const BudgetUI = (() => {
         }
         return;
       }
+      // "✎" su un gruppo custom — rinomina
+      const renBtn = ev.target.closest('[data-rinomina-gruppo]');
+      if (renBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        _rinominaGruppoCustom(renBtn.dataset.rinominaGruppo);
+        return;
+      }
       // "×" su un box custom — eliminazione con conferma
       const delBtn = ev.target.closest('[data-elimina-custom]');
       if (delBtn) {
@@ -1309,6 +1345,24 @@ const BudgetUI = (() => {
       if (scDel) {
         ev.preventDefault();
         _eliminaSottocontoConConferma(scDel.dataset.eliminaSc);
+        return;
+      }
+      // Enter/Spazio su "✎" gruppo custom → rinomina
+      const renBtn = ev.target.closest('[data-rinomina-gruppo]');
+      if (renBtn) {
+        ev.preventDefault();
+        _rinominaGruppoCustom(renBtn.dataset.rinominaGruppo);
+        return;
+      }
+      // Enter/Spazio su "×" gruppo custom → elimina
+      const grpDel = ev.target.closest('[data-elimina-custom]');
+      if (grpDel) {
+        ev.preventDefault();
+        if (confirm('Eliminare questo gruppo? I sottoconti mappati torneranno a "Non mappati".')
+            && Projects.eliminaMacroareaCustom(grpDel.dataset.eliminaCustom)) {
+          UI.aggiornaStatusBar('modificato');
+          renderMacroSezioni();
+        }
         return;
       }
       // Enter/Spazio su un box della mini-CE → scorri al raggruppamento
@@ -1496,16 +1550,13 @@ const BudgetUI = (() => {
     const descr   = (descEl && descEl.textContent || '').trim();
     const macroId = (macroEl && macroEl.value) || '';
 
-    if (!codice) {
-      UI.mostraNotifica('Inserisci un codice per la nuova voce.', 'error');
-      if (codEl) codEl.focus();
-      return;
-    }
-
+    // Codice facoltativo: se vuoto, Projects genera un segnaposto
+    // (NUOVO-N) modificabile poi dalla riga.
     const res = Projects.aggiungiSottoconto(codice, descr, macroId);
     if (res && res.ok) {
       UI.aggiornaStatusBar('modificato');
-      UI.mostraNotifica('Voce "' + codice + '" aggiunta a 0. Imposta l\'importo dalle celle, oppure valorizzala nel Budget con l\'override del gruppo.', 'success');
+      const etichetta = codice || res.codice;
+      UI.mostraNotifica('Voce "' + etichetta + '" aggiunta a 0. Modifica codice/descrizione dalla riga; imposta l\'importo dalle celle o valorizzala nel Budget con l\'override del gruppo.', 'success');
       renderMacroSezioni();
     } else {
       const err = res && res.err;
@@ -1551,6 +1602,63 @@ const BudgetUI = (() => {
     if (e.key === 'Enter' || e.key === 'Escape') {
       e.preventDefault();
       e.target.blur();
+    }
+  }
+
+  /**
+   * Blur sul codice editabile di una voce manuale → rinomina il conto.
+   * Al fallimento (duplicato / codice vuoto / mastro rimanenze) mostra un
+   * avviso e re-renderizza per ripristinare il valore precedente.
+   */
+  function codiceSottocontoBlur(el) {
+    const oldCod = el.dataset.scCodice;
+    if (!oldCod) return;
+    const nc = (el.textContent || '').trim();
+    if (nc === oldCod) return;
+    const res = Projects.rinominaSottoconto(oldCod, nc);
+    if (res && res.ok) {
+      UI.aggiornaStatusBar('modificato');
+      renderMacroSezioni();
+    } else {
+      const err = res && res.err;
+      const msg = err === 'duplicato'        ? 'Esiste già un conto con questo codice.'
+                : err === 'codice_vuoto'     ? 'Il codice non può essere vuoto.'
+                : err === 'mastro_rimanenze' ? 'I mastri 61/80 (variazione rimanenze) non sono ammessi.'
+                : 'Impossibile rinominare il conto.';
+      UI.mostraNotifica(msg, 'error');
+      renderMacroSezioni();
+    }
+  }
+
+  /**
+   * Blur sulla descrizione editabile di una voce manuale → salva.
+   * La descrizione non è chiave né mostrata altrove: nessun re-render
+   * (evita flicker e perdita di focus).
+   */
+  function descrizioneSottocontoBlur(el) {
+    const cod = el.dataset.scCodice;
+    if (!cod) return;
+    if (Projects.aggiornaDescrizioneSottoconto(cod, (el.textContent || '').trim())) {
+      UI.aggiornaStatusBar('modificato');
+    }
+  }
+
+  /**
+   * Rinomina un gruppo custom via prompt (i predefiniti non sono
+   * rinominabili). Coerente col flusso di creazione "+ Nuovo gruppo".
+   */
+  function _rinominaGruppoCustom(id) {
+    if (!id) return;
+    const prog = Projects.getProgetto();
+    const macro = ((prog && prog.macro_sezioni) || []).find(m => m.id === id);
+    const cur = macro ? macro.label : '';
+    const nuovo = (window.prompt('Nuovo nome del gruppo:', cur) || '').trim();
+    if (!nuovo || nuovo === cur) return;
+    if (Projects.rinominaMacroareaCustom(id, nuovo)) {
+      UI.aggiornaStatusBar('modificato');
+      renderMacroSezioni();
+    } else {
+      UI.mostraNotifica('Impossibile rinominare il gruppo.', 'error');
     }
   }
 
@@ -3981,6 +4089,8 @@ const BudgetUI = (() => {
     aggiungiVoceKeyDown:     aggiungiVoceKeyDown,
     valoreSottocontoBlur:    valoreSottocontoBlur,
     valoreSottocontoKeyDown: valoreSottocontoKeyDown,
+    codiceSottocontoBlur:      codiceSottocontoBlur,
+    descrizioneSottocontoBlur: descrizioneSottocontoBlur,
     budgetBlur:         budgetBlur,
     budgetKeyDown:      budgetKeyDown,
     cambiaMeseAvvio:    cambiaMeseAvvio,
