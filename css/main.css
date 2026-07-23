@@ -3467,6 +3467,9 @@ thead .ab-col-periodo-preavvio {
   border-bottom: 1px solid var(--color-border-light);
   vertical-align: middle;
 }
+/* Celle numeriche allineate a destra: l'input inline-block e il valore
+   calcolato si appoggiano al bordo destro, coerenti con le th.num. */
+.ab-soci-tab td.num { text-align: right; }
 .ab-soci-costo {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
@@ -3486,11 +3489,15 @@ thead .ab-col-periodo-preavvio {
   font-family: 'JetBrains Mono', monospace;
   font-size: 14px;
   min-height: 22px;
+  min-width: 80px;
+  max-width: 130px;
   cursor: text;
 }
 .ab-soci-input-nome {
   text-align: left;
   font-family: 'DM Sans', sans-serif;
+  min-width: 120px;
+  max-width: 200px;
 }
 .ab-soci-input:hover { border-color: var(--color-accent); }
 .ab-soci-input:focus {
