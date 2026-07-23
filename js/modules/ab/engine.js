@@ -220,6 +220,11 @@ const BudgetEngine = (() => {
       costoTot  += costo;
       return { id: r && r.id, nome: (r && r.nome) || '', ore, ore_effettive: oreEff, tariffa, costo };
     });
+    // Tariffa media ponderata sulle ore = Σ(ore×tariffa)/Σore. Il fattore di
+    // ragguaglio si semplifica (numeratore e denominatore lo condividono),
+    // quindi è invariante rispetto all'orizzonte — coerente col MdC/ora, con
+    // cui va confrontata per capire se il lavoro dei soci "si ripaga".
+    const tariffaMedia = oreEffTot > 0 ? (costoTot / oreEffTot) : 0;
     return {
       attivo,
       righe,
@@ -230,6 +235,7 @@ const BudgetEngine = (() => {
       fattore_ragguaglio: fattore,
       ore_totali: oreTot,
       ore_effettive_totali: oreEffTot,
+      tariffa_media: tariffaMedia,
       costo_figurativo: attivo ? costoTot : 0
     };
   }
@@ -501,20 +507,40 @@ const BudgetEngine = (() => {
     // produttività oraria. Vedi calcolaLavoroSoci.
     const soci = calcolaLavoroSoci(progetto);
     const costoFigSoci = soci.costo_figurativo;
-    const redditoNormalizzato = utileNetto - costoFigSoci;
+    // Orizzonte coerente col costo soci (evita di sottrarre un costo su 12
+    // mesi da un utile su N mesi parziali):
+    //   - Ragguaglio ON  → costo soci ragguagliato ai mesi operativi:
+    //     il confronto è sull'utile del PRIMO ESERCIZIO PARZIALE (as-is).
+    //   - Ragguaglio OFF su anno parziale (avvio>gennaio) → costo soci PIENO
+    //     annuo: l'utile (e le basi di break-even/KPI orari) va proiettato a
+    //     12 mesi a regime, fattore 12/mesi_operativi. Il budget è pro-rata
+    //     lineare, quindi la proiezione a regime è lineare.
+    //   - Avvio a gennaio → mesi_operativi=12, fattore 1 (nessun effetto).
+    const mesiOper = soci.mesi_operativi || 12;
+    const normARegime = !soci.ragguaglio_attivo && soci.mese_avvio > 1 && mesiOper > 0;
+    const fattAnnua = normARegime ? (12 / mesiOper) : 1;
+    const utileNorm    = utileNetto * fattAnnua;
+    const fatturatoNorm = fatturato * fattAnnua;
+    const mdcNorm      = mdc * fattAnnua;
+    const redditoNormalizzato = utileNorm - costoFigSoci;
     // Break-even che remunera anche il lavoro dei soci: al numeratore del
     // break-even operativo (kRim + fissiBE, componente a comportamento
     // fisso) si aggiunge il costo figurativo, anch'esso fisso per natura e
     // indipendente dal fatturato. Usa `fissiBE` (non `fissi`) per restare
-    // coerente col break-even operativo: break_even_soci − break_even =
-    // costoFigSoci / denom.
-    const breakEvenSoci = (denom > 0 && (kRim + fissiBE + costoFigSoci) > 0)
-      ? (kRim + fissiBE + costoFigSoci) / denom : null;
-    // KPI di produttività oraria sulle ore EFFETTIVE (ragguagliate al periodo
-    // di budget), coerenti con fatturato/MdC del budget.
+    // coerente col break-even operativo. In ottica a regime (OFF/parziale) le
+    // basi fisse sono anch'esse annualizzate, così il BEP è comparabile al
+    // costo soci pieno e al fatturato a regime.
+    const kRimBE   = kRim * fattAnnua;
+    const fissiBEn = fissiBE * fattAnnua;
+    const breakEvenSoci = (denom > 0 && (kRimBE + fissiBEn + costoFigSoci) > 0)
+      ? (kRimBE + fissiBEn + costoFigSoci) / denom : null;
+    // KPI di produttività oraria sulle ore EFFETTIVE: ore ragguagliate al
+    // periodo (ON) confrontate con fatturato/MdC parziali; ore annue intere
+    // (OFF/parziale) confrontate con fatturato/MdC annualizzati. Sempre stesso
+    // orizzonte a numeratore e denominatore.
     const oreKpi    = soci.ore_effettive_totali;
-    const ricaviOra = oreKpi > 0 ? fatturato / oreKpi : null;
-    const mdcOra    = oreKpi > 0 ? mdc / oreKpi       : null;
+    const ricaviOra = oreKpi > 0 ? fatturatoNorm / oreKpi : null;
+    const mdcOra    = oreKpi > 0 ? mdcNorm / oreKpi       : null;
 
     return {
       fatturato,
@@ -531,6 +557,12 @@ const BudgetEngine = (() => {
       lavoro_soci: soci,
       costo_figurativo_soci: costoFigSoci,
       reddito_normalizzato: redditoNormalizzato,
+      // Utile effettivamente usato nel reddito normalizzato: parziale (ON) o
+      // proiettato a 12 mesi (OFF/parziale). `reddito_norm_a_regime` segnala
+      // alla UI di etichettarlo come "proiettato a 12 mesi".
+      reddito_norm_utile_base: utileNorm,
+      reddito_norm_a_regime: normARegime,
+      reddito_norm_fattore: fattAnnua,
       break_even_soci: breakEvenSoci,
       ricavi_ora: ricaviOra,
       mdc_ora: mdcOra

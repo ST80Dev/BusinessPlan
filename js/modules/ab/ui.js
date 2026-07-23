@@ -2243,6 +2243,29 @@ const BudgetUI = (() => {
   }
 
   /**
+   * Classifica il MdC/ora rispetto alla tariffa media dei soci: è il KPI che
+   * dice se il lavoro dei soci "si ripaga" a livello di margine. Ogni ora
+   * produce `mdcOra` di margine; ne serve almeno `tariffaMedia` per coprire il
+   * loro compenso, e l'eccedenza va a coprire i costi fissi + utile.
+   * Tre livelli (soglie sul rapporto MdC/ora ÷ tariffa):
+   *   ok   (≥ 1,3): sostenibile con margine per fissi/utile
+   *   warn (1,0–1,3): copre appena il compenso
+   *   bad  (< 1,0): il margine orario non copre nemmeno la tariffa
+   * @returns {{lvl,cls,label}} lvl='na' se dati insufficienti.
+   */
+  function _mdcOraInfo(mdcOra, tariffaMedia) {
+    if (mdcOra == null || !(tariffaMedia > 0)) return { lvl: 'na', cls: '', label: '' };
+    const surplus = mdcOra - tariffaMedia;
+    const ratio   = mdcOra / tariffaMedia;
+    if (ratio >= 1.3) return { lvl: 'ok', cls: 'lvl-ok',
+      label: `Sostenibile — +${_fmtEuroInt(surplus)}/h oltre il compenso soci` };
+    if (ratio >= 1.0) return { lvl: 'warn', cls: 'lvl-warn',
+      label: `Al limite — copre appena il compenso (+${_fmtEuroInt(surplus)}/h)` };
+    return { lvl: 'bad', cls: 'lvl-bad',
+      label: `Critico — ${_fmtEuroInt(Math.abs(surplus))}/h sotto la tariffa soci` };
+  }
+
+  /**
    * Blocco "Reddito normalizzato — lavoro dei soci". Imputa un costo
    * figurativo (ore × tariffa) al lavoro dei soci non retribuiti, tenuto
    * SEPARATO dal CE civilistico e dalle imposte. Mostra:
@@ -2298,6 +2321,13 @@ const BudgetUI = (() => {
     const reddito = b.reddito_normalizzato;
     const redditoCls = reddito >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso';
 
+    // Ottica a regime: con Ragguaglio OFF su anno parziale il costo soci è
+    // pieno annuo, quindi l'utile del reddito normalizzato è proiettato a 12
+    // mesi (coerenza di orizzonte). L'etichetta lo dichiara esplicitamente.
+    const aRegime       = !!b.reddito_norm_a_regime;
+    const utileRigaLbl  = aRegime ? 'Utile netto proiettato a 12 mesi' : 'Utile netto (da budget)';
+    const utileRigaVal  = aRegime ? (b.reddito_norm_utile_base || 0) : b.utileNetto;
+
     // Ragguaglio ore al primo anno parziale (solo se avvio > gennaio).
     const mostraRagguaglio = (soci.mese_avvio || 1) > 1;
     const fattPct = Math.round((soci.fattore_ragguaglio || 1) * 100);
@@ -2309,18 +2339,26 @@ const BudgetUI = (() => {
              onclick="BudgetUI.toggleRagguaglioSoci()"
              onkeydown="BudgetUI.toggleRagguaglioSociKeyDown(event)">${soci.ragguaglio ? 'Ragguaglio ON' : 'Ragguaglio OFF'}</div>
         <span class="text-muted">${soci.ragguaglio
-          ? `Ore ragguagliate al primo anno (avvio→dic: ${soci.mesi_operativi} mesi → fattore ${fattPct}%). Le ore inserite sono <strong>annue a regime</strong>; il costo figurativo usa le ore del periodo (${_fmtNum0(soci.ore_effettive_totali)} h).`
-          : 'Ore annue a regime intere (nessun ragguaglio al primo anno parziale).'}</span>
+          ? `<strong>Ottica primo esercizio parziale.</strong> Ore ragguagliate al primo anno (avvio→dic: ${soci.mesi_operativi} mesi → fattore ${fattPct}%). Le ore inserite sono <strong>annue a regime</strong>; il costo figurativo usa le ore del periodo (${_fmtNum0(soci.ore_effettive_totali)} h) e si sottrae all'utile dei ${soci.mesi_operativi} mesi.`
+          : `<strong>Ottica a regime.</strong> Ore annue intere e costo soci pieno annuo; l'utile del budget parziale (${soci.mesi_operativi} mesi) viene <strong>proiettato a 12 mesi</strong> (×12/${soci.mesi_operativi}) per un confronto coerente.`}</span>
       </div>` : '';
 
     // KPI ore: ore effettive del periodo quando il ragguaglio è attivo.
     const oreKpiVal   = soci.ragguaglio_attivo ? soci.ore_effettive_totali : soci.ore_totali;
     const oreKpiLabel = soci.ragguaglio_attivo ? 'Ore periodo' : 'Ore totali';
+    // MdC/ora vs tariffa media soci → livello + etichetta + colore dinamici.
+    const tariffaMedia = soci.tariffa_media || 0;
+    const mdcInfo = _mdcOraInfo(b.mdc_ora, tariffaMedia);
+    const mdcSub = mdcInfo.lvl !== 'na'
+      ? `<span class="ab-soci-kpi-sub">${mdcInfo.label}</span>` : '';
+    const mdcTitle = tariffaMedia > 0
+      ? `Margine di contribuzione per ora di lavoro dei soci, da confrontare con la tariffa media (${_fmtEuroInt(tariffaMedia)}/h). Sopra la tariffa = il lavoro si ripaga e l'eccedenza copre i costi fissi e l'utile.`
+      : 'Margine di contribuzione per ora di lavoro dei soci.';
     const kpiOra = (attivo && oreKpiVal > 0) ? `
       <div class="ab-soci-kpi-row">
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">${oreKpiLabel}</span><span class="ab-soci-kpi-val">${_fmtNum0(oreKpiVal)}</span></div>
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Ricavi / ora</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.ricavi_ora)}</span></div>
-        <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">MdC / ora</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.mdc_ora)}</span></div>
+        <div class="ab-soci-kpi ab-soci-kpi-mdc ${mdcInfo.cls}" title="${mdcTitle}"><span class="ab-soci-kpi-label">MdC / ora vs tariffa</span><span class="ab-soci-kpi-val">${_fmtEuroInt(b.mdc_ora)}</span>${mdcSub}</div>
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Break-even coi soci</span><span class="ab-soci-kpi-val">${b.break_even_soci != null ? _fmtEuroInt(b.break_even_soci) : '—'}</span></div>
       </div>` : '';
 
@@ -2346,7 +2384,7 @@ const BudgetUI = (() => {
            onkeydown="BudgetUI.aggiungiSocioKeyDown(event)">+ Aggiungi socio</div>
 
       <div class="ab-soci-summary">
-        <div class="ab-soci-sum-row"><span>Utile netto (da budget)</span><span class="num">${_fmtEuroInt(b.utileNetto)}</span></div>
+        <div class="ab-soci-sum-row"><span>${utileRigaLbl}</span><span class="num">${_fmtEuroInt(utileRigaVal)}</span></div>
         <div class="ab-soci-sum-row"><span>− Costo figurativo lavoro soci</span><span class="num">${_fmtEuroInt(costo)}</span></div>
         <div class="ab-soci-sum-row ab-soci-sum-tot ${redditoCls}"><span>= Reddito normalizzato</span><span class="num">${_fmtEuroInt(reddito)}</span></div>
       </div>
@@ -2802,10 +2840,18 @@ const BudgetUI = (() => {
     const socis = pre.budget.lavoro_soci || { attivo: false };
     const sociAttivo = !!socis.attivo;
     const costoSoci = pre.budget.costo_figurativo_soci || 0;
-    const redditoNormProj = pre.proiezione.utileNetto - costoSoci;
+    // Coerenza di orizzonte col costo soci: se il costo è pieno annuo (OFF su
+    // anno parziale) l'utile proiettato e il fatturato proiettato vengono
+    // annualizzati a 12 mesi (stesso fattore del budget), così il reddito
+    // normalizzato e il Δ break-even confrontano mele con mele.
+    const aRegimeSoci  = !!pre.budget.reddito_norm_a_regime;
+    const fattSoci     = pre.budget.reddito_norm_fattore || 1;
+    const utileProjNorm = pre.proiezione.utileNetto * fattSoci;
+    const fattProjNorm  = pre.fatturato_proiettato * fattSoci;
+    const redditoNormProj = utileProjNorm - costoSoci;
     const bepSoci = pre.budget.break_even_soci;
     const deltaBepSoci = (bepSoci != null && bepSoci > 0)
-      ? (pre.fatturato_proiettato - bepSoci) / bepSoci : null;
+      ? (fattProjNorm - bepSoci) / bepSoci : null;
 
     // Toggle segmentato compatto (riusa .ab-freq-toggle/.ab-freq-opt).
     const _tgl = (opts) => `<div class="ab-freq-toggle">${opts}</div>`;
@@ -2819,21 +2865,21 @@ const BudgetUI = (() => {
                       onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ da %</span>` : '';
 
     const sociCards = sociAttivo ? `
-            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio" title="Costo figurativo del lavoro dei soci (ore × tariffa), ragguagliato al periodo. Fuori dal Conto Economico civilistico e dalle imposte.">
+            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio" title="Costo figurativo del lavoro dei soci (ore × tariffa)${aRegimeSoci ? ', pieno annuo (ottica a regime)' : ', ragguagliato al periodo'}. Fuori dal Conto Economico civilistico e dalle imposte.">
               <div class="ab-kpi-label">Costo figurativo soci</div>
               <div class="ab-kpi-value">${_fmtKpi(costoSoci)}</div>
-              <div class="ab-kpi-sub">fuori dal CE</div>
+              <div class="ab-kpi-sub">${aRegimeSoci ? 'annuo pieno' : 'fuori dal CE'}</div>
             </div>
-            <div class="ab-budget-kpi-card ab-cons-kpi ${redditoNormProj >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}" title="Utile netto proiettato meno il costo figurativo dei soci: redditività proiettata al netto di un giusto compenso al loro lavoro.">
+            <div class="ab-budget-kpi-card ab-cons-kpi ${redditoNormProj >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}" title="${aRegimeSoci ? 'Utile proiettato a 12 mesi (a regime)' : 'Utile netto proiettato'} meno il costo figurativo dei soci: redditività al netto di un giusto compenso al loro lavoro.">
               <div class="ab-kpi-label">Reddito normalizz. proiettato</div>
               <div class="ab-kpi-value">${_fmtKpi(redditoNormProj)}</div>
-              <div class="ab-kpi-sub">utile − costo soci</div>
+              <div class="ab-kpi-sub">${aRegimeSoci ? 'utile 12m − costo soci' : 'utile − costo soci'}</div>
             </div>
-            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio" title="Fatturato necessario a coprire i costi e anche un giusto compenso ai soci.">
+            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio" title="Fatturato necessario a coprire i costi e anche un giusto compenso ai soci${aRegimeSoci ? ' (a regime, 12 mesi)' : ''}.">
               <div class="ab-kpi-label">Break-even coi soci</div>
               <div class="ab-kpi-value">${_fmtKpi(bepSoci)}</div>
               <div class="ab-kpi-sub">${deltaBepSoci != null
-                  ? (pre.fatturato_proiettato >= bepSoci
+                  ? (fattProjNorm >= bepSoci
                       ? _fmtPctSigned(deltaBepSoci) + ' sopra'
                       : _fmtPctSigned(deltaBepSoci) + ' dal pareggio')
                   : 'target'}</div>

@@ -3700,6 +3700,27 @@ thead .ab-col-periodo-preavvio {
   font-weight: 700;
   color: var(--color-text-primary);
 }
+.ab-soci-kpi-sub {
+  font-size: 10px;
+  line-height: 1.3;
+  margin-top: 2px;
+  max-width: 220px;
+}
+/* Riquadro MdC/ora con classificazione a semaforo: bordo sinistro e colore
+   di valore/sub secondo il livello (ok / al limite / critico). */
+.ab-soci-kpi-mdc {
+  min-width: 200px;
+  border-left-width: 3px;
+}
+.ab-soci-kpi-mdc.lvl-ok   { border-left-color: var(--color-success); }
+.ab-soci-kpi-mdc.lvl-warn { border-left-color: var(--color-warning); }
+.ab-soci-kpi-mdc.lvl-bad  { border-left-color: var(--color-error); }
+.ab-soci-kpi-mdc.lvl-ok   .ab-soci-kpi-val,
+.ab-soci-kpi-mdc.lvl-ok   .ab-soci-kpi-sub { color: var(--color-success); }
+.ab-soci-kpi-mdc.lvl-warn .ab-soci-kpi-val,
+.ab-soci-kpi-mdc.lvl-warn .ab-soci-kpi-sub { color: var(--color-warning); }
+.ab-soci-kpi-mdc.lvl-bad  .ab-soci-kpi-val,
+.ab-soci-kpi-mdc.lvl-bad  .ab-soci-kpi-sub { color: var(--color-error); }
 
 /* ── Toolbar pulsante "Esporta PDF" sopra Budget e Consuntivo AB ─── */
 /* ── PDF: layout dedicato per stampa Budget / Consuntivo AB ──────── */
