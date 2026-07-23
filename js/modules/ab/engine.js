@@ -318,11 +318,32 @@ const BudgetEngine = (() => {
     const utileNetto = utileAnteImposte - imposteVal;
 
     // Break-even operativo:
-    //   risultato_op = F * (1 - sommaPctVar) - (rim_ini - rim_fin) - fissi = 0
-    //   F_be = (rim_ini - rim_fin + fissi) / (1 - sommaPctVar)
+    //   risultato_op = F * (1 - sommaPctVar) - (rim_ini - rim_fin) - fissiBE = 0
+    //   F_be = (rim_ini - rim_fin + fissiBE) / (1 - sommaPctVar)
+    //
+    // Attenzione: il numeratore usa `fissiBE`, non `fissi`. Al break-even
+    // ciò che conta è il *comportamento* della voce (var_fisso), non la
+    // sua collocazione di prospetto (sezione):
+    //   - le voci a comportamento variabile (var_fisso='variabile') sono
+    //     già entrate in `sommaPctVar` (ramo variabile-puro sopra) e
+    //     pesano nel denominatore, qualunque sia la loro sezione;
+    //   - le voci a comportamento fisso (var_fisso='fisso') pesano nel
+    //     numeratore, sia che stiano tra i Fissi sia che stiano tra i
+    //     Variabili (es. un costo della sezione variabili trattato come
+    //     fisso).
+    // Sommare il numeratore per `sezione` (come `fissi`) conterebbe due
+    // volte le voci "Fissi ma variabili" e perderebbe le "Variabili ma
+    // fisse". Isoliamo perciò la sola componente a comportamento fisso,
+    // sopra la linea (sezioni variabili/fissi), escluse le rimanenze
+    // (calcolate, già in kRim). Le voci prov_oneri_straord/imposte hanno
+    // var_fisso null e non concorrono per definizione.
     const denom = 1 - sommaPctVar;
     const kRim = v('rim_ini') - v('rim_fin');
-    const breakEven = (denom > 0 && (kRim + fissi) > 0) ? (kRim + fissi) / denom : null;
+    const fissiBE = (macro || [])
+      .filter(m => m.tipo === 'costo' && !m.calcolato && m.var_fisso === 'fisso'
+                && (m.sezione === 'variabili' || m.sezione === 'fissi'))
+      .reduce((s, m) => s + v(m.id), 0);
+    const breakEven = (denom > 0 && (kRim + fissiBE) > 0) ? (kRim + fissiBE) / denom : null;
 
     return {
       fatturato,

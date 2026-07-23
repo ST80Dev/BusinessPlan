@@ -2405,6 +2405,73 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   filter: brightness(1.05);
 }
 
+/* Toggle F/V (comportamento voce di costo: Fisso vs Variabile).
+   Controllo segmentato compatto dentro la cella Override del budget.
+   Convenzione palette coerente coi mini-flag della Mappatura:
+   accent (blu) = variabile, muted (grigio) = fisso. Il lato attivo è
+   pieno, l'inattivo è tenue. */
+.ab-fv {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.ab-fv-seg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.ab-fv-seg:hover {
+  background: var(--color-surface-hover);
+}
+.ab-fv-seg + .ab-fv-seg {
+  border-left: 1px solid var(--color-border);
+}
+.ab-fv-seg-active {
+  color: #FFFFFF;
+}
+.ab-fv-seg:first-child.ab-fv-seg-active {
+  background: var(--color-text-muted);   /* Fisso attivo */
+}
+.ab-fv-seg:last-child.ab-fv-seg-active {
+  background: var(--color-accent);       /* Variabile attivo */
+}
+
+/* Badge di divergenza: mostrato sulla riga quando il comportamento non
+   segue la convenzione del gruppo (voce nei Fissi trattata da variabile,
+   o nei Variabili trattata da fissa). */
+.ab-budget-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+.ab-budget-badge-var {
+  background: var(--color-accent-light);
+  color: var(--color-accent-hover);
+}
+.ab-budget-badge-fix {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+}
+
 .ab-budget-row-has-note td:first-child::before {
   content: '!';
   display: inline-block;
