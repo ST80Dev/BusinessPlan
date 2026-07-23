@@ -1603,6 +1603,7 @@ const BudgetUI = (() => {
               <th class="num" title="${_escapeHtml(mediaHeaderTitle)}">${_escapeHtml(mediaHeader)}</th>
               <th class="num" title="Incidenza % media sul fatturato calcolata come media delle incidenze % di ciascun anno storico importato.">% storica</th>
               <th class="num" title="Riferimento storico (ultimo esercizio importato arrotondato al centinaio per ricavi, costi variabili, costi fissi e imposte; media € per rimanenze; 0 per proventi/oneri straordinari). Indipendente dal fatturato ipotizzato — il quale impatta solo la colonna Budget €.">Ultimo anno €</th>
+              <th class="ab-comp-col" title="Comportamento di calcolo della voce di costo. Fisso: importo € ancorato allo storico, ripartito nel tempo. Variabile: stagionalizzato coi ricavi (% sul fatturato). Cambia solo il calcolo, non la collocazione: la voce resta nel suo gruppo e la sua appartenenza al costo del venduto non cambia.">Comportamento</th>
               <th class="num">Override</th>
               <th class="num">Budget €</th>
               <th class="num">Budget %</th>
@@ -1611,7 +1612,7 @@ const BudgetUI = (() => {
           <tbody>
     `;
 
-    const totaleColspan = 7;
+    const totaleColspan = 8;
 
     // Totali "Base storica": ricalcoliamo gli aggregati con la stessa
     // logica del budget, ma usando come valore di partenza per ogni voce
@@ -1645,6 +1646,7 @@ const BudgetUI = (() => {
           <td class="num">${_fmtEuroInt(valMediaTri * segno)}</td>
           <td class="num">${_fmtPct(pctBase * segno)}</td>
           <td class="num">${_fmtEuroInt(valBase * segno)}</td>
+          <td class="ab-comp-col"></td>
           <td class="num"></td>
           <td class="num">${_fmtEuroInt(valBudget * segno)}</td>
           <td class="num">${_fmtPct(pctBudget * segno)}</td>
@@ -1703,6 +1705,7 @@ const BudgetUI = (() => {
         <td class="num" title="${_escapeHtml(mediaHeaderTitle)}">${_fmtEuroInt(mediaTriDisplay)}</td>
         <td class="num">${_fmtPct(dato.media_pct)}</td>
         <td class="num" title="${baseTitle}">${_fmtEuroInt(baseDisplay)}</td>
+        <td class="ab-comp-col">${r.togglable ? _renderFvToggle(r) : ''}</td>
         <td class="num">${_renderOverrideCell(r, dato, progetto, notaPresente, notaAperta)}</td>
         <td class="num">${_fmtEuroInt(dato.valore * segno)}</td>
         <td class="num">${_fmtPct(dato.pct * segno)}</td>
@@ -1932,7 +1935,6 @@ const BudgetUI = (() => {
    */
   function _renderOverrideCell(r, dato, progetto, notaPresente, notaAperta) {
     const inputHtml = _renderOverrideInput(r, dato, progetto);
-    const fvHtml = r.togglable ? _renderFvToggle(r) : '';
     const cls = 'ab-budget-nota-toggle'
       + (notaPresente ? ' ab-budget-nota-toggle-piena' : '')
       + (notaAperta   ? ' ab-budget-nota-toggle-aperta' : '');
@@ -1946,7 +1948,6 @@ const BudgetUI = (() => {
       ? 'Chiudi nota'
       : (notaPresente ? 'Apri nota presente' : 'Aggiungi nota');
     return `<div class="ab-budget-override-wrap">
-      ${fvHtml}
       ${inputHtml}
       <span class="${cls}"
             role="button"
@@ -1959,9 +1960,10 @@ const BudgetUI = (() => {
   }
 
   /**
-   * Controllo segmentato F/V per il comportamento della voce di costo.
-   *   F = fisso     (importo € pro-rata sul tempo)
-   *   V = variabile (stagionalizzato coi ricavi, % sul fatturato)
+   * Controllo segmentato Fisso/Var per il comportamento della voce di
+   * costo, mostrato nella colonna "Comportamento" del budget.
+   *   Fisso = importo € pro-rata sul tempo
+   *   Var   = variabile stagionalizzato coi ricavi (% sul fatturato)
    * Cambia solo il comportamento di calcolo: la voce resta nel suo gruppo
    * (Variabili/Fissi) e quindi la sua appartenenza al costo del venduto
    * non cambia. Vedi Projects.impostaComportamentoMacro e il badge di
@@ -1976,13 +1978,13 @@ const BudgetUI = (() => {
             title="Tratta come costo fisso: importo € ancorato allo storico, pro-rata sul tempo"
             aria-label="Fisso" aria-pressed="${!isVar}"
             onclick="BudgetUI.impostaComportamento('${idEsc}','fisso')"
-            onkeydown="BudgetUI.comportamentoKeyDown(event,'${idEsc}','fisso')">F</span>
+            onkeydown="BudgetUI.comportamentoKeyDown(event,'${idEsc}','fisso')">Fisso</span>
       <span class="ab-fv-seg${isVar ? ' ab-fv-seg-active' : ''}"
             role="button" tabindex="0"
             title="Tratta come variabile stagionalizzato: % sul fatturato, scala coi ricavi"
             aria-label="Variabile" aria-pressed="${isVar}"
             onclick="BudgetUI.impostaComportamento('${idEsc}','variabile')"
-            onkeydown="BudgetUI.comportamentoKeyDown(event,'${idEsc}','variabile')">V</span>
+            onkeydown="BudgetUI.comportamentoKeyDown(event,'${idEsc}','variabile')">Var</span>
     </div>`;
   }
 
