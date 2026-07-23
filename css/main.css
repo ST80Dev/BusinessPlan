@@ -2132,7 +2132,7 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-budget {
   padding: 8px 24px 24px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 240px;
   grid-template-rows: auto;
   gap: 20px;
   align-items: start;
@@ -2145,12 +2145,13 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   grid-column: 1;
   grid-row: 1;
 }
-/* Footer a tutta larghezza: pannello seed + blocco reddito normalizzato
-   impilati sotto la tabella, spanning su entrambe le colonne della griglia
-   (non nella colonna stretta di destra da 300px, dove il blocco soci
-   sforava). */
+/* Footer (pannello seed + blocco reddito normalizzato) impilato SOTTO la
+   tabella, nella sola colonna 1: così non finisce nella colonna stretta di
+   destra (dove il blocco soci sforava) e soprattutto non viene coperto dalla
+   card KPI sticky di destra quando si scrolla (che invece accadeva con
+   grid-column: 1 / -1). Resta comunque ampio quanto la tabella. */
 .ab-budget > .ab-budget-footer {
-  grid-column: 1 / -1;
+  grid-column: 1;
   grid-row: 2;
   display: flex;
   flex-direction: column;
@@ -2602,29 +2603,35 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
 .ab-consuntivo { padding: 8px 20px 16px; }
 
 .ab-consuntivo-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(520px, auto);
-  gap: 18px;
-  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 14px;
 }
-.ab-consuntivo-head-left {
+/* Barra unica: riquadri di controllo (toggle) + riquadri KPI, tutti allineati */
+.ab-consuntivo-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+}
+/* Riquadro di controllo (toggle) reso "a card" come i KPI */
+.ab-cons-ctrl {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 0;
+  justify-content: center;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
 }
-.ab-consuntivo-controls {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-.ab-freq-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
+.ab-cons-ctrl-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
 }
 .ab-freq-toggle {
   display: inline-flex;
@@ -2632,9 +2639,10 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   border-radius: 6px;
   overflow: hidden;
   background: var(--color-surface);
+  width: fit-content;
 }
 .ab-freq-opt {
-  padding: 4px 12px;
+  padding: 3px 10px;
   cursor: pointer;
   font-size: 12px;
   color: var(--color-text-muted);
@@ -2655,34 +2663,32 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   display: flex;
   gap: 16px;
   font-size: 12px;
+  flex-wrap: wrap;
 }
 .ab-consuntivo-stats strong {
   color: var(--color-text);
   font-weight: 600;
 }
 
-.ab-consuntivo-kpi {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(170px, 1fr));
-  gap: 8px;
-  align-items: stretch;
-}
-.ab-consuntivo-kpi .ab-budget-kpi-card {
+/* Riquadri KPI del Consuntivo: compatti e in linea coi riquadri di controllo */
+.ab-cons-kpi {
+  min-width: 150px;
+  flex: 0 1 auto;
   padding: 6px 10px;
   border-radius: 6px;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
-.ab-consuntivo-kpi .ab-kpi-label {
+.ab-cons-kpi .ab-kpi-label {
   font-size: 10px;
   margin-bottom: 2px;
 }
-.ab-consuntivo-kpi .ab-kpi-value {
+.ab-cons-kpi .ab-kpi-value {
   font-size: 18px;
   line-height: 1.1;
 }
-.ab-consuntivo-kpi .ab-kpi-sub {
+.ab-cons-kpi .ab-kpi-sub {
   font-size: 10px;
   margin-top: 2px;
 }
