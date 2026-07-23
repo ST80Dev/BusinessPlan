@@ -3315,6 +3315,18 @@ thead .ab-col-periodo-preavvio {
 .ab-seed-info {
   font-size: 12px;
 }
+/* Etichetta orizzonte budget primo anno parziale (riga intera nel body flex) */
+.ab-seed-horizon {
+  flex-basis: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-accent-light);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
 .ab-seed-actions {
   display: flex;
   flex-wrap: wrap;

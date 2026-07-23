@@ -54,6 +54,15 @@ const BudgetUI = (() => {
     return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
 
+  // Società "senza storico" (neocostituita): nessun anno storico. Per queste
+  // il Budget e il Consuntivo si costruiscono dai soli valori ipotizzati/
+  // override, senza richiedere l'import del CE da Excel.
+  function _abSenzaStorico(progetto) {
+    return !progetto || !progetto.meta
+      || !Array.isArray(progetto.meta.anni_storici)
+      || progetto.meta.anni_storici.length === 0;
+  }
+
   /* ──────────────────────────────────────────────────────────
      IMPORTA CE
      ────────────────────────────────────────────────────────── */
@@ -688,6 +697,11 @@ const BudgetUI = (() => {
     const c = document.getElementById('content');
     if (!c) return;
     const progetto = Projects.getProgetto();
+    // Società neocostituita: nessuno storico da mostrare. Indirizza al Budget.
+    if (_abSenzaStorico(progetto)) {
+      c.innerHTML = _placeholder('Storico & medie', 'Società neocostituita: nessuno storico. Costruisci direttamente il budget dalla sezione "Budget anno".');
+      return;
+    }
     if (!progetto || !progetto.storico || Object.keys(progetto.storico).length === 0 ||
         !progetto.sottoconti_ce || progetto.sottoconti_ce.length === 0) {
       c.innerHTML = _placeholder('Storico & medie', 'Importa prima il CE da Excel per popolare lo storico.');
@@ -1477,7 +1491,12 @@ const BudgetUI = (() => {
     const c = document.getElementById('content');
     if (!c) return;
     const progetto = Projects.getProgetto();
-    if (!progetto || !progetto.sottoconti_ce || progetto.sottoconti_ce.length === 0) {
+    if (!progetto) return;
+    // Le società neocostituite (senza storico) costruiscono il budget dai soli
+    // valori ipotizzati/override, senza import del CE. Per le altre, l'import è
+    // ancora il presupposto (macroaree/medie storiche).
+    const senzaSottoconti = !Array.isArray(progetto.sottoconti_ce) || progetto.sottoconti_ce.length === 0;
+    if (senzaSottoconti && !_abSenzaStorico(progetto)) {
       c.innerHTML = _placeholder('Budget anno', 'Importa prima il CE da Excel per costruire il budget.');
       return;
     }
@@ -1858,6 +1877,17 @@ const BudgetUI = (() => {
       ? 'Società senza storico: imposta il mese di avvio attività e, quando disponibili, annualizza i mesi già consuntivati per proporre il fatturato di budget.'
       : 'Mese di avvio attività: rilevante per le società costituite in corso d\'anno (primo esercizio parziale). Con avvio a gennaio non ha effetto.';
 
+    // Etichetta orizzonte: quando l'avvio è infrannuale il budget dell'anno in
+    // corso è il PRIMO ESERCIZIO PARZIALE (avvio→dic). Lo si dichiara
+    // esplicitamente così l'operatore sa che i valori vanno riferiti a quel
+    // periodo (coerente col preconsuntivo, che confronta sullo stesso
+    // orizzonte). Il valore ×12 "a regime" è solo un riferimento.
+    const mesiOp = seed.mesi_operativi_anno;
+    const horizonNote = meseAvvio > 1 ? `
+          <div class="ab-seed-horizon">
+            <strong>Budget anno in corso = primo esercizio parziale:</strong> ${mesiOp} mesi (avvio→dicembre). Inserisci valori riferiti a questo periodo — il Consuntivo confronta sullo stesso orizzonte. Il valore <em>a regime (×12)</em> è solo un riferimento di pianificazione.
+          </div>` : '';
+
     return `
       <div class="ab-seed-panel">
         <div class="ab-seed-head">
@@ -1870,6 +1900,7 @@ const BudgetUI = (() => {
             <select class="form-select ab-seed-select"
                     onchange="BudgetUI.cambiaMeseAvvio(this.value)">${opts}</select>
           </div>
+          ${horizonNote}
           ${annualizza}
         </div>
       </div>`;
@@ -2405,7 +2436,9 @@ const BudgetUI = (() => {
     const c = document.getElementById('content');
     if (!c) return;
     const progetto = Projects.getProgetto();
-    if (!progetto || !progetto.sottoconti_ce || progetto.sottoconti_ce.length === 0) {
+    if (!progetto) return;
+    const senzaSottoconti = !Array.isArray(progetto.sottoconti_ce) || progetto.sottoconti_ce.length === 0;
+    if (senzaSottoconti && !_abSenzaStorico(progetto)) {
       c.innerHTML = _placeholder('Consuntivo', 'Importa prima il CE da Excel per costruire il consuntivo.');
       return;
     }

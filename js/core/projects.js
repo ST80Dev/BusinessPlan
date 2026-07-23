@@ -1091,11 +1091,16 @@ const Projects = (() => {
     const annoCorr = meta.anno_corrente;
     const nAnni = meta.anni_storici;
 
+    // nAnni = 0 → società neocostituita: nessuno storico (anniStorici vuoto).
     const anniStorici = [];
     for (let i = nAnni; i >= 1; i--) anniStorici.push(annoCorr - i);
 
     const storico = {};
     anniStorici.forEach(a => { storico[a] = {}; });
+
+    // Mese di avvio attività (1-12). >1 = società costituita in corso d'anno
+    // (primo esercizio parziale). Vedi engine.calcolaPreconsuntivo.
+    const meseAvvio = Math.min(12, Math.max(1, parseInt(meta.mese_avvio, 10) || 1));
 
     return {
       meta: {
@@ -1104,9 +1109,7 @@ const Projects = (() => {
         settore:         meta.settore || '',
         anno_corrente:   annoCorr,
         anni_storici:    anniStorici,
-        mese_avvio:      1,    // Mese di avvio attività (1-12). >1 = società
-                               // costituita in corso d'anno (primo esercizio
-                               // parziale). Vedi engine.calcolaPreconsuntivo.
+        mese_avvio:      meseAvvio,
         note_anagrafica: [],   // [{titolo, testo}] — esposte negli export
         creato:          oggi,
         modificato:      oggi,
@@ -1138,16 +1141,20 @@ const Projects = (() => {
     const settoreEl = document.getElementById('na-settore');
     const annoEl    = document.getElementById('na-anno-corrente');
     const anniEl    = document.getElementById('na-anni-storici');
+    const meseEl    = document.getElementById('na-mese-avvio');
 
     const cliente   = (dittaEl   && dittaEl.textContent   || '').trim();
     const settore   = (settoreEl && settoreEl.textContent || '').trim();
     const annoCorr  = parseInt(((annoEl  && annoEl.textContent)  || '').trim(), 10);
     const nAnni     = parseInt(((anniEl  && anniEl.textContent)  || '3').trim(), 10);
+    const meseAvvio = meseEl ? (parseInt(meseEl.value, 10) || 1) : 1;
 
     const errori = [];
     if (!cliente) errori.push('Il nome ditta è obbligatorio.');
     if (isNaN(annoCorr) || annoCorr < 1900 || annoCorr > 2100) errori.push('Anno corrente non valido.');
-    if (isNaN(nAnni) || nAnni < 1 || nAnni > 3) errori.push('Anni di storico deve essere tra 1 e 3.');
+    // 0 anni = società neocostituita (nessuno storico): budget costruito dai
+    // soli valori ipotizzati/override, senza import del CE.
+    if (isNaN(nAnni) || nAnni < 0 || nAnni > 3) errori.push('Anni di storico deve essere tra 0 e 3.');
 
     if (errori.length > 0) {
       UI.mostraNotifica(errori.join(' '), 'error');
@@ -1155,7 +1162,7 @@ const Projects = (() => {
     }
 
     const progetto = _creaStrutturaAB({
-      cliente, settore, anno_corrente: annoCorr, anni_storici: nAnni
+      cliente, settore, anno_corrente: annoCorr, anni_storici: nAnni, mese_avvio: meseAvvio
     });
 
     _progettoCorrente = progetto;
@@ -1175,6 +1182,8 @@ const Projects = (() => {
     });
     const anni = document.getElementById('na-anni-storici');
     if (anni) anni.textContent = '3';
+    const mese = document.getElementById('na-mese-avvio');
+    if (mese) mese.value = '1';
   }
 
   /* ──────────────────────────────────────────────────────────

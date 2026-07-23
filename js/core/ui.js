@@ -429,8 +429,12 @@ const UI = (() => {
     aggiornaStatusBar('pronto');
     _aggiornaIndicatoriSidebar();
 
-    // Naviga alla prima sezione del modulo
-    if (modulo === 'ab')      navigate('ab-importa-ce');
+    // Naviga alla prima sezione del modulo. Per le società AB neocostituite
+    // (senza storico da importare) si parte direttamente dal Budget.
+    if (modulo === 'ab') {
+      const senzaStorico = !Array.isArray(progetto.meta.anni_storici) || progetto.meta.anni_storici.length === 0;
+      navigate(senzaStorico ? 'ab-budget' : 'ab-importa-ce');
+    }
     else if (modulo === 'imposte') navigate('imp-anagrafica');
     else                     navigate('dati-partenza');
 
