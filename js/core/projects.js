@@ -739,9 +739,12 @@ const Projects = (() => {
       dati.meta.mese_avvio = 1;
     }
     if (!dati.lavoro_soci || typeof dati.lavoro_soci !== 'object') {
-      dati.lavoro_soci = { attivo: false, righe: [] };
-    } else if (!Array.isArray(dati.lavoro_soci.righe)) {
-      dati.lavoro_soci.righe = [];
+      dati.lavoro_soci = { attivo: false, ragguaglio: true, righe: [] };
+    } else {
+      if (!Array.isArray(dati.lavoro_soci.righe)) dati.lavoro_soci.righe = [];
+      // Ragguaglio ore al primo anno parziale: default attivo per i progetti
+      // salvati prima della sua introduzione.
+      if (dati.lavoro_soci.ragguaglio == null) dati.lavoro_soci.ragguaglio = true;
     }
     if (Array.isArray(dati.sottoconti_ce) && dati.sottoconti_ce.length > 0
         && typeof ExcelImport !== 'undefined' && ExcelImport.ricalcolaStorico) {
@@ -1123,8 +1126,9 @@ const Projects = (() => {
         fatturato: {}             // { '01': 1234, '02': ... }
       },
       lavoro_soci: {              // Costo figurativo lavoro soci (fuori dal CE
-        attivo: false,            // civilistico — vedi engine.calcolaLavoroSoci)
-        righe:  []                // [{ id, nome, ore, tariffa }]
+        attivo:     false,        // civilistico — vedi engine.calcolaLavoroSoci)
+        ragguaglio: true,         // ragguaglia le ore annue al primo anno parziale
+        righe:      []            // [{ id, nome, ore, tariffa }] — ore annue a regime
       }
     };
   }
@@ -1493,10 +1497,13 @@ const Projects = (() => {
 
   function _assicuraLavoroSoci() {
     if (!_progettoCorrente.lavoro_soci || typeof _progettoCorrente.lavoro_soci !== 'object') {
-      _progettoCorrente.lavoro_soci = { attivo: false, righe: [] };
+      _progettoCorrente.lavoro_soci = { attivo: false, ragguaglio: true, righe: [] };
     }
     if (!Array.isArray(_progettoCorrente.lavoro_soci.righe)) {
       _progettoCorrente.lavoro_soci.righe = [];
+    }
+    if (_progettoCorrente.lavoro_soci.ragguaglio == null) {
+      _progettoCorrente.lavoro_soci.ragguaglio = true;
     }
     return _progettoCorrente.lavoro_soci;
   }
@@ -1517,6 +1524,18 @@ const Projects = (() => {
     if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
     const ls = _assicuraLavoroSoci();
     ls.attivo = !!attivo;
+    _modificato = true;
+  }
+
+  /**
+   * Attiva/disattiva il ragguaglio delle ore al primo anno parziale.
+   * Quando attivo (e mese_avvio > 1) le ore annue a regime vengono ridotte
+   * al fattore mesi_operativi/12 nel calcolo del costo figurativo.
+   */
+  function lavoroSociRagguaglio(attivo) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    const ls = _assicuraLavoroSoci();
+    ls.ragguaglio = !!attivo;
     _modificato = true;
   }
 
@@ -1928,6 +1947,7 @@ const Projects = (() => {
     aggiornaConsuntivo,
     aggiornaMetaAB,
     lavoroSociToggle,
+    lavoroSociRagguaglio,
     lavoroSociAddRiga,
     lavoroSociUpdateRiga,
     lavoroSociRemoveRiga,
