@@ -63,6 +63,44 @@ const BudgetUI = (() => {
       || progetto.meta.anni_storici.length === 0;
   }
 
+  // Anni effettivamente presenti nei valori dei sottoconti importati (unione
+  // delle chiavi di `s.valori`), in ordine crescente. Usato come fallback per
+  // mostrare i dati importati quando non c'è storico dichiarato (neocostituite).
+  function _anniConValori(progetto) {
+    const set = new Set();
+    ((progetto && progetto.sottoconti_ce) || []).forEach(s => {
+      if (s && s.valori) Object.keys(s.valori).forEach(a => set.add(a));
+    });
+    return Array.from(set).map(Number).filter(n => isFinite(n)).sort((a, b) => a - b);
+  }
+
+  // Aggrega un set di valori per-macroarea negli stessi derivati del budget
+  // (CdV, MdC, fissi, utile, ...), con la stessa logica di segno dell'engine.
+  // Usato per mostrare i TOTALI dei valori parziali importati (infrannuale)
+  // nella colonna di riferimento del prospetto Budget.
+  function _totaliDaValori(vals, macro) {
+    const v = id => Number((vals || {})[id]) || 0;
+    const sum = (sez, orient) => (macro || [])
+      .filter(m => m.sezione === sez)
+      .reduce((s, m) => {
+        const sign = orient === 'cost'
+          ? (m.tipo === 'costo' ? 1 : -1)
+          : (m.tipo === 'ricavo' ? 1 : -1);
+        return s + sign * v(m.id);
+      }, 0);
+    const fatturato = v('ricavi');
+    const cdv = sum('variabili', 'cost');
+    const totVar = cdv;
+    const mdc = fatturato - totVar;
+    const fissi = sum('fissi', 'cost');
+    const totCosti = totVar + fissi;
+    const provOneriStraordNetto = sum('prov_oneri_straord', 'result');
+    const utileAnteImposte = mdc - fissi + provOneriStraordNetto;
+    const imposte = v('imposte');
+    const utileNetto = utileAnteImposte - imposte;
+    return { fatturato, cdv, totVar, mdc, fissi, totCosti, provOneriStraordNetto, utileAnteImposte, imposte, utileNetto };
+  }
+
   /* ──────────────────────────────────────────────────────────
      IMPORTA CE
      ────────────────────────────────────────────────────────── */
@@ -1086,7 +1124,14 @@ const BudgetUI = (() => {
   function _renderGruppoSottoconti(opts) {
     const { id, label, descrizione, sottoconti, macroAree, progetto, readonly, evidenza } = opts;
     const evidenzaClass = evidenza === 'warn' ? ' ab-gruppo-warn' : '';
-    const anni = progetto.meta.anni_storici;
+    // Anni delle colonne valore: gli anni storici se presenti; altrimenti (es.
+    // società neocostituita con import infrannuale) gli anni effettivamente
+    // presenti nei valori dei sottoconti, così i dati importati restano
+    // visibili anche senza storico dichiarato.
+    const anniStor = progetto.meta.anni_storici;
+    const anni = (Array.isArray(anniStor) && anniStor.length > 0)
+      ? anniStor
+      : _anniConValori(progetto);
 
     // Anche i gruppi a destra fanno da drop target (utile per
     // riassegnare al volo senza muovere il mouse fino alla sidebar).
@@ -1646,6 +1691,37 @@ const BudgetUI = (() => {
       ? 'Valore dell\'unico anno storico importato (la media non è significativa con un solo esercizio).'
       : `Media degli importi € sugli anni storici importati (${anniReali.join(', ')}), riferimento informativo per le decisioni di budget.`;
 
+    // Import infrannuale (neocostituite): la colonna "Ultimo anno €" mostra i
+    // VALORI PARZIALI realmente importati (periodo avvio→riferimento),
+    // relabellata con le sigle dei mesi. Così l'operatore vede il "fatto
+    // finora" accanto alla proiezione a fine anno (colonna Budget €), e può
+    // rettificare i sottoconti se necessario. I valori sono ricalcolati da
+    // sottoconti+mapping (riflettono le rettifiche fatte in Mappatura).
+    const infr = progetto.meta && progetto.meta.import_infrannuale;
+    let infrValori = null, infrRicavi = 0, infrHeader = null, infrTitle = null, infrTotali = null;
+    if (infr && _abSenzaStorico(progetto) && typeof ExcelImport !== 'undefined' && ExcelImport.calcolaStorico) {
+      try {
+        // ricalcolaStorico usa meta.anni_storici (vuoto per le neocostituite):
+        // qui calcoliamo sugli anni effettivamente presenti nei sottoconti, così
+        // i valori importati restano ricavati da sottoconti+mapping (riflettono
+        // le rettifiche fatte nella Mappatura).
+        const anniImp = _anniConValori(progetto);
+        const stor = ExcelImport.calcolaStorico(
+          { anni: anniImp, sottoconti: progetto.sottoconti_ce || [], rimanenze: progetto.rimanenze || {} },
+          progetto.mapping || {}, progetto.macro_sezioni);
+        const anno = infr.anno || (anniImp.length ? Math.max.apply(null, anniImp) : null);
+        if (anno != null && stor[anno]) {
+          infrValori = stor[anno];
+          infrTotali = _totaliDaValori(infrValori, progetto.macro_sezioni);
+          infrRicavi = Number(infrValori.ricavi) || 0;
+          const mAvv = Math.min(12, Math.max(1, parseInt(progetto.meta.mese_avvio, 10) || 1));
+          const mRif = Math.min(12, Math.max(mAvv, parseInt(infr.mese_riferimento, 10) || mAvv));
+          infrHeader = _MESI_ABBR[mAvv - 1] + '–' + _MESI_ABBR[mRif - 1];
+          infrTitle = `Valori realmente importati dal bilancio infrannuale — periodo ${_MESI[mAvv - 1]}–${_MESI[mRif - 1]} ${anno} (${infr.mesi_coperti || ''} mesi). La colonna Budget € proietta questi valori a fine anno (avvio→dic).`;
+        }
+      } catch (_e) { infrValori = null; }
+    }
+
     // KPI: differenze percentuali fatturato vs ultimo fatturato storico
     // (arrotondato al centinaio, base del budget teorico) e vs break-even
     const fattBase = b.fatturato_ultimo_arrotondato;
@@ -1701,8 +1777,8 @@ const BudgetUI = (() => {
             <tr>
               <th>Macroarea</th>
               <th class="num" title="${_escapeHtml(mediaHeaderTitle)}">${_escapeHtml(mediaHeader)}</th>
-              <th class="num" title="Incidenza % media sul fatturato calcolata come media delle incidenze % di ciascun anno storico importato.">% storica</th>
-              <th class="num" title="Riferimento storico (ultimo esercizio importato arrotondato al centinaio per ricavi, costi variabili, costi fissi e imposte; media € per rimanenze; 0 per proventi/oneri straordinari). Indipendente dal fatturato ipotizzato — il quale impatta solo la colonna Budget €.">Ultimo anno €</th>
+              <th class="num" title="${infrValori ? 'Incidenza % sul fatturato dei valori parziali importati (periodo ' + _escapeHtml(infrHeader) + ').' : 'Incidenza % media sul fatturato calcolata come media delle incidenze % di ciascun anno storico importato.'}">${infrValori ? '% ' + _escapeHtml(infrHeader) : '% storica'}</th>
+              <th class="num" title="${infrValori ? _escapeHtml(infrTitle) : 'Riferimento storico (ultimo esercizio importato arrotondato al centinaio per ricavi, costi variabili, costi fissi e imposte; media € per rimanenze; 0 per proventi/oneri straordinari). Indipendente dal fatturato ipotizzato — il quale impatta solo la colonna Budget €.'}">${infrValori ? _escapeHtml(infrHeader) + ' €' : 'Ultimo anno €'}</th>
               <th class="ab-comp-col" title="Comportamento di calcolo della voce di costo. Fisso: importo € ancorato allo storico, ripartito nel tempo. Variabile: stagionalizzato coi ricavi (% sul fatturato). Cambia solo il calcolo, non la collocazione: la voce resta nel suo gruppo e la sua appartenenza al costo del venduto non cambia.">Comportamento</th>
               <th class="num">Rettifica</th>
               <th class="num">Budget €</th>
@@ -1737,8 +1813,11 @@ const BudgetUI = (() => {
       if (r.tipo === 'totale') {
         const valBudget = b[r.id] || 0;
         const pctBudget = b.fatturato > 0 ? valBudget / b.fatturato : 0;
-        const valBase = baseTot[r.id] || 0;
-        const pctBase = baseTot.fatturato > 0 ? valBase / baseTot.fatturato : 0;
+        // Colonna di riferimento: totali dei valori parziali importati
+        // (infrannuale) oppure i totali "base storica".
+        const valBase = infrTotali ? (infrTotali[r.id] || 0) : (baseTot[r.id] || 0);
+        const baseRef = infrTotali ? infrTotali.fatturato : baseTot.fatturato;
+        const pctBase = baseRef > 0 ? valBase / baseRef : 0;
         const valMediaTri = medieEuroDerivati[r.id] || 0;
         const cls = `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}`;
         html += `<tr class="${cls}">
@@ -1773,14 +1852,25 @@ const BudgetUI = (() => {
       //     colonna resta ferma quando si rettifica il fatturato.
       const isStraord = m && m.sezione === 'prov_oneri_straord';
       const isCalc = m && m.calcolato;
-      const baseDisplay = isStraord ? 0
-        : isCalc ? (dato.media_euro || 0)
-        : (dato.ultimo_anno_euro || 0);
-      const baseTitle   = isStraord
-        ? 'Default 0 (voce di natura non ricorrente — usare la rettifica per forzare un valore)'
-        : isCalc
-            ? 'Media storica degli importi €'
-            : `Ultimo anno storico arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`;
+      // Colonna base: valori parziali importati (infrannuale) oppure il
+      // riferimento storico standard.
+      const baseDisplay = infrValori
+        ? (Number(infrValori[r.id]) || 0)
+        : (isStraord ? 0
+          : isCalc ? (dato.media_euro || 0)
+          : (dato.ultimo_anno_euro || 0));
+      const baseTitle = infrValori
+        ? infrTitle
+        : (isStraord
+            ? 'Default 0 (voce di natura non ricorrente — usare la rettifica per forzare un valore)'
+            : isCalc
+                ? 'Media storica degli importi €'
+                : `Ultimo anno storico arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`);
+      // Colonna % (col.3): incidenza dei valori parziali importati, oppure la
+      // % media storica.
+      const pctCol3 = infrValori
+        ? (infrRicavi > 0 ? (Number(infrValori[r.id]) || 0) / infrRicavi : 0)
+        : dato.media_pct;
       const mediaTriDisplay = (dato.media_euro || 0);
 
       const note = (progetto.budget && progetto.budget.note) || {};
@@ -1803,7 +1893,7 @@ const BudgetUI = (() => {
       html += `<tr class="${fonteCls}${notaPresente ? ' ab-budget-row-has-note' : ''}">
         <td>${_escapeHtml(r.label)}${badge}</td>
         <td class="num" title="${_escapeHtml(mediaHeaderTitle)}">${_fmtEuroInt(mediaTriDisplay)}</td>
-        <td class="num">${_fmtPct(dato.media_pct)}</td>
+        <td class="num">${_fmtPct(pctCol3)}</td>
         <td class="num" title="${baseTitle}">${_fmtEuroInt(baseDisplay)}</td>
         <td class="ab-comp-col">${r.togglable ? _renderFvToggle(r) : ''}</td>
         <td class="num">${_renderOverrideCell(r, dato, progetto, notaPresente, notaAperta)}</td>
@@ -2462,6 +2552,7 @@ const BudgetUI = (() => {
      ────────────────────────────────────────────────────────── */
 
   const _MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  const _MESI_ABBR = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
   const _TRIMESTRI = ['1° trimestre (gen-mar)','2° trimestre (apr-giu)','3° trimestre (lug-set)','4° trimestre (ott-dic)'];
 
   function _delta(a, b) {
