@@ -3671,6 +3671,12 @@ thead .ab-col-periodo-preavvio {
 }
 .ab-soci-sum-tot.ab-kpi-verde { color: var(--color-success); }
 .ab-soci-sum-tot.ab-kpi-rosso { color: var(--color-error); }
+/* Riga informativa "di cui netto in tasca ai soci": rientrata, minore. */
+.ab-soci-sum-info {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  padding-left: 12px;
+}
 
 .ab-soci-kpi-row {
   display: flex;

@@ -2328,6 +2328,16 @@ const BudgetUI = (() => {
     const utileRigaLbl  = aRegime ? 'Utile netto proiettato a 12 mesi' : 'Utile netto (da budget)';
     const utileRigaVal  = aRegime ? (b.reddito_norm_utile_base || 0) : b.utileNetto;
 
+    // Base del costo soci nel reddito normalizzato: con Simulazione compenso ON
+    // si sottrae il costo pieno azienda (libro paga) e si mostra il netto socio
+    // come riga informativa; OFF resta il costo figurativo puro.
+    const simulaOn      = !!b.simula_compenso;
+    const costoRedRiga  = simulaOn ? (b.costo_azienda_soci || 0) : costo;
+    const costoRedLbl   = simulaOn ? '− Costo soci a libro paga (azienda)' : '− Costo figurativo lavoro soci';
+    const nettoInfoRow  = simulaOn
+      ? `<div class="ab-soci-sum-row ab-soci-sum-info"><span>di cui netto in tasca ai soci</span><span class="num ab-soci-netto">${_fmtEuroInt(b.netto_soci || 0)}</span></div>`
+      : '';
+
     // Ragguaglio ore al primo anno parziale (solo se avvio > gennaio).
     const mostraRagguaglio = (soci.mese_avvio || 1) > 1;
     const fattPct = Math.round((soci.fattore_ragguaglio || 1) * 100);
@@ -2450,8 +2460,9 @@ const BudgetUI = (() => {
 
       <div class="ab-soci-summary">
         <div class="ab-soci-sum-row"><span>${utileRigaLbl}</span><span class="num">${_fmtEuroInt(utileRigaVal)}</span></div>
-        <div class="ab-soci-sum-row"><span>− Costo figurativo lavoro soci</span><span class="num">${_fmtEuroInt(costo)}</span></div>
+        <div class="ab-soci-sum-row"><span>${costoRedLbl}</span><span class="num">${_fmtEuroInt(costoRedRiga)}</span></div>
         <div class="ab-soci-sum-row ab-soci-sum-tot ${redditoCls}"><span>= Reddito normalizzato</span><span class="num">${_fmtEuroInt(reddito)}</span></div>
+        ${nettoInfoRow}
       </div>
       ${kpiOra}
       ${simulaBar}
@@ -2942,7 +2953,12 @@ const BudgetUI = (() => {
     const fattSoci     = pre.budget.reddito_norm_fattore || 1;
     const utileProjNorm = pre.proiezione.utileNetto * fattSoci;
     const fattProjNorm  = pre.fatturato_proiettato * fattSoci;
-    const redditoNormProj = utileProjNorm - costoSoci;
+    // Simulazione compenso ON → il costo soci del reddito è quello pieno
+    // azienda (libro paga); il netto socio resta informativo.
+    const simulaOnCons = !!pre.budget.simula_compenso;
+    const costoSociKpi = simulaOnCons ? (pre.budget.costo_azienda_soci || 0) : costoSoci;
+    const nettoSociKpi = pre.budget.netto_soci || 0;
+    const redditoNormProj = utileProjNorm - costoSociKpi;
     const bepSoci = pre.budget.break_even_soci;
     const deltaBepSoci = (bepSoci != null && bepSoci > 0)
       ? (fattProjNorm - bepSoci) / bepSoci : null;
@@ -2959,15 +2975,17 @@ const BudgetUI = (() => {
                       onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ da %</span>` : '';
 
     const sociCards = sociAttivo ? `
-            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio" title="Costo figurativo del lavoro dei soci (ore × tariffa)${aRegimeSoci ? ', pieno annuo (ottica a regime)' : ', ragguagliato al periodo'}. Fuori dal Conto Economico civilistico e dalle imposte.">
-              <div class="ab-kpi-label">Costo figurativo soci</div>
-              <div class="ab-kpi-value">${_fmtKpi(costoSoci)}</div>
-              <div class="ab-kpi-sub">${aRegimeSoci ? 'annuo pieno' : 'fuori dal CE'}</div>
+            <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio" title="${simulaOnCons
+                ? `Costo pieno per l'azienda del lavoro soci a libro paga (lordo + INPS 2/3 + IRAP indeducibile). Di cui netto in tasca ai soci: ${_fmtKpi(nettoSociKpi)}.`
+                : `Costo figurativo del lavoro dei soci (ore × tariffa)${aRegimeSoci ? ', pieno annuo (ottica a regime)' : ', ragguagliato al periodo'}. Fuori dal Conto Economico civilistico e dalle imposte.`}">
+              <div class="ab-kpi-label">${simulaOnCons ? 'Costo soci a libro paga' : 'Costo figurativo soci'}</div>
+              <div class="ab-kpi-value">${_fmtKpi(costoSociKpi)}</div>
+              <div class="ab-kpi-sub">${simulaOnCons ? 'costo pieno azienda' : (aRegimeSoci ? 'annuo pieno' : 'fuori dal CE')}</div>
             </div>
-            <div class="ab-budget-kpi-card ab-cons-kpi ${redditoNormProj >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}" title="${aRegimeSoci ? 'Utile proiettato a 12 mesi (a regime)' : 'Utile netto proiettato'} meno il costo figurativo dei soci: redditività al netto di un giusto compenso al loro lavoro.">
+            <div class="ab-budget-kpi-card ab-cons-kpi ${redditoNormProj >= 0 ? 'ab-kpi-verde' : 'ab-kpi-rosso'}" title="${aRegimeSoci ? 'Utile proiettato a 12 mesi (a regime)' : 'Utile netto proiettato'} meno il ${simulaOnCons ? 'costo pieno azienda dei soci (libro paga)' : 'costo figurativo dei soci'}: redditività al netto di un giusto compenso al loro lavoro.">
               <div class="ab-kpi-label">Reddito normalizz. proiettato</div>
               <div class="ab-kpi-value">${_fmtKpi(redditoNormProj)}</div>
-              <div class="ab-kpi-sub">${aRegimeSoci ? 'utile 12m − costo soci' : 'utile − costo soci'}</div>
+              <div class="ab-kpi-sub">${simulaOnCons ? 'utile − costo azienda' : (aRegimeSoci ? 'utile 12m − costo soci' : 'utile − costo soci')}</div>
             </div>
             <div class="ab-budget-kpi-card ab-cons-kpi ab-kpi-arancio" title="Fatturato necessario a coprire i costi e anche un giusto compenso ai soci${aRegimeSoci ? ' (a regime, 12 mesi)' : ''}.">
               <div class="ab-kpi-label">Break-even coi soci</div>

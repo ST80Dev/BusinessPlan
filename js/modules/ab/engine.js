@@ -571,18 +571,35 @@ const BudgetEngine = (() => {
     const utileNorm    = utileNetto * fattAnnua;
     const fatturatoNorm = fatturato * fattAnnua;
     const mdcNorm      = mdc * fattAnnua;
-    const redditoNormalizzato = utileNorm - costoFigSoci;
+    // Base del costo soci nel reddito normalizzato e nel break-even:
+    //   - Simulazione compenso OFF (default) → costo-opportunità puro
+    //     (costoFigSoci = ore×tariffa). Retrocompatibile.
+    //   - Simulazione compenso ON → ottica "libro paga": si sottrae il COSTO
+    //     PIENO PER L'AZIENDA = costoFigSoci × (1 + ricarico_azienda_pct), che
+    //     include gli oneri datoriali (INPS 2/3 + IRAP indeducibile). Il netto
+    //     in tasca al socio (costoFigSoci × (1 − prelievo_socio_pct)) è esposto
+    //     come informazione. Nota: il prelievo socio NON aumenta il costo
+    //     azienda (è già dentro il lordo), quindi non entra nel reddito.
+    const lsCfg = (progetto && progetto.lavoro_soci) || {};
+    const simulaCompenso = !!lsCfg.simula_compenso;
+    const fiscoCfg = lsCfg.fisco || {};
+    const ricaricoAz = isFinite(fiscoCfg.ricarico_azienda_pct) ? Number(fiscoCfg.ricarico_azienda_pct) : 0.20;
+    const prelievoSc = isFinite(fiscoCfg.prelievo_socio_pct)   ? Number(fiscoCfg.prelievo_socio_pct)   : 0.35;
+    const costoAziendaSoci = costoFigSoci * (1 + ricaricoAz);
+    const nettoSoci        = costoFigSoci * (1 - prelievoSc);
+    const costoRedditoSoci = simulaCompenso ? costoAziendaSoci : costoFigSoci;
+    const redditoNormalizzato = utileNorm - costoRedditoSoci;
     // Break-even che remunera anche il lavoro dei soci: al numeratore del
     // break-even operativo (kRim + fissiBE, componente a comportamento
-    // fisso) si aggiunge il costo figurativo, anch'esso fisso per natura e
-    // indipendente dal fatturato. Usa `fissiBE` (non `fissi`) per restare
-    // coerente col break-even operativo. In ottica a regime (OFF/parziale) le
-    // basi fisse sono anch'esse annualizzate, così il BEP è comparabile al
-    // costo soci pieno e al fatturato a regime.
+    // fisso) si aggiunge il costo soci (figurativo o pieno azienda a seconda
+    // della simulazione), anch'esso fisso per natura e indipendente dal
+    // fatturato. Usa `fissiBE` (non `fissi`) per restare coerente col
+    // break-even operativo. In ottica a regime (OFF/parziale) le basi fisse
+    // sono anch'esse annualizzate, così il BEP è comparabile.
     const kRimBE   = kRim * fattAnnua;
     const fissiBEn = fissiBE * fattAnnua;
-    const breakEvenSoci = (denom > 0 && (kRimBE + fissiBEn + costoFigSoci) > 0)
-      ? (kRimBE + fissiBEn + costoFigSoci) / denom : null;
+    const breakEvenSoci = (denom > 0 && (kRimBE + fissiBEn + costoRedditoSoci) > 0)
+      ? (kRimBE + fissiBEn + costoRedditoSoci) / denom : null;
     // KPI di produttività oraria sulle ore EFFETTIVE: ore ragguagliate al
     // periodo (ON) confrontate con fatturato/MdC parziali; ore annue intere
     // (OFF/parziale) confrontate con fatturato/MdC annualizzati. Sempre stesso
@@ -605,6 +622,13 @@ const BudgetEngine = (() => {
       // Lavoro soci / reddito normalizzato (fuori dal CE civilistico)
       lavoro_soci: soci,
       costo_figurativo_soci: costoFigSoci,
+      // Simulazione compenso amministratori: costo pieno azienda e netto socio
+      // (informativo); `costo_reddito_soci` è la base effettiva del reddito
+      // normalizzato e del break-even (azienda se simula ON, figurativo se OFF).
+      simula_compenso: simulaCompenso,
+      costo_azienda_soci: costoAziendaSoci,
+      netto_soci: nettoSoci,
+      costo_reddito_soci: costoRedditoSoci,
       reddito_normalizzato: redditoNormalizzato,
       // Utile effettivamente usato nel reddito normalizzato: parziale (ON) o
       // proiettato a 12 mesi (OFF/parziale). `reddito_norm_a_regime` segnala
