@@ -2125,6 +2125,19 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   grid-column: 1;
   grid-row: 1;
 }
+/* Footer a tutta larghezza: pannello seed + blocco reddito normalizzato
+   impilati sotto la tabella, spanning su entrambe le colonne della griglia
+   (non nella colonna stretta di destra da 300px, dove il blocco soci
+   sforava). */
+.ab-budget > .ab-budget-footer {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.ab-budget-footer > .ab-soci-block { margin-top: 0; }
 @media (max-width: 1100px) {
   .ab-budget {
     grid-template-columns: minmax(0, 1fr);
@@ -2133,8 +2146,9 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   .ab-budget > table {
     grid-column: 1;
   }
-  .ab-budget > .ab-budget-card { grid-row: 1; }
-  .ab-budget > table           { grid-row: 2; }
+  .ab-budget > .ab-budget-card    { grid-row: 1; }
+  .ab-budget > table              { grid-row: 2; }
+  .ab-budget > .ab-budget-footer  { grid-row: 3; }
 }
 
 .ab-budget-card {

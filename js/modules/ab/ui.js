@@ -1594,8 +1594,6 @@ const BudgetUI = (() => {
           </div>
         </div>
 
-        ${_renderSeedPanel(progetto, seed, b)}
-
         <table class="ab-storico-tab ab-storico-prospetto ab-budget-tab">
           <thead>
             <tr>
@@ -1750,20 +1748,34 @@ const BudgetUI = (() => {
     }
 
     html += '</tbody></table>';
+    // Footer a tutta larghezza (span su entrambe le colonne della griglia
+    // .ab-budget): pannello seed e blocco reddito normalizzato impilati
+    // uno sotto l'altro come riquadri, non nella colonna stretta di destra.
+    html += '<div class="ab-budget-footer">';
+    html += _renderSeedPanel(progetto, seed, b);
     html += _renderSociBlock(progetto, b);
+    html += '</div>';
     html += '</div>';
     c.innerHTML = html;
   }
 
   /**
-   * Pannello "Budget da dati in corso d'anno" — seed del fatturato per
-   * società senza storico. Visibile solo quando ci sono mesi consuntivati
-   * (seed.disponibile). Consente di scegliere il mese di avvio attività e
-   * di annualizzare il run-rate su due orizzonti (primo anno parziale /
-   * anno a regime), scrivendo il valore su fatturato_ipotizzato.
+   * Pannello "Budget da dati in corso d'anno" — unica sede del MESE DI AVVIO
+   * attività (le basi del budget si impostano qui, non nel Consuntivo) e
+   * seed del fatturato per società senza storico.
+   *
+   * Visibilità: mostrato quando la società non ha storico reale (neocostituita)
+   * oppure quando ci sono già mesi consuntivati da annualizzare. Nascosto per
+   * le società con storico consolidato (avvio implicito a gennaio).
+   *
+   * Il selettore del mese di avvio è sempre presente; l'annualizzazione
+   * (run-rate + bottoni parziale/regime) compare solo se ci sono mesi inseriti
+   * nel Consuntivo (seed.disponibile).
    */
   function _renderSeedPanel(progetto, seed, b) {
-    if (!seed || !seed.disponibile) return '';
+    if (!seed) return '';
+    const noStorico = !b.anni_reali || b.anni_reali.length === 0;
+    if (!seed.disponibile && !noStorico) return '';
 
     const meseAvvio = seed.mese_avvio || 1;
     const opts = _MESI.map((nome, i) =>
@@ -1791,11 +1803,24 @@ const BudgetUI = (() => {
         <span class="ab-seed-btn-val">${_fmtEuroInt(regime)}</span>
       </div>`;
 
+    // Blocco annualizzazione: solo se ci sono mesi consuntivati. Altrimenti
+    // un invito a inserirli nel Consuntivo.
+    const annualizza = seed.disponibile ? `
+          <div class="ab-seed-info text-muted">
+            Consuntivato <strong>${_fmtEuroInt(seed.fatturato_ytd)}</strong> su <strong>${seed.mesi_attivi}</strong> ${seed.mesi_attivi === 1 ? 'mese' : 'mesi'} operativi → run-rate <strong>${_fmtEuroInt(seed.run_rate_mensile)}</strong>/mese
+          </div>
+          <div class="ab-seed-actions">
+            ${unMese ? btnRegime : btnParziale + btnRegime}
+          </div>` : `
+          <div class="ab-seed-info text-muted">
+            Inserisci i mesi già fatturati nel <strong>Consuntivo</strong> per annualizzare il fatturato di budget.
+          </div>`;
+
     return `
       <div class="ab-seed-panel">
         <div class="ab-seed-head">
           <span class="ab-seed-title">Budget da dati in corso d'anno</span>
-          <span class="ab-seed-hint text-muted">Società senza storico: annualizza i mesi già inseriti nel Consuntivo per proporre il fatturato di budget.</span>
+          <span class="ab-seed-hint text-muted">Società senza storico: imposta il mese di avvio attività e, quando disponibili, annualizza i mesi già consuntivati per proporre il fatturato di budget.</span>
         </div>
         <div class="ab-seed-body">
           <div class="ab-seed-field">
@@ -1803,12 +1828,7 @@ const BudgetUI = (() => {
             <select class="form-select ab-seed-select"
                     onchange="BudgetUI.cambiaMeseAvvio(this.value)">${opts}</select>
           </div>
-          <div class="ab-seed-info text-muted">
-            Consuntivato <strong>${_fmtEuroInt(seed.fatturato_ytd)}</strong> su <strong>${seed.mesi_attivi}</strong> ${seed.mesi_attivi === 1 ? 'mese' : 'mesi'} operativi → run-rate <strong>${_fmtEuroInt(seed.run_rate_mensile)}</strong>/mese
-          </div>
-          <div class="ab-seed-actions">
-            ${unMese ? btnRegime : btnParziale + btnRegime}
-          </div>
+          ${annualizza}
         </div>
       </div>`;
   }
@@ -2321,11 +2341,10 @@ const BudgetUI = (() => {
       : ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
     const periodiKeys = pre.periodi_keys;
 
-    // Opzioni mese di avvio attività (1-12). Con avvio > gennaio i mesi
-    // precedenti sono "pre-avvio": non editabili e non conteggiati.
-    const avvioOpts = _MESI.map((nome, i) =>
-      `<option value="${i + 1}"${(i + 1) === pre.mese_avvio ? ' selected' : ''}>${nome}</option>`
-    ).join('');
+    // Il mese di avvio attività si imposta nella pagina Budget (pannello
+    // "Budget da dati in corso d'anno"), unica sede delle basi di budget.
+    // Qui è solo riflesso: i mesi pre-avvio sono resi non editabili e i
+    // "periodi operativi" ne tengono conto nel denominatore.
     const denomOperativi = pre.periodi_operativi != null ? pre.periodi_operativi : pre.periodi_totali;
 
     let html = `
@@ -2359,12 +2378,6 @@ const BudgetUI = (() => {
                       onclick="BudgetUI.apriDistribuisciPct()"
                       onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ Distribuisci da %</span>
                 ` : ''}
-              </div>
-              <div class="ab-freq-selector"
-                   title="Mese di avvio attività. Per società costituite in corso d'anno: i mesi precedenti non esistono e non concorrono al calcolo (run-rate e costi pro-rata partono dall'avvio).">
-                <span class="text-muted">Avvio attività:</span>
-                <select class="form-select ab-avvio-select"
-                        onchange="BudgetUI.cambiaMeseAvvioConsuntivo(this.value)">${avvioOpts}</select>
               </div>
               <div class="ab-consuntivo-stats text-muted">
                 <span title="Periodi operativi trascorsi da avvio fino all'ultimo mese con ricavo inserito: i mesi intermedi a ricavo zero contano comunque come trascorsi (i loro costi fissi sono conteggiati); i mesi precedenti all'avvio e quelli successivi all'orizzonte non sono conteggiati."><strong>${pre.periodi_chiusi}</strong> / ${denomOperativi} periodi operativi</span>
@@ -2576,23 +2589,6 @@ const BudgetUI = (() => {
     Projects.aggiornaConsuntivo(field, parsed);
     UI.aggiornaStatusBar('modificato');
     // Preserva la posizione di scroll orizzontale tra un re-render e l'altro
-    const scroller = document.querySelector('.ab-consuntivo-tab-scroll');
-    const scrollLeft = scroller ? scroller.scrollLeft : 0;
-    renderConsuntivo();
-    if (scrollLeft) {
-      const newScroller = document.querySelector('.ab-consuntivo-tab-scroll');
-      if (newScroller) newScroller.scrollLeft = scrollLeft;
-    }
-  }
-
-  /**
-   * Cambia il mese di avvio attività dalla vista Consuntivo, preservando
-   * lo scroll orizzontale della tabella.
-   */
-  function cambiaMeseAvvioConsuntivo(value) {
-    const m = parseInt(value, 10);
-    Projects.aggiornaMetaAB('mese_avvio', m);
-    UI.aggiornaStatusBar('modificato');
     const scroller = document.querySelector('.ab-consuntivo-tab-scroll');
     const scrollLeft = scroller ? scroller.scrollLeft : 0;
     renderConsuntivo();
@@ -3562,7 +3558,6 @@ const BudgetUI = (() => {
     eliminaNota:        eliminaNota,
     eliminaNotaKeyDown: eliminaNotaKeyDown,
     consuntivoBlur:     consuntivoBlur,
-    cambiaMeseAvvioConsuntivo: cambiaMeseAvvioConsuntivo,
     cambiaFrequenza:    cambiaFrequenza,
     cambiaModalitaProiezione:   cambiaModalitaProiezione,
     attesoBlur:                 attesoBlur,
