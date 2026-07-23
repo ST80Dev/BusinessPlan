@@ -241,6 +241,55 @@ const BudgetEngine = (() => {
   }
 
   /**
+   * Simulazione "se il lavoro dei soci fosse pagato come compenso
+   * amministratori". Trasforma ore×tariffa (compenso lordo annuo A REGIME, su
+   * 12 mesi) in netto in tasca al socio e costo pieno per l'azienda, con due
+   * percentuali medie indicative editabili (stima rapida, non calcolo puntuale
+   * di scaglioni/aliquote):
+   *   - prelievo_socio_pct   (default 0,35): IRPEF + addizionali + INPS quota
+   *     socio a carico del percettore → netto = lordo × (1 − prelievo).
+   *   - ricarico_azienda_pct (default 0,20): INPS 2/3 a carico società + IRAP
+   *     indeducibile → costo azienda = lordo × (1 + ricarico).
+   * Il lordo usa le ore ANNUE a regime (non ragguagliate): è una vista a
+   * regime su 12 mesi, indipendente dal mese di avvio.
+   * @returns {{attivo, prelievo_pct, ricarico_pct, righe:[], tot_*}}
+   */
+  function calcolaCompensoNettoSoci(progetto) {
+    const ls = (progetto && progetto.lavoro_soci) || {};
+    const fisco = ls.fisco || {};
+    const prelievo = isFinite(fisco.prelievo_socio_pct)   ? Number(fisco.prelievo_socio_pct)   : 0.35;
+    const ricarico = isFinite(fisco.ricarico_azienda_pct) ? Number(fisco.ricarico_azienda_pct) : 0.20;
+    const righeIn = Array.isArray(ls.righe) ? ls.righe : [];
+
+    let totLordo = 0, totNetto = 0, totAzienda = 0;
+    const righe = righeIn.map(r => {
+      const ore     = Number(r && r.ore)     || 0;   // ore annue a regime
+      const tariffa = Number(r && r.tariffa) || 0;
+      const lordoAnnuo   = ore * tariffa;
+      const nettoAnnuo   = lordoAnnuo * (1 - prelievo);
+      const aziendaAnnuo = lordoAnnuo * (1 + ricarico);
+      totLordo   += lordoAnnuo;
+      totNetto   += nettoAnnuo;
+      totAzienda += aziendaAnnuo;
+      return {
+        id: r && r.id, nome: (r && r.nome) || '',
+        lordo_annuo: lordoAnnuo,     lordo_mensile: lordoAnnuo / 12,
+        netto_annuo: nettoAnnuo,     netto_mensile: nettoAnnuo / 12,
+        azienda_annuo: aziendaAnnuo, azienda_mensile: aziendaAnnuo / 12
+      };
+    });
+    return {
+      attivo: !!ls.attivo,
+      prelievo_pct: prelievo,
+      ricarico_pct: ricarico,
+      righe,
+      tot_lordo_annuo: totLordo,     tot_lordo_mensile: totLordo / 12,
+      tot_netto_annuo: totNetto,     tot_netto_mensile: totNetto / 12,
+      tot_azienda_annuo: totAzienda, tot_azienda_mensile: totAzienda / 12
+    };
+  }
+
+  /**
    * Seed del fatturato di budget a partire dai mesi già inseriti nel
    * consuntivo dell'anno in corso. Pensato per società NEOCOSTITUITE,
    * prive di storico, di cui sono noti solo alcuni mesi.
@@ -872,6 +921,7 @@ const BudgetEngine = (() => {
     calcolaPctMedie:    calcolaPctMedie,
     calcolaMedieEuro:   calcolaMedieEuro,
     calcolaLavoroSoci:  calcolaLavoroSoci,
+    calcolaCompensoNettoSoci: calcolaCompensoNettoSoci,
     calcolaSeedFatturato: calcolaSeedFatturato,
     calcolaBudget:      calcolaBudget,
     calcolaPreconsuntivo: calcolaPreconsuntivo

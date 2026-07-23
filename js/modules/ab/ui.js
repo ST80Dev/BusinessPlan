@@ -2362,6 +2362,71 @@ const BudgetUI = (() => {
         <div class="ab-soci-kpi"><span class="ab-soci-kpi-label">Break-even coi soci</span><span class="ab-soci-kpi-val">${b.break_even_soci != null ? _fmtEuroInt(b.break_even_soci) : '—'}</span></div>
       </div>` : '';
 
+    // ── Simulazione compenso amministratori (netto socio + costo azienda) ──
+    const lsRaw   = progetto.lavoro_soci || {};
+    const simula  = !!lsRaw.simula_compenso;
+    const comp    = BudgetEngine.calcolaCompensoNettoSoci(progetto);
+    const prelPct = Math.round(comp.prelievo_pct * 100);
+    const ricPct  = Math.round(comp.ricarico_pct * 100);
+    const simulaRighe = (comp.righe || []).map(r => `
+      <tr>
+        <td>${_escapeHtml(r.nome || '—')}</td>
+        <td class="num">${_fmtEuroInt(r.lordo_mensile)}</td>
+        <td class="num ab-soci-netto">${_fmtEuroInt(r.netto_mensile)}</td>
+        <td class="num">${_fmtEuroInt(r.azienda_mensile)}</td>
+      </tr>`).join('');
+    const simulaPanel = (attivo && simula) ? `
+      <div class="ab-soci-simula">
+        <div class="ab-soci-simula-params">
+          <label class="ab-soci-simula-param">Prelievo medio socio
+            <span class="ab-soci-pct-wrap"><div class="amount-field ab-soci-input ab-soci-pct" contenteditable="true"
+                 data-campo="prelievo_socio_pct"
+                 title="IRPEF + addizionali + INPS quota a carico del socio. Netto = lordo × (1 − questa %)."
+                 onblur="BudgetUI.simulaFiscoBlur(this)"
+                 onkeydown="BudgetUI.budgetKeyDown(event)">${_fmtNum0(prelPct)}</div><span class="ab-soci-pct-sign">%</span></span>
+          </label>
+          <label class="ab-soci-simula-param">Ricarico costo azienda
+            <span class="ab-soci-pct-wrap"><div class="amount-field ab-soci-input ab-soci-pct" contenteditable="true"
+                 data-campo="ricarico_azienda_pct"
+                 title="INPS 2/3 a carico società + IRAP indeducibile. Costo azienda = lordo × (1 + questa %)."
+                 onblur="BudgetUI.simulaFiscoBlur(this)"
+                 onkeydown="BudgetUI.budgetKeyDown(event)">${_fmtNum0(ricPct)}</div><span class="ab-soci-pct-sign">%</span></span>
+          </label>
+        </div>
+        <table class="ab-soci-tab ab-soci-simula-tab">
+          <thead>
+            <tr>
+              <th>Socio</th>
+              <th class="num" title="Compenso lordo mensile a regime = ore annue × tariffa ÷ 12.">Lordo / mese</th>
+              <th class="num" title="Netto stimato in tasca al socio = lordo − prelievo medio.">Netto / mese</th>
+              <th class="num" title="Costo pieno per l'azienda = lordo + INPS a carico società + IRAP indeducibile.">Costo azienda / mese</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${simulaRighe || `<tr class="ab-soci-empty"><td colspan="4" class="text-muted">Nessun socio: inserisci ore e tariffa sopra per stimare il compenso.</td></tr>`}
+          </tbody>
+          <tfoot>
+            <tr class="ab-soci-simula-tot">
+              <td>Totale mensile</td>
+              <td class="num">${_fmtEuroInt(comp.tot_lordo_mensile)}</td>
+              <td class="num ab-soci-netto">${_fmtEuroInt(comp.tot_netto_mensile)}</td>
+              <td class="num">${_fmtEuroInt(comp.tot_azienda_mensile)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="ab-soci-desc text-muted">Stima indicativa a regime (12 mesi), <strong>non</strong> un calcolo puntuale di scaglioni/aliquote: netto = lordo × (1 − ${prelPct}%); costo azienda = lordo × (1 + ${ricPct}%). Il netto reale dipende da altri redditi del socio, copertura previdenziale, detrazioni e residenza.</div>
+      </div>` : '';
+    const simulaBar = attivo ? `
+      <div class="ab-soci-ragguaglio ab-soci-simula-bar">
+        <div class="ab-soci-switch ab-soci-switch-sm ${simula ? 'ab-soci-switch-on' : ''}"
+             role="button" tabindex="0"
+             title="${simula ? 'Nascondi la simulazione del compenso amministratori' : 'Simula il compenso amministratori: netto in tasca al socio e costo per l\'azienda'}"
+             onclick="BudgetUI.toggleSimulaSoci()"
+             onkeydown="BudgetUI.toggleSimulaSociKeyDown(event)">${simula ? 'Simulazione compenso ON' : 'Simula compenso amministratori'}</div>
+        <span class="text-muted">Se il lavoro dei soci fosse pagato come <strong>compenso amministratori</strong>: netto in tasca al socio e costo pieno per l'azienda.</span>
+      </div>
+      ${simulaPanel}` : '';
+
     const corpo = attivo ? `
       <div class="ab-soci-desc text-muted">Costo figurativo del lavoro dei soci (ore annue × tariffa oraria). Non entra nel Conto Economico civilistico né incide sulle imposte: serve solo a valutare la redditività al netto di un giusto compenso al lavoro dei soci.</div>
       ${ragguaglioBar}
@@ -2389,6 +2454,7 @@ const BudgetUI = (() => {
         <div class="ab-soci-sum-row ab-soci-sum-tot ${redditoCls}"><span>= Reddito normalizzato</span><span class="num">${_fmtEuroInt(reddito)}</span></div>
       </div>
       ${kpiOra}
+      ${simulaBar}
     ` : `
       <div class="ab-soci-desc text-muted">Per società i cui unici lavoratori sono i soci non retribuiti (costo del personale civilistico = 0), attiva questo blocco per imputare un costo figurativo al loro lavoro (ore × tariffa) e ottenere il reddito normalizzato. Non modifica il CE né le imposte.</div>
       <div class="ab-soci-add" role="button" tabindex="0"
@@ -2623,6 +2689,34 @@ const BudgetUI = (() => {
       e.preventDefault();
       toggleRagguaglioSoci();
     }
+  }
+
+  /** Mostra/nasconde la simulazione compenso amministratori. */
+  function toggleSimulaSoci() {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+    const cur = !!(progetto.lavoro_soci && progetto.lavoro_soci.simula_compenso);
+    Projects.lavoroSociSimula(!cur);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
+  }
+
+  function toggleSimulaSociKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleSimulaSoci();
+    }
+  }
+
+  /** Aggiorna un'aliquota media (%) della simulazione compenso al blur.
+   *  Il valore è in punti percentuali (es. 35 → 0,35 in engine). */
+  function simulaFiscoBlur(el) {
+    if (!el) return;
+    const campo = el.getAttribute('data-campo');
+    const val = _parseEuro((el.textContent || '').trim());
+    Projects.lavoroSociFisco(campo, val == null ? 0 : val);
+    UI.aggiornaStatusBar('modificato');
+    renderBudget();
   }
 
   /** Aggiunge una riga socio e mette il focus sul nome. */
@@ -4146,6 +4240,9 @@ const BudgetUI = (() => {
     toggleLavoroSociKeyDown: toggleLavoroSociKeyDown,
     toggleRagguaglioSoci: toggleRagguaglioSoci,
     toggleRagguaglioSociKeyDown: toggleRagguaglioSociKeyDown,
+    toggleSimulaSoci:   toggleSimulaSoci,
+    toggleSimulaSociKeyDown: toggleSimulaSociKeyDown,
+    simulaFiscoBlur:    simulaFiscoBlur,
     aggiungiSocio:      aggiungiSocio,
     aggiungiSocioKeyDown: aggiungiSocioKeyDown,
     eliminaSocio:       eliminaSocio,
