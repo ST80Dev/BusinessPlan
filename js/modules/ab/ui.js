@@ -1641,7 +1641,7 @@ const BudgetUI = (() => {
               <th class="num" title="Incidenza % media sul fatturato calcolata come media delle incidenze % di ciascun anno storico importato.">% storica</th>
               <th class="num" title="Riferimento storico (ultimo esercizio importato arrotondato al centinaio per ricavi, costi variabili, costi fissi e imposte; media € per rimanenze; 0 per proventi/oneri straordinari). Indipendente dal fatturato ipotizzato — il quale impatta solo la colonna Budget €.">Ultimo anno €</th>
               <th class="ab-comp-col" title="Comportamento di calcolo della voce di costo. Fisso: importo € ancorato allo storico, ripartito nel tempo. Variabile: stagionalizzato coi ricavi (% sul fatturato). Cambia solo il calcolo, non la collocazione: la voce resta nel suo gruppo e la sua appartenenza al costo del venduto non cambia.">Comportamento</th>
-              <th class="num">Override</th>
+              <th class="num">Rettifica</th>
               <th class="num">Budget €</th>
               <th class="num">Budget %</th>
             </tr>
@@ -1714,7 +1714,7 @@ const BudgetUI = (() => {
         : isCalc ? (dato.media_euro || 0)
         : (dato.ultimo_anno_euro || 0);
       const baseTitle   = isStraord
-        ? 'Default 0 (voce di natura non ricorrente — usare l\'override per forzare un valore)'
+        ? 'Default 0 (voce di natura non ricorrente — usare la rettifica per forzare un valore)'
         : isCalc
             ? 'Media storica degli importi €'
             : `Ultimo anno storico arrotondato al centinaio${b.ultimo_anno ? ' (' + b.ultimo_anno + ')' : ''}`;
@@ -3214,7 +3214,7 @@ const BudgetUI = (() => {
       `<strong>${_escapeHtml(mediaHeaderPdf)}</strong> — media in € degli importi degli esercizi storici importati${annoEsRange ? ' (' + annoEsRange + ')' : ''}: riferimento informativo per ponderare correzioni manuali al budget.`,
       '<strong>Ultimo anno €</strong> — riferimento storico fisso, indipendente dal fatturato ipotizzato: ricavi, costi variabili, costi fissi e imposte = ultimo esercizio importato arrotondato al centinaio; rimanenze = media € storica; proventi/oneri straordinari = 0 per natura non ricorrente.',
       '<strong>% storica</strong> — incidenza media sul fatturato calcolata come media delle incidenze % di ciascun anno storico importato (non come media degli importi diviso media del fatturato).',
-      '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi e imposte: ultimo anno o override utente. Proventi/oneri straordinari: 0 di default o override utente. Rimanenze: media € storica o override €.',
+      '<strong>Budget €</strong> — costi variabili: % budget × fatturato ipotizzato. Costi fissi e imposte: ultimo anno o rettifica utente. Proventi/oneri straordinari: 0 di default o rettifica utente. Rimanenze: media € storica o rettifica €.',
       '<strong>Costo del venduto</strong> = Mat. prime + Altri costi variabili + Rimanenze iniziali − Rimanenze finali.',
       `<strong>Fatturato di break-even</strong> = (Rim. iniziali − Rim. finali + Σ costi fissi) / (1 − Σ % costi variabili). ${b.break_even != null ? 'Differenza vs ipotizzato: ' + _fmtPctSigned(deltaFattBe || 0) : 'Non calcolabile (denominatore non positivo o costi fissi nulli).'}`
     ];
