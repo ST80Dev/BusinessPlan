@@ -1794,6 +1794,76 @@ const Projects = (() => {
     return true;
   }
 
+  /**
+   * Aggiunge una nuova voce di conto (sottoconto) creata a mano, senza
+   * dover re-importare l'Excel. Serve per rettifiche post-import e
+   * soprattutto per voci che entreranno nell'anno da budgetare e prima
+   * non c'erano (es. "Compenso soci", un nuovo costo/servizio):
+   * la si crea qui a 0 sullo storico e poi la si valorizza per l'anno
+   * di budget con l'override della sua macroarea (eventualmente un
+   * "Nuovo gruppo" dedicato).
+   *
+   * L'importo iniziale è 0 su tutti gli anni (`valori: {}`): l'operatore
+   * lo rettifica poi dalle celle editabili della mappatura se serve un
+   * valore storico. Il conto è marcato `manuale: true` per distinguerlo
+   * dalle voci importate.
+   *
+   * Se il codice ha forma NN/NN il mastro/sottomastro vengono dedotti
+   * (utile per la colonna Mastro e la pre-mappatura); altrimenti restano
+   * vuoti. Non è ammesso un codice sui mastri di variazione rimanenze
+   * (61/80): quelle voci confluiscono nel blocco calcolato e non vanno
+   * inserite a mano come righe normali.
+   *
+   * @param {string} codice       - codice conto (univoco, obbligatorio)
+   * @param {string} descrizione  - descrizione libera
+   * @param {string} [macroId]    - macroarea di destinazione (mapping);
+   *                                 vuoto ⇒ resta "Non mappato"
+   * @returns {{ok:boolean, codice?:string, err?:string}}
+   */
+  function aggiungiSottoconto(codice, descrizione, macroId) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return { ok: false, err: 'no_ab' };
+    const cod = (codice || '').trim();
+    if (!cod) return { ok: false, err: 'codice_vuoto' };
+    if (!Array.isArray(_progettoCorrente.sottoconti_ce)) _progettoCorrente.sottoconti_ce = [];
+    if (_progettoCorrente.sottoconti_ce.some(s => s.codice === cod)) return { ok: false, err: 'duplicato' };
+
+    // Deduci mastro/sottomastro se il codice è nel formato NN/NN.
+    let mastro = '', sottomastro = '';
+    const mm = cod.match(/^(\d{1,3})\s*\/\s*(\d{1,4})$/);
+    if (mm) { mastro = mm[1]; sottomastro = mm[2]; }
+
+    // I mastri di variazione rimanenze non possono essere aggiunti a mano.
+    if (typeof ExcelImport !== 'undefined'
+        && Array.isArray(ExcelImport.MASTRI_VARIAZIONE_RIMANENZE)
+        && ExcelImport.MASTRI_VARIAZIONE_RIMANENZE.indexOf(mastro) >= 0) {
+      return { ok: false, err: 'mastro_rimanenze' };
+    }
+
+    _progettoCorrente.sottoconti_ce.push({
+      codice:      cod,
+      descrizione: (descrizione || '').trim(),
+      mastro:      mastro,
+      sottomastro: sottomastro,
+      valori:      {},
+      manuale:     true
+    });
+
+    // Mapping opzionale a una macroarea esistente non calcolata.
+    if (macroId) {
+      const macro = (_progettoCorrente.macro_sezioni || []).find(x => x.id === macroId && !x.calcolato);
+      if (macro) {
+        if (!_progettoCorrente.mapping) _progettoCorrente.mapping = {};
+        _progettoCorrente.mapping[cod] = macroId;
+      }
+    }
+
+    if (typeof ExcelImport !== 'undefined' && ExcelImport.ricalcolaStorico) {
+      _progettoCorrente.storico = ExcelImport.ricalcolaStorico(_progettoCorrente);
+    }
+    _modificato = true;
+    return { ok: true, codice: cod };
+  }
+
   /* ──────────────────────────────────────────────────────────
      Macroaree custom (gruppi definiti dall'utente)
 
@@ -2060,6 +2130,7 @@ const Projects = (() => {
     aggiornaMappingSottoconto,
     aggiornaValoreSottoconto,
     eliminaSottoconto,
+    aggiungiSottoconto,
     aggiornaBudget,
     aggiornaConsuntivo,
     aggiornaMetaAB,

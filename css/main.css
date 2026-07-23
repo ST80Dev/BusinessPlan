@@ -2921,6 +2921,61 @@ thead .ab-col-periodo-preavvio {
   font-weight: 600;
 }
 
+/* Form "Aggiungi voce": crea a mano un nuovo sottoconto post-import.
+   Barra compatta in testa alla mappatura (codice + descrizione
+   contenteditable, select macroarea, pulsante). */
+.ab-aggiungi-voce {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.ab-aggiungi-voce-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.ab-nv-field {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  min-height: 24px;
+  line-height: 18px;
+  outline: none;
+}
+.ab-nv-codice {
+  width: 120px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.ab-nv-descr {
+  min-width: 200px;
+  flex: 1 1 auto;
+}
+.ab-nv-field:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-light);
+}
+/* Placeholder per i contenteditable vuoti della form (scoped). */
+.ab-nv-field:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.ab-nv-macro {
+  max-width: 240px;
+}
+.ab-nv-add {
+  padding: 4px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .ab-mappatura-sezione-titolo {
   font-family: 'DM Sans', sans-serif;
   font-size: 14px;

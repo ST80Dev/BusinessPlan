@@ -988,6 +988,21 @@ const BudgetUI = (() => {
             <span><strong>${inRimanenze.length}</strong> in rimanenze (calcolato)</span>
             <span class="ab-mappatura-selcount" data-sel-count></span>
           </div>
+          <div class="ab-aggiungi-voce" title="Crea una voce di conto a mano (post-import). Utile per costi/voci nuovi dell'anno da budgetare: creala a 0 e valorizzala poi nel Budget con l'override del gruppo.">
+            <span class="ab-aggiungi-voce-label">+ Aggiungi voce:</span>
+            <div class="ab-nv-field ab-nv-codice" contenteditable="true" draggable="false"
+                 data-placeholder="Codice"
+                 title="Codice conto (univoco). Es. SOCI oppure 68/90"
+                 onkeydown="BudgetUI.aggiungiVoceKeyDown(event)"></div>
+            <div class="ab-nv-field ab-nv-descr" contenteditable="true" draggable="false"
+                 data-placeholder="Descrizione"
+                 title="Descrizione della voce"
+                 onkeydown="BudgetUI.aggiungiVoceKeyDown(event)"></div>
+            ${_selectMacroareeVuoto(macroAree)}
+            <div class="btn btn-primary ab-nv-add" role="button" tabindex="0"
+                 onclick="BudgetUI.aggiungiVoceManuale()"
+                 onkeydown="BudgetUI.aggiungiVoceKeyDown(event)">Aggiungi</div>
+          </div>
         </div>
 
         <div class="ab-mappatura-layout">
@@ -1437,6 +1452,83 @@ const BudgetUI = (() => {
     Projects.aggiornaMappingSottoconto(codice, macroareaId);
     UI.aggiornaStatusBar('modificato');
     renderMacroSezioni();
+  }
+
+  /**
+   * Select delle macroaree per la form "Aggiungi voce" (senza onchange):
+   * "— Non mappato —" + macroaree non calcolate raggruppate per sezione.
+   */
+  function _selectMacroareeVuoto(macroAree) {
+    const sezioniProspetto = [
+      { sez: 'ricavi',             titolo: 'Ricavi' },
+      { sez: 'variabili',          titolo: 'Costi variabili' },
+      { sez: 'fissi',              titolo: 'Costi fissi' },
+      { sez: 'prov_oneri_straord', titolo: 'Proventi/Oneri Straordinari' },
+      { sez: 'imposte',            titolo: 'Imposte' }
+    ];
+    let html = `<select class="form-select form-select-sm ab-nv-macro" title="Macroarea di destinazione (mapping). Vuoto = Non mappato">`;
+    html += `<option value="">— Non mappato —</option>`;
+    sezioniProspetto.forEach(({ sez, titolo }) => {
+      const macroSez = (macroAree || []).filter(m => m.sezione === sez && !m.calcolato);
+      if (macroSez.length === 0) return;
+      html += `<optgroup label="${_escapeHtml(titolo)}">`;
+      macroSez.forEach(m => { html += `<option value="${_escapeHtml(m.id)}">${_escapeHtml(m.label)}</option>`; });
+      html += '</optgroup>';
+    });
+    html += '</select>';
+    return html;
+  }
+
+  /**
+   * Crea una nuova voce di conto dalla form in testa alla mappatura.
+   * Legge codice/descrizione (contenteditable) e macroarea (select),
+   * delega a Projects.aggiungiSottoconto e re-renderizza. La nuova voce
+   * nasce a 0 sullo storico: l'importo si imposta poi dalle celle
+   * editabili o, per l'anno di budget, con l'override del gruppo.
+   */
+  function aggiungiVoceManuale() {
+    const root = document.querySelector('.ab-aggiungi-voce');
+    if (!root) return;
+    const codEl   = root.querySelector('.ab-nv-codice');
+    const descEl  = root.querySelector('.ab-nv-descr');
+    const macroEl = root.querySelector('.ab-nv-macro');
+    const codice  = (codEl  && codEl.textContent  || '').trim();
+    const descr   = (descEl && descEl.textContent || '').trim();
+    const macroId = (macroEl && macroEl.value) || '';
+
+    if (!codice) {
+      UI.mostraNotifica('Inserisci un codice per la nuova voce.', 'error');
+      if (codEl) codEl.focus();
+      return;
+    }
+
+    const res = Projects.aggiungiSottoconto(codice, descr, macroId);
+    if (res && res.ok) {
+      UI.aggiornaStatusBar('modificato');
+      UI.mostraNotifica('Voce "' + codice + '" aggiunta a 0. Imposta l\'importo dalle celle, oppure valorizzala nel Budget con l\'override del gruppo.', 'success');
+      renderMacroSezioni();
+    } else {
+      const err = res && res.err;
+      const msg = err === 'duplicato'        ? 'Esiste già un conto con questo codice.'
+                : err === 'mastro_rimanenze' ? 'I mastri 61/80 (variazione rimanenze) non si aggiungono a mano: confluiscono nel blocco rimanenze calcolato.'
+                : err === 'codice_vuoto'     ? 'Il codice è obbligatorio.'
+                : 'Impossibile aggiungere la voce.';
+      UI.mostraNotifica(msg, 'error');
+    }
+  }
+
+  /**
+   * Invio nei campi della form "Aggiungi voce" → conferma; blocca il
+   * newline nei contenteditable. Spazio sul pulsante "Aggiungi" → conferma.
+   */
+  function aggiungiVoceKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      aggiungiVoceManuale();
+    } else if (e.key === ' ' && e.target && e.target.classList && e.target.classList.contains('ab-nv-add')) {
+      e.preventDefault();
+      aggiungiVoceManuale();
+    }
   }
 
   /**
@@ -3885,6 +3977,8 @@ const BudgetUI = (() => {
     annullaModaleClassifica:   annullaModaleClassifica,
     confermaModaleClassifica:  confermaModaleClassifica,
     cambiaMacroarea:    cambiaMacroarea,
+    aggiungiVoceManuale:     aggiungiVoceManuale,
+    aggiungiVoceKeyDown:     aggiungiVoceKeyDown,
     valoreSottocontoBlur:    valoreSottocontoBlur,
     valoreSottocontoKeyDown: valoreSottocontoKeyDown,
     budgetBlur:         budgetBlur,
