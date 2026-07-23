@@ -2405,28 +2405,32 @@ td.cell-amount .formula-tip .tip-box { top: 100%; right: 0; left: auto; }
   filter: brightness(1.05);
 }
 
-/* Toggle F/V (comportamento voce di costo: Fisso vs Variabile).
-   Controllo segmentato compatto dentro la cella Override del budget.
-   Convenzione palette coerente coi mini-flag della Mappatura:
-   accent (blu) = variabile, muted (grigio) = fisso. Il lato attivo è
-   pieno, l'inattivo è tenue. */
+/* Toggle Fisso/Var (comportamento voce di costo) nella colonna
+   "Comportamento" del budget. Convenzione palette coerente coi mini-flag
+   della Mappatura: accent (blu) = variabile, muted (grigio) = fisso. Il
+   lato attivo è pieno, l'inattivo è tenue. */
+.ab-comp-col {
+  text-align: center;
+  white-space: nowrap;
+  width: 1%;
+}
 .ab-fv {
   display: inline-flex;
-  align-items: center;
+  align-items: stretch;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   overflow: hidden;
-  flex: 0 0 auto;
 }
 .ab-fv-seg {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 20px;
-  font-family: 'JetBrains Mono', monospace;
+  padding: 2px 8px;
+  min-height: 20px;
+  font-family: 'DM Sans', sans-serif;
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   color: var(--color-text-muted);
   background: var(--color-surface);
   cursor: pointer;
