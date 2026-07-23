@@ -2416,6 +2416,16 @@ const BudgetUI = (() => {
                       onkeydown="BudgetUI.distribuisciPctKeyDown(event)">⇩ Distribuisci da %</span>
                 ` : ''}
               </div>
+              <div class="ab-freq-selector"
+                   title="Come distribuire il valore di fine anno delle rimanenze sui periodi trascorsi. Lineare: quota proporzionale al tempo trascorso. Stagionalità acquisti: quota proporzionale al fatturato di periodo (gli acquisti seguono il fatturato). La rettifica manuale nelle celle 'Proiezione fine anno' delle rimanenze prevale comunque su entrambe.">
+                <span class="text-muted">Rimanenze:</span>
+                <div class="ab-freq-toggle">
+                  <div class="ab-freq-opt ${pre.rim_distribuzione === 'lineare' ? 'active' : ''}"
+                       onclick="BudgetUI.cambiaRimDistribuzione('lineare')">Lineare</div>
+                  <div class="ab-freq-opt ${pre.rim_distribuzione === 'stagionale' ? 'active' : ''}"
+                       onclick="BudgetUI.cambiaRimDistribuzione('stagionale')">Stagionalità acquisti</div>
+                </div>
+              </div>
               <div class="ab-consuntivo-stats text-muted">
                 <span title="Periodi operativi trascorsi da avvio fino all'ultimo mese con ricavo inserito: i mesi intermedi a ricavo zero contano comunque come trascorsi (i loro costi fissi sono conteggiati); i mesi precedenti all'avvio e quelli successivi all'orizzonte non sono conteggiati."><strong>${pre.periodi_chiusi}</strong> / ${denomOperativi} periodi operativi</span>
                 <span><strong>${(pre.frazione_anno * 100).toFixed(0)}%</strong> dell'anno</span>
@@ -2565,10 +2575,34 @@ const BudgetUI = (() => {
         return `<td class="${periodCls}">${Math.abs(v) < 0.5 ? '' : _fmtEuroInt(v)}</td>`;
       }).join('');
 
+      // Cella "Proiezione fine anno": per le rimanenze (rim_ini/rim_fin) è
+      // editabile — è la rettifica manuale del valore reale di magazzino di
+      // fine anno, che prevale su budget e distribuzione. Vuota → usa il
+      // budget (il valore calcolato è mostrato come placeholder). Il valore
+      // è il magazzino in positivo, a prescindere dal segno di prospetto.
+      const isRimRow = r.tipo === 'macro' && (r.id === 'rim_ini' || r.id === 'rim_fin');
+      let cellProiez;
+      if (isRimRow) {
+        const ovr = pre.rim_override ? pre.rim_override[r.id] : undefined;
+        const haOvr = ovr != null && ovr !== '' && isFinite(Number(ovr));
+        cellProiez = `<td class="num ab-col-stick ab-col-stick-3 ab-rim-override-td ${haOvr ? 'ab-rim-override-attivo' : ''}">
+          <div class="amount-field ab-periodo-input-cell ab-rim-override-input"
+               contenteditable="true"
+               data-cons-field="override_rim.${r.id}"
+               data-input-type="euro"
+               data-placeholder="${_fmtEuroInt(valProiez)}"
+               title="Rimanenze reali di fine anno (valore di magazzino). Sostituiscono budget e distribuzione nella valutazione. Svuota la cella per tornare al budget."
+               onblur="BudgetUI.rimOverrideBlur(this)"
+               onkeydown="BudgetUI.budgetKeyDown(event)">${haOvr ? _fmtEuroInt(valProiez) : ''}</div>
+        </td>`;
+      } else {
+        cellProiez = `<td class="num ab-col-stick ab-col-stick-3">${_fmtEuroInt(valProiez * segno)}</td>`;
+      }
+
       html += `<tr class="${cls}">
         <td class="ab-col-stick ab-col-stick-1">${_escapeHtml(r.label)}</td>
         <td class="num ab-col-stick ab-col-stick-2">${_fmtEuroInt(valBudget * segno)}</td>
-        <td class="num ab-col-stick ab-col-stick-3">${_fmtEuroInt(valProiez * segno)}</td>
+        ${cellProiez}
         <td class="num ab-col-stick ab-col-stick-4">${_fmtDelta({ abs: d.abs * segno, pct: d.pct }, r.segnoBuono, true)}</td>
         ${celleP}
       </tr>`;
@@ -2672,6 +2706,45 @@ const BudgetUI = (() => {
     Projects.aggiornaConsuntivo('modalita_proiezione', mod);
     UI.aggiornaStatusBar('modificato');
     renderConsuntivo();
+  }
+
+  /**
+   * Cambia la modalità di distribuzione delle rimanenze sui periodi del
+   * consuntivo:
+   *   'lineare'    → quota proporzionale al tempo trascorso (default)
+   *   'stagionale' → quota proporzionale agli acquisti (fatturato di periodo)
+   * Non azzera nulla: le rettifiche manuali di fine anno restano invariate e
+   * continuano a prevalere.
+   */
+  function cambiaRimDistribuzione(mod) {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+    const cur = (progetto.consuntivo && progetto.consuntivo.rim_distribuzione) || 'lineare';
+    if (cur === mod) return;
+    Projects.aggiornaConsuntivo('rim_distribuzione', mod);
+    UI.aggiornaStatusBar('modificato');
+    renderConsuntivo();
+  }
+
+  /**
+   * Salva il blur di una cella di rettifica manuale rimanenze
+   * ("Proiezione fine anno" di rim_ini/rim_fin). Cella vuota → rimuove la
+   * rettifica (torna al budget); uno 0 esplicito è una rettifica valida
+   * (magazzino azzerato). Conserva lo scroll orizzontale.
+   */
+  function rimOverrideBlur(el) {
+    const field = el.dataset.consField; // es. 'override_rim.rim_fin'
+    const txt = (el.textContent || '').trim();
+    const value = txt === '' ? null : _parseEuro(txt);
+    Projects.aggiornaConsuntivo(field, value);
+    UI.aggiornaStatusBar('modificato');
+    const scroller = document.querySelector('.ab-consuntivo-tab-scroll');
+    const scrollLeft = scroller ? scroller.scrollLeft : 0;
+    renderConsuntivo();
+    if (scrollLeft) {
+      const newScroller = document.querySelector('.ab-consuntivo-tab-scroll');
+      if (newScroller) newScroller.scrollLeft = scrollLeft;
+    }
   }
 
   /**
@@ -3597,6 +3670,8 @@ const BudgetUI = (() => {
     consuntivoBlur:     consuntivoBlur,
     cambiaFrequenza:    cambiaFrequenza,
     cambiaModalitaProiezione:   cambiaModalitaProiezione,
+    cambiaRimDistribuzione:     cambiaRimDistribuzione,
+    rimOverrideBlur:            rimOverrideBlur,
     attesoBlur:                 attesoBlur,
     apriDistribuisciPct:        apriDistribuisciPct,
     chiudiDistribuisciPct:      chiudiDistribuisciPct,

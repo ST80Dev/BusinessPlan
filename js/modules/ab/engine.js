@@ -650,7 +650,46 @@ const BudgetEngine = (() => {
       ? fattMixTotale
       : (frazione > 0 ? (fattConsuntivato / frazione) : budget.fatturato);
 
-    function _calcolaVista(fattConsForCosti, fattAnnoCompleto, frazTempo) {
+    // ── Rimanenze: modalità di distribuzione + rettifica manuale ──
+    // rim_ini/rim_fin sono STOCK (saldi SP), non flussi. Due leve indipendenti:
+    //   • override_rim[id]  → valore REALE di fine anno inserito a mano nel
+    //                         foglio (inventario/valutazione puntuale). Se
+    //                         presente prevale sul valore di budget.
+    //   • rim_distribuzione → come quel valore di fine anno si distribuisce
+    //                         sui periodi trascorsi (colonna Consuntivato e
+    //                         celle per-periodo):
+    //         'lineare'    (default) = quota proporzionale al TEMPO trascorso
+    //                       (identico al comportamento storico: × frazione);
+    //         'stagionale' = quota proporzionale agli ACQUISTI, cioè al
+    //                       fatturato di periodo (gli acquisti sono % del
+    //                       fatturato, quindi ne seguono il profilo).
+    // Retrocompatibile: 'lineare' + nessun override ⇒ output invariato.
+    const rimDistrib = cons.rim_distribuzione === 'stagionale' ? 'stagionale' : 'lineare';
+    const ovrRim = cons.override_rim || {};
+    const _rimVoci = macro.filter(m => m.calcolato).map(m => m.id); // es. ['rim_ini','rim_fin']
+    // Valore di fine anno effettivo per ciascuna voce rimanenze: rettifica
+    // manuale se valorizzata, altrimenti il valore calcolato dal budget.
+    const rimYearEnd = {};
+    _rimVoci.forEach(id => {
+      const o = Number(ovrRim[id]);
+      const haOverride = ovrRim[id] != null && ovrRim[id] !== '' && isFinite(o);
+      rimYearEnd[id] = haOverride ? o : ((budget.valori[id] && budget.valori[id].valore) || 0);
+    });
+    // Frazione di distribuzione per il CONSUNTIVATO (year-to-date):
+    //   lineare    → frazione di tempo trascorso (comportamento storico);
+    //   stagionale → peso degli acquisti (fatturato) consuntivati sul totale
+    //                anno proiettato. In proiezione lineare coincide con la
+    //                frazione di tempo; in stagionalizzata riflette il picco.
+    const fracRimCons = rimDistrib === 'stagionale'
+      ? (fattProiettato > 0 ? Math.min(1, fattConsuntivato / fattProiettato) : frazione)
+      : frazione;
+    const rimConsVals = {}, rimProiezVals = {};
+    _rimVoci.forEach(id => {
+      rimConsVals[id]   = rimYearEnd[id] * fracRimCons;
+      rimProiezVals[id] = rimYearEnd[id];
+    });
+
+    function _calcolaVista(fattConsForCosti, fattAnnoCompleto, frazTempo, rimVals) {
       const valori = {};
       for (const m of macro) {
         if (m.id === 'ricavi') {
@@ -665,7 +704,14 @@ const BudgetEngine = (() => {
           continue;
         }
 
-        // Fissi/calcolato/prov_oneri_straord/imposte: budget annuale × frazione tempo
+        // Rimanenze (calcolato): valore già determinato dal chiamante secondo
+        // la modalità di distribuzione ed eventuale rettifica di fine anno.
+        if (m.calcolato && rimVals && typeof rimVals[m.id] === 'number') {
+          valori[m.id] = { valore: rimVals[m.id] };
+          continue;
+        }
+
+        // Fissi/prov_oneri_straord/imposte: budget annuale × frazione tempo
         const valBudget = (budget.valori[m.id] && budget.valori[m.id].valore) || 0;
         valori[m.id] = { valore: valBudget * frazTempo };
       }
@@ -689,8 +735,8 @@ const BudgetEngine = (() => {
       };
     }
 
-    const consuntivato = _calcolaVista(fattConsuntivato, fattConsuntivato, frazione);
-    const proiezione   = _calcolaVista(fattConsuntivato, fattProiettato, 1);
+    const consuntivato = _calcolaVista(fattConsuntivato, fattConsuntivato, frazione, rimConsVals);
+    const proiezione   = _calcolaVista(fattConsuntivato, fattProiettato, 1, rimProiezVals);
 
     const fraz1Periodo = periodiOperativi > 0 ? 1 / periodiOperativi : 0;
 
@@ -713,9 +759,18 @@ const BudgetEngine = (() => {
       //   l'operatore può inserire il mese successivo ed estendere l'orizzonte.
       const preAvvio = i < primoPeriodoIdx;
       const futuro   = !preAvvio && i > ultimoPeriodoConDati;
+      // Quota rimanenze del periodo: stagionale ∝ fatturato (acquisti) del
+      // periodo sul totale anno; lineare = quota uniforme 1/periodi_operativi.
+      const rimValsPeriodo = {};
+      _rimVoci.forEach(id => {
+        const w = rimDistrib === 'stagionale'
+          ? (fattProiettato > 0 ? (fattMixPerPeriodo[k] || 0) / fattProiettato : fraz1Periodo)
+          : fraz1Periodo;
+        rimValsPeriodo[id] = rimYearEnd[id] * w;
+      });
       perPeriodo[k] = (preAvvio || futuro)
         ? _vistaVuota()
-        : _calcolaVista(fattPeriodo, fattPeriodo, fraz1Periodo);
+        : _calcolaVista(fattPeriodo, fattPeriodo, fraz1Periodo, rimValsPeriodo);
       perPeriodo[k].fatturato_periodo = fattPeriodo;
       perPeriodo[k].inserito = fattPeriodo > 0;
       perPeriodo[k].pre_avvio = preAvvio;
@@ -739,6 +794,9 @@ const BudgetEngine = (() => {
       fatturato_consuntivato: fattConsuntivato,
       fatturato_atteso_tot:   attesoTotale,
       fatturato_proiettato:   fattProiettato,
+      rim_distribuzione:      rimDistrib,
+      rim_year_end:           rimYearEnd,
+      rim_override:           { rim_ini: ovrRim.rim_ini, rim_fin: ovrRim.rim_fin },
       consuntivato,
       proiezione,
       per_periodo:            perPeriodo,
