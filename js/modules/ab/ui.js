@@ -697,9 +697,11 @@ const BudgetUI = (() => {
     const c = document.getElementById('content');
     if (!c) return;
     const progetto = Projects.getProgetto();
-    // Società neocostituita: nessuno storico da mostrare. Indirizza al Budget.
-    if (_abSenzaStorico(progetto)) {
-      c.innerHTML = _placeholder('Storico & medie', 'Società neocostituita: nessuno storico. Costruisci direttamente il budget dalla sezione "Budget anno".');
+    // Società neocostituita senza import: nessuno storico ancora. L'import
+    // resta possibile (es. stampa infrannuale) e popolerebbe lo storico; in
+    // alternativa si può costruire direttamente il budget.
+    if (_abSenzaStorico(progetto) && (!progetto.sottoconti_ce || progetto.sottoconti_ce.length === 0)) {
+      c.innerHTML = _placeholder('Storico & medie', 'Società neocostituita: nessuno storico pregresso. Puoi importare un bilancio (anche infrannuale) dalla sezione "Importa CE", oppure costruire direttamente il "Budget anno".');
       return;
     }
     if (!progetto || !progetto.storico || Object.keys(progetto.storico).length === 0 ||
