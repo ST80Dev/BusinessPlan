@@ -3671,6 +3671,12 @@ thead .ab-col-periodo-preavvio {
 }
 .ab-soci-sum-tot.ab-kpi-verde { color: var(--color-success); }
 .ab-soci-sum-tot.ab-kpi-rosso { color: var(--color-error); }
+/* Riga informativa "di cui netto in tasca ai soci": rientrata, minore. */
+.ab-soci-sum-info {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  padding-left: 12px;
+}
 
 .ab-soci-kpi-row {
   display: flex;
@@ -3721,6 +3727,53 @@ thead .ab-col-periodo-preavvio {
 .ab-soci-kpi-mdc.lvl-warn .ab-soci-kpi-sub { color: var(--color-warning); }
 .ab-soci-kpi-mdc.lvl-bad  .ab-soci-kpi-val,
 .ab-soci-kpi-mdc.lvl-bad  .ab-soci-kpi-sub { color: var(--color-error); }
+
+/* ── Simulazione compenso amministratori (netto socio + costo azienda) ── */
+.ab-soci-simula-bar { margin-top: 14px; }
+.ab-soci-simula {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.ab-soci-simula-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 10px;
+}
+.ab-soci-simula-param {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ab-soci-pct-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.ab-soci-pct {
+  min-width: 56px;
+  max-width: 72px;
+  text-align: right;
+}
+.ab-soci-pct-sign {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--color-text-muted);
+}
+.ab-soci-simula-tab { margin-bottom: 8px; }
+.ab-soci-simula-tab tfoot td {
+  border-top: 2px solid var(--color-border);
+  border-bottom: none;
+  font-weight: 700;
+}
+.ab-soci-netto {
+  color: var(--color-success);
+  font-weight: 700;
+}
 
 /* ── Toolbar pulsante "Esporta PDF" sopra Budget e Consuntivo AB ─── */
 /* ── PDF: layout dedicato per stampa Budget / Consuntivo AB ──────── */

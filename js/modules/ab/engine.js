@@ -241,6 +241,55 @@ const BudgetEngine = (() => {
   }
 
   /**
+   * Simulazione "se il lavoro dei soci fosse pagato come compenso
+   * amministratori". Trasforma ore×tariffa (compenso lordo annuo A REGIME, su
+   * 12 mesi) in netto in tasca al socio e costo pieno per l'azienda, con due
+   * percentuali medie indicative editabili (stima rapida, non calcolo puntuale
+   * di scaglioni/aliquote):
+   *   - prelievo_socio_pct   (default 0,35): IRPEF + addizionali + INPS quota
+   *     socio a carico del percettore → netto = lordo × (1 − prelievo).
+   *   - ricarico_azienda_pct (default 0,20): INPS 2/3 a carico società + IRAP
+   *     indeducibile → costo azienda = lordo × (1 + ricarico).
+   * Il lordo usa le ore ANNUE a regime (non ragguagliate): è una vista a
+   * regime su 12 mesi, indipendente dal mese di avvio.
+   * @returns {{attivo, prelievo_pct, ricarico_pct, righe:[], tot_*}}
+   */
+  function calcolaCompensoNettoSoci(progetto) {
+    const ls = (progetto && progetto.lavoro_soci) || {};
+    const fisco = ls.fisco || {};
+    const prelievo = isFinite(fisco.prelievo_socio_pct)   ? Number(fisco.prelievo_socio_pct)   : 0.35;
+    const ricarico = isFinite(fisco.ricarico_azienda_pct) ? Number(fisco.ricarico_azienda_pct) : 0.20;
+    const righeIn = Array.isArray(ls.righe) ? ls.righe : [];
+
+    let totLordo = 0, totNetto = 0, totAzienda = 0;
+    const righe = righeIn.map(r => {
+      const ore     = Number(r && r.ore)     || 0;   // ore annue a regime
+      const tariffa = Number(r && r.tariffa) || 0;
+      const lordoAnnuo   = ore * tariffa;
+      const nettoAnnuo   = lordoAnnuo * (1 - prelievo);
+      const aziendaAnnuo = lordoAnnuo * (1 + ricarico);
+      totLordo   += lordoAnnuo;
+      totNetto   += nettoAnnuo;
+      totAzienda += aziendaAnnuo;
+      return {
+        id: r && r.id, nome: (r && r.nome) || '',
+        lordo_annuo: lordoAnnuo,     lordo_mensile: lordoAnnuo / 12,
+        netto_annuo: nettoAnnuo,     netto_mensile: nettoAnnuo / 12,
+        azienda_annuo: aziendaAnnuo, azienda_mensile: aziendaAnnuo / 12
+      };
+    });
+    return {
+      attivo: !!ls.attivo,
+      prelievo_pct: prelievo,
+      ricarico_pct: ricarico,
+      righe,
+      tot_lordo_annuo: totLordo,     tot_lordo_mensile: totLordo / 12,
+      tot_netto_annuo: totNetto,     tot_netto_mensile: totNetto / 12,
+      tot_azienda_annuo: totAzienda, tot_azienda_mensile: totAzienda / 12
+    };
+  }
+
+  /**
    * Seed del fatturato di budget a partire dai mesi già inseriti nel
    * consuntivo dell'anno in corso. Pensato per società NEOCOSTITUITE,
    * prive di storico, di cui sono noti solo alcuni mesi.
@@ -522,18 +571,35 @@ const BudgetEngine = (() => {
     const utileNorm    = utileNetto * fattAnnua;
     const fatturatoNorm = fatturato * fattAnnua;
     const mdcNorm      = mdc * fattAnnua;
-    const redditoNormalizzato = utileNorm - costoFigSoci;
+    // Base del costo soci nel reddito normalizzato e nel break-even:
+    //   - Simulazione compenso OFF (default) → costo-opportunità puro
+    //     (costoFigSoci = ore×tariffa). Retrocompatibile.
+    //   - Simulazione compenso ON → ottica "libro paga": si sottrae il COSTO
+    //     PIENO PER L'AZIENDA = costoFigSoci × (1 + ricarico_azienda_pct), che
+    //     include gli oneri datoriali (INPS 2/3 + IRAP indeducibile). Il netto
+    //     in tasca al socio (costoFigSoci × (1 − prelievo_socio_pct)) è esposto
+    //     come informazione. Nota: il prelievo socio NON aumenta il costo
+    //     azienda (è già dentro il lordo), quindi non entra nel reddito.
+    const lsCfg = (progetto && progetto.lavoro_soci) || {};
+    const simulaCompenso = !!lsCfg.simula_compenso;
+    const fiscoCfg = lsCfg.fisco || {};
+    const ricaricoAz = isFinite(fiscoCfg.ricarico_azienda_pct) ? Number(fiscoCfg.ricarico_azienda_pct) : 0.20;
+    const prelievoSc = isFinite(fiscoCfg.prelievo_socio_pct)   ? Number(fiscoCfg.prelievo_socio_pct)   : 0.35;
+    const costoAziendaSoci = costoFigSoci * (1 + ricaricoAz);
+    const nettoSoci        = costoFigSoci * (1 - prelievoSc);
+    const costoRedditoSoci = simulaCompenso ? costoAziendaSoci : costoFigSoci;
+    const redditoNormalizzato = utileNorm - costoRedditoSoci;
     // Break-even che remunera anche il lavoro dei soci: al numeratore del
     // break-even operativo (kRim + fissiBE, componente a comportamento
-    // fisso) si aggiunge il costo figurativo, anch'esso fisso per natura e
-    // indipendente dal fatturato. Usa `fissiBE` (non `fissi`) per restare
-    // coerente col break-even operativo. In ottica a regime (OFF/parziale) le
-    // basi fisse sono anch'esse annualizzate, così il BEP è comparabile al
-    // costo soci pieno e al fatturato a regime.
+    // fisso) si aggiunge il costo soci (figurativo o pieno azienda a seconda
+    // della simulazione), anch'esso fisso per natura e indipendente dal
+    // fatturato. Usa `fissiBE` (non `fissi`) per restare coerente col
+    // break-even operativo. In ottica a regime (OFF/parziale) le basi fisse
+    // sono anch'esse annualizzate, così il BEP è comparabile.
     const kRimBE   = kRim * fattAnnua;
     const fissiBEn = fissiBE * fattAnnua;
-    const breakEvenSoci = (denom > 0 && (kRimBE + fissiBEn + costoFigSoci) > 0)
-      ? (kRimBE + fissiBEn + costoFigSoci) / denom : null;
+    const breakEvenSoci = (denom > 0 && (kRimBE + fissiBEn + costoRedditoSoci) > 0)
+      ? (kRimBE + fissiBEn + costoRedditoSoci) / denom : null;
     // KPI di produttività oraria sulle ore EFFETTIVE: ore ragguagliate al
     // periodo (ON) confrontate con fatturato/MdC parziali; ore annue intere
     // (OFF/parziale) confrontate con fatturato/MdC annualizzati. Sempre stesso
@@ -556,6 +622,13 @@ const BudgetEngine = (() => {
       // Lavoro soci / reddito normalizzato (fuori dal CE civilistico)
       lavoro_soci: soci,
       costo_figurativo_soci: costoFigSoci,
+      // Simulazione compenso amministratori: costo pieno azienda e netto socio
+      // (informativo); `costo_reddito_soci` è la base effettiva del reddito
+      // normalizzato e del break-even (azienda se simula ON, figurativo se OFF).
+      simula_compenso: simulaCompenso,
+      costo_azienda_soci: costoAziendaSoci,
+      netto_soci: nettoSoci,
+      costo_reddito_soci: costoRedditoSoci,
       reddito_normalizzato: redditoNormalizzato,
       // Utile effettivamente usato nel reddito normalizzato: parziale (ON) o
       // proiettato a 12 mesi (OFF/parziale). `reddito_norm_a_regime` segnala
@@ -872,6 +945,7 @@ const BudgetEngine = (() => {
     calcolaPctMedie:    calcolaPctMedie,
     calcolaMedieEuro:   calcolaMedieEuro,
     calcolaLavoroSoci:  calcolaLavoroSoci,
+    calcolaCompensoNettoSoci: calcolaCompensoNettoSoci,
     calcolaSeedFatturato: calcolaSeedFatturato,
     calcolaBudget:      calcolaBudget,
     calcolaPreconsuntivo: calcolaPreconsuntivo

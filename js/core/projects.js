@@ -746,6 +746,13 @@ const Projects = (() => {
       // salvati prima della sua introduzione.
       if (dati.lavoro_soci.ragguaglio == null) dati.lavoro_soci.ragguaglio = true;
     }
+    // Simulazione compenso amministratori (netto socio + costo azienda):
+    // default disattivata, aliquote medie indicative (prelievo socio 35%,
+    // ricarico azienda 20%) per i progetti precedenti alla feature.
+    if (dati.lavoro_soci.simula_compenso == null) dati.lavoro_soci.simula_compenso = false;
+    if (!dati.lavoro_soci.fisco || typeof dati.lavoro_soci.fisco !== 'object') {
+      dati.lavoro_soci.fisco = { prelievo_socio_pct: 0.35, ricarico_azienda_pct: 0.20 };
+    }
     if (Array.isArray(dati.sottoconti_ce) && dati.sottoconti_ce.length > 0
         && typeof ExcelImport !== 'undefined' && ExcelImport.ricalcolaStorico) {
       try {
@@ -1131,7 +1138,12 @@ const Projects = (() => {
       lavoro_soci: {              // Costo figurativo lavoro soci (fuori dal CE
         attivo:     false,        // civilistico — vedi engine.calcolaLavoroSoci)
         ragguaglio: true,         // ragguaglia le ore annue al primo anno parziale
-        righe:      []            // [{ id, nome, ore, tariffa }] — ore annue a regime
+        righe:      [],           // [{ id, nome, ore, tariffa }] — ore annue a regime
+        simula_compenso: false,   // simulazione compenso amministratori (netto/costo azienda)
+        fisco: {                  // aliquote medie indicative (stima rapida)
+          prelievo_socio_pct:   0.35,  // IRPEF + addizionali + INPS quota socio
+          ricarico_azienda_pct: 0.20   // INPS 2/3 c/società + IRAP indeducibile
+        }
       }
     };
   }
@@ -1621,6 +1633,12 @@ const Projects = (() => {
     if (_progettoCorrente.lavoro_soci.ragguaglio == null) {
       _progettoCorrente.lavoro_soci.ragguaglio = true;
     }
+    if (_progettoCorrente.lavoro_soci.simula_compenso == null) {
+      _progettoCorrente.lavoro_soci.simula_compenso = false;
+    }
+    if (!_progettoCorrente.lavoro_soci.fisco || typeof _progettoCorrente.lavoro_soci.fisco !== 'object') {
+      _progettoCorrente.lavoro_soci.fisco = { prelievo_socio_pct: 0.35, ricarico_azienda_pct: 0.20 };
+    }
     return _progettoCorrente.lavoro_soci;
   }
 
@@ -1652,6 +1670,34 @@ const Projects = (() => {
     if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
     const ls = _assicuraLavoroSoci();
     ls.ragguaglio = !!attivo;
+    _modificato = true;
+  }
+
+  /**
+   * Attiva/disattiva la simulazione "compenso amministratori" (netto in tasca
+   * al socio + costo pieno per l'azienda), mostrata come pannello nel blocco
+   * soci del Budget.
+   */
+  function lavoroSociSimula(attivo) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    const ls = _assicuraLavoroSoci();
+    ls.simula_compenso = !!attivo;
+    _modificato = true;
+  }
+
+  /**
+   * Aggiorna un'aliquota media della simulazione compenso.
+   * @param {'prelievo_socio_pct'|'ricarico_azienda_pct'} campo
+   * @param {number} pct - percentuale in punti (es. 35 → 0,35). Clampata 0-100.
+   */
+  function lavoroSociFisco(campo, pct) {
+    if (!_progettoCorrente || _progettoCorrente.meta.modulo !== 'ab') return;
+    if (campo !== 'prelievo_socio_pct' && campo !== 'ricarico_azienda_pct') return;
+    const ls = _assicuraLavoroSoci();
+    let v = Number(pct);
+    if (!isFinite(v) || v < 0) v = 0;
+    if (v > 100) v = 100;
+    ls.fisco[campo] = v / 100;
     _modificato = true;
   }
 
@@ -2226,6 +2272,8 @@ const Projects = (() => {
     aggiornaMetaAB,
     lavoroSociToggle,
     lavoroSociRagguaglio,
+    lavoroSociSimula,
+    lavoroSociFisco,
     lavoroSociAddRiga,
     lavoroSociUpdateRiga,
     lavoroSociRemoveRiga,
