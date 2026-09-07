@@ -3944,6 +3944,51 @@ thead .ab-col-periodo-preavvio {
 .ab-pdf-delta-good { color: var(--color-success); font-weight: 600; }
 .ab-pdf-delta-bad  { color: var(--color-error);   font-weight: 600; }
 
+/* ── PDF consuntivo mensile orizzontale ───────────────────────────
+   Layout compatto per far stare in larghezza le 4 colonne di sintesi
+   (Macroarea, Budget, Proiezione, Δ) + tutti i periodi (12 mesi o 4
+   trimestri). Va stampato in orizzontale (landscape): sta in A4, ma
+   in A3 respira. Font e padding ridotti rispetto al PDF verticale. */
+.ab-pdf-tab-mensile {
+  font-size: 8px;
+  table-layout: fixed;
+}
+.ab-pdf-tab-mensile thead th {
+  padding: 3px 3px;
+  font-size: 7.5px;
+  letter-spacing: 0;
+  vertical-align: bottom;
+}
+.ab-pdf-tab-mensile tbody td {
+  padding: 2px 3px;
+}
+/* Prima colonna (etichette macroarea): può andare a capo, larghezza fissa. */
+.ab-pdf-tab-mensile th:first-child,
+.ab-pdf-tab-mensile td:first-child {
+  white-space: normal;
+  width: 150px;
+  word-break: break-word;
+}
+/* Colonne di sintesi (Budget/Proiezione/Δ): un filo più larghe dei mesi. */
+.ab-pdf-tab-mensile thead th:nth-child(2),
+.ab-pdf-tab-mensile thead th:nth-child(3),
+.ab-pdf-tab-mensile thead th:nth-child(4) {
+  width: 62px;
+}
+/* Colonne periodo (mesi/trimestri). */
+.ab-pdf-tab-mensile .ab-pdf-col-mese {
+  width: 56px;
+}
+.ab-pdf-tab-mensile .ab-pdf-col-mese-chiuso {
+  background: #B7C8E2;
+}
+/* Mesi precedenti all'avvio attività: attenuati e contrassegnati con "—". */
+.ab-pdf-tab-mensile .ab-pdf-col-preavvio {
+  background: #ECEFF4;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 .ab-pdf-notes {
   margin-top: 14px;
   font-size: 10px;
@@ -4066,7 +4111,9 @@ thead .ab-col-periodo-preavvio {
   .ab-pdf-tab tr.ab-prospetto-tot-arancio-forte td,
   .ab-pdf-kpi-card,
   .ab-pdf-tab thead th,
-  .ab-pdf-tab .ab-pdf-col-vuoto {
+  .ab-pdf-tab .ab-pdf-col-vuoto,
+  .ab-pdf-tab .ab-pdf-col-mese-chiuso,
+  .ab-pdf-tab .ab-pdf-col-preavvio {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

@@ -308,6 +308,10 @@ Basato su ricognizione del codice, non solo sulla pianificazione originale.
 - **Retrocompatibile**: `'lineare'` + nessun override ⇒ output del preconsuntivo identico al precedente. La variazione rimanenze (`rim_ini − rim_fin`) confluisce nel costo del venduto → MdC → utile automaticamente, come già avviene per le altre voci calcolate.
 - Engine: `BudgetEngine.calcolaPreconsuntivo` (blocco rimanenze prima di `_calcolaVista`, che ora riceve i valori rim già determinati per vista). UI: toggle "Rimanenze" + celle di rettifica in `BudgetUI.renderConsuntivo` (`cambiaRimDistribuzione`, `rimOverrideBlur`).
 
+**Export PDF del Consuntivo AB — due layout:**
+- **PDF verticale** (`esportaPdfConsuntivo` → `_renderConsuntivoPdfHtml`, pulsante "📄 Esporta PDF"): pensato per A4 portrait. In frequenza mensile **collassa i mesi in un'unica colonna "Cumulato gen→ultimo mese compilato"**; in trimestrale mostra 4 colonne Q1–Q4. Adatto quando servono poche colonne e la % di scostamento nel Δ.
+- **PDF mensile orizzontale** (`esportaPdfConsuntivoMensile` → `_renderConsuntivoMensilePdfHtml` + `_buildPdfPeriodColsCompleto`, pulsante "📄 PDF mensile (orizz.)"): riproduce lo **sviluppo per periodo come a video** — 12 colonne mese (Gen→Dic) in mensile, 4 in trimestrale — affiancate alle colonne di sintesi Budget / Proiezione fine anno / Δ. I mesi non compilati sono in grigio (`.ab-pdf-col-vuoto`), i mesi precedenti all'avvio attività barrati (`.ab-pdf-col-preavvio`). Stampa in **landscape**: `_printPdf(html, title, { landscape: true })` inietta `@page { size: landscape }` (solo keyword, senza dimensione), così l'operatore sceglie **A4 o A3** nella finestra di stampa del browser — la tabella sta in A4 e respira in A3. Layout compatto in `.ab-pdf-tab-mensile` (font 8px, `table-layout: fixed`, prima colonna 150px a capo). Δ compatto (solo € con segno), la % resta nel PDF verticale.
+
 ### Shell / Multi-modulo
 
 | Fase | Contenuto | Stato |

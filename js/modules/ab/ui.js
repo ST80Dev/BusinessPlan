@@ -3638,13 +3638,26 @@ const BudgetUI = (() => {
      già nascosto in @media print, quindi nessuna classe ad-hoc.
      ────────────────────────────────────────────────────────── */
 
-  function _printPdf(html, title) {
+  /**
+   * Stampa PDF del markup passato.
+   * @param {string} html   markup del report
+   * @param {string} title  titolo finestra/documento
+   * @param {Object} [opts] opzioni. opts.landscape=true forza l'orientamento
+   *        orizzontale: iniettando `@page { size: landscape }` il foglio ruota
+   *        e l'operatore sceglie il formato carta (A4 o A3) dalla finestra di
+   *        stampa del browser. Utile per prospetti larghi (es. consuntivo con
+   *        tutti i mesi in colonna) che non stanno in verticale.
+   */
+  function _printPdf(html, title, opts) {
+    opts = opts || {};
     if (document.activeElement && typeof document.activeElement.blur === 'function') {
       document.activeElement.blur();
     }
     // Rimuovi un eventuale container precedente (es. due click rapidi)
     const old = document.getElementById('ab-pdf-print');
     if (old && old.parentNode) old.parentNode.removeChild(old);
+    const oldStyle = document.getElementById('ab-pdf-page-style');
+    if (oldStyle && oldStyle.parentNode) oldStyle.parentNode.removeChild(oldStyle);
 
     const cont = document.createElement('div');
     cont.id = 'ab-pdf-print';
@@ -3652,13 +3665,29 @@ const BudgetUI = (() => {
     document.body.appendChild(cont);
     document.body.classList.add('ab-pdf-mode');
 
+    // Orientamento orizzontale opzionale: la regola @page iniettata qui viene
+    // dopo main.css nella cascata, quindi sovrascrive `size: A4 portrait`.
+    // Usando la sola keyword `landscape` (senza dimensione) il browser mantiene
+    // il formato carta selezionato nella finestra di stampa: default A4, ma
+    // l'operatore può passare ad A3 per più respiro.
+    if (opts.landscape) {
+      document.body.classList.add('ab-pdf-landscape');
+      const st = document.createElement('style');
+      st.id = 'ab-pdf-page-style';
+      st.textContent = '@media print { @page { size: landscape; margin: 6mm; } }';
+      document.head.appendChild(st);
+    }
+
     const oldTitle = document.title;
     if (title) document.title = title;
 
     function cleanup() {
       document.body.classList.remove('ab-pdf-mode');
+      document.body.classList.remove('ab-pdf-landscape');
       const c = document.getElementById('ab-pdf-print');
       if (c && c.parentNode) c.parentNode.removeChild(c);
+      const s = document.getElementById('ab-pdf-page-style');
+      if (s && s.parentNode) s.parentNode.removeChild(s);
       document.title = oldTitle;
       window.removeEventListener('afterprint', cleanup);
     }
@@ -4218,6 +4247,255 @@ const BudgetUI = (() => {
     _printPdf(html, `Consuntivo ${anno} — ${cliente}`);
   }
 
+  /* ── Consuntivo: PDF mensile orizzontale ─────────────────────
+     Alternativa "sviluppo per periodo" all'export consuntivo sopra.
+     Mentre `_renderConsuntivoPdfHtml` collassa i mesi in un'unica
+     colonna cumulata (adatta all'A4 verticale), questo prospetto
+     riporta TUTTI i periodi in colonna esattamente come a video:
+     12 mesi (Gen→Dic) in frequenza mensile, 4 trimestri in
+     trimestrale, affiancati alle colonne di sintesi Budget /
+     Proiezione fine anno / Δ. Va stampato in orizzontale
+     (landscape): default A4, ma la tabella è pensata per stare
+     anche in A4 e respirare in A3 (scelta del formato nella
+     finestra di stampa del browser).
+     ──────────────────────────────────────────────────────────── */
+
+  /**
+   * Costruisce una colonna per ogni periodo (mese o trimestre),
+   * rispecchiando la vista a video: etichetta breve, stato compilato,
+   * mesi precedenti all'avvio attività, valori e totali di periodo.
+   */
+  function _buildPdfPeriodColsCompleto(pre) {
+    const meseBrevi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    const trimBrevi = ['1° trim.','2° trim.','3° trim.','4° trim.'];
+    const trimSub   = ['gen-mar','apr-giu','lug-set','ott-dic'];
+    const isTrim = pre.frequenza === 'trimestrale';
+    return pre.periodi_keys.map((k, i) => {
+      const vp = pre.per_periodo[k] || {};
+      return {
+        key: k,
+        label: isTrim ? trimBrevi[i] : meseBrevi[i],
+        subLabel: isTrim ? trimSub[i] : '',
+        chiuso: !!vp.inserito,
+        preAvvio: !!vp.pre_avvio,
+        valori: vp.valori || {},
+        totali: vp
+      };
+    });
+  }
+
+  function _renderConsuntivoMensilePdfHtml(progetto) {
+    const pre = BudgetEngine.calcolaPreconsuntivo(progetto);
+    const note = (progetto.budget && progetto.budget.note) || {};
+    const cols = _buildPdfPeriodColsCompleto(pre);
+
+    // Stesse righe (e segni) del consuntivo a video / PDF verticale.
+    const righeRaw = [
+      { tipo: 'sezione', label: 'RICAVI' },
+      { tipo: 'macro',   id: 'ricavi',           label: 'Ricavi',                                 segnoBuono: +1 },
+      { tipo: 'totale',  id: 'fatturato',        label: 'FATTURATO',                              evidenza: 'verde-forte', segnoBuono: +1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'mat_prime',        label: 'Costi p/mat. prime, suss., cons., merci', segnoBuono: -1 },
+      { tipo: 'macro',   id: 'altri_var',        label: 'Altri costi variabili',                  nascondiSeZero: true, segnoBuono: -1 },
+      { tipo: 'macro',   id: 'rim_ini',          label: 'Rimanenze iniziali',                     segnoBuono: -1 },
+      { tipo: 'macro',   id: 'rim_fin',          label: 'Rimanenze finali',                       segno: -1, segnoBuono: +1 },
+      { tipo: 'totale',  id: 'cdv',              label: 'COSTO DEL VENDUTO',                      evidenza: 'arancio', segnoBuono: -1 },
+      { tipo: 'totale',  id: 'mdc',              label: 'MARGINE DI CONTRIBUZIONE',               evidenza: 'verde', segnoBuono: +1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'servizi',          label: 'Costi per servizi',                      segnoBuono: -1 },
+      { tipo: 'macro',   id: 'godimento',        label: 'Costi p/godimento beni di terzi',        segnoBuono: -1 },
+      { tipo: 'macro',   id: 'personale',        label: 'Costi per il personale',                 segnoBuono: -1 },
+      { tipo: 'macro',   id: 'ammortamenti',     label: 'Ammortamenti',                           segnoBuono: -1 },
+      { tipo: 'macro',   id: 'oneri_gest',       label: 'Oneri diversi di gestione',              segnoBuono: -1 },
+      { tipo: 'macro',   id: 'oneri_fin',        label: 'Int. pass. e altri oneri finanz.',       segnoBuono: -1 },
+      { tipo: 'totale',  id: 'fissi',            label: 'TOTALE COSTI FISSI',                     evidenza: 'arancio', segnoBuono: -1 },
+      { tipo: 'totale',  id: 'totCosti',         label: 'TOTALE COSTI',                           evidenza: 'arancio-forte', segnoBuono: -1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'straordinari',     label: 'Oneri straordinari', segno: -1,          segnoBuono: +1 },
+      { tipo: 'macro',   id: 'altri_ric',        label: 'Altri ricavi e proventi',                segnoBuono: +1 },
+      { tipo: 'macro',   id: 'altri_prov_f',     label: 'Altri proventi finanziari',              segnoBuono: +1 },
+      { tipo: 'totale',  id: 'utileAnteImposte', label: 'UTILE ANTE IMPOSTE',                     evidenza: 'verde-forte', segnoBuono: +1 },
+      { tipo: 'spacer' },
+      { tipo: 'macro',   id: 'imposte',          label: 'Imposte sul reddito',                    segnoBuono: -1 },
+      { tipo: 'totale',  id: 'utileNetto',       label: 'UTILE NETTO',                            evidenza: 'verde', segnoBuono: +1 }
+    ];
+
+    const righe = _injectCustomRighe(righeRaw, progetto.macro_sezioni, {
+      segno:      { prov_oneri_straord: -1 },
+      segnoBuono: { variabili: -1, fissi: -1, prov_oneri_straord: +1 }
+    });
+
+    const colspanTot = 4 + cols.length;
+    let body = '';
+    const noteUtente = [];
+
+    function valColPeriodo(rowDef, col) {
+      if (rowDef.tipo === 'totale') return col.totali[rowDef.id] || 0;
+      return (col.valori[rowDef.id] && col.valori[rowDef.id].valore) || 0;
+    }
+
+    for (const r of righe) {
+      if (r.tipo === 'spacer') {
+        body += `<tr class="ab-prospetto-spacer"><td colspan="${colspanTot}">&nbsp;</td></tr>`;
+        continue;
+      }
+      if (r.tipo === 'sezione') {
+        body += `<tr class="ab-sezione"><td colspan="${colspanTot}">${_escapeHtml(r.label)}</td></tr>`;
+        continue;
+      }
+
+      const segno = r.segno || 1;
+      let valBudget, valProiez;
+      if (r.tipo === 'totale') {
+        valBudget = pre.budget[r.id] || 0;
+        valProiez = pre.proiezione[r.id] || 0;
+      } else {
+        valBudget = (pre.budget.valori[r.id] && pre.budget.valori[r.id].valore) || 0;
+        valProiez = (pre.proiezione.valori[r.id] && pre.proiezione.valori[r.id].valore) || 0;
+      }
+      if (r.nascondiSeZero && Math.abs(valBudget) < 0.005 && Math.abs(valProiez) < 0.005) continue;
+
+      const cls = r.tipo === 'totale' ? `ab-prospetto-tot ab-prospetto-tot-${r.evidenza || 'arancio'}` : '';
+
+      // Δ vs budget compatto (solo € con segno e colore): nel layout mensile
+      // le colonne sono molte, la % di scostamento resta nel PDF verticale.
+      const dAbs = (valProiez - valBudget) * segno;
+      let deltaCell = '';
+      if (Math.abs(dAbs) >= 0.5) {
+        const sb = r.segnoBuono || 0;
+        const buono = (dAbs * sb) >= 0;
+        const segnoTxt = dAbs > 0 ? '+' : '';
+        deltaCell = `<span class="${buono ? 'ab-pdf-delta-good' : 'ab-pdf-delta-bad'}">${segnoTxt}${_fmtEuroInt(dAbs)}</span>`;
+      }
+
+      // Nota utente (segna solo macro, non i totali derivati)
+      let notaMark = '';
+      if (r.tipo === 'macro') {
+        const t = (note[r.id] || '').trim();
+        if (t.length > 0) {
+          const n = noteUtente.length + 1;
+          noteUtente.push({ n, label: r.label, testo: t });
+          notaMark = ` <sup class="ab-pdf-noteref">[${n}]</sup>`;
+        }
+      }
+
+      const celleP = cols.map(col => {
+        if (col.preAvvio) {
+          return '<td class="num ab-pdf-col-preavvio">—</td>';
+        }
+        const v = valColPeriodo(r, col) * segno;
+        const cellCls = 'num' + (col.chiuso ? '' : ' ab-pdf-col-vuoto');
+        return `<td class="${cellCls}">${Math.abs(v) < 0.5 ? '' : _fmtEuroInt(v)}</td>`;
+      }).join('');
+
+      body += `<tr class="${cls}">
+        <td>${_escapeHtml(r.label)}${notaMark}</td>
+        <td class="num">${_fmtEuroInt(valBudget * segno)}</td>
+        <td class="num">${_fmtEuroInt(valProiez * segno)}</td>
+        <td class="num">${deltaCell}</td>
+        ${celleP}
+      </tr>`;
+    }
+
+    // KPI di testa (proiezione vs budget) — gli stessi 4 del PDF verticale.
+    const dFatt = pre.fatturato_proiettato - pre.budget.fatturato;
+    const dFattPct = pre.budget.fatturato !== 0 ? dFatt / Math.abs(pre.budget.fatturato) : null;
+    const dUtile = pre.proiezione.utileNetto - pre.budget.utileNetto;
+    const dUtilePct = pre.budget.utileNetto !== 0 ? dUtile / Math.abs(pre.budget.utileNetto) : null;
+    const dMdc = pre.proiezione.mdc - pre.budget.mdc;
+    const dMdcPct = pre.budget.mdc !== 0 ? dMdc / Math.abs(pre.budget.mdc) : null;
+    function _kpiSub(d, dpct) {
+      const segno = d > 0 ? '+' : '';
+      return `${segno}${_fmtEuroInt(d)} €${dpct != null ? ' (' + segno + (dpct * 100).toFixed(1).replace('.', ',') + '%)' : ''} vs budget`;
+    }
+    const kpiHtml = `
+      <div class="ab-pdf-kpi">
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Fatturato consuntivato</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(pre.fatturato_consuntivato)} €</div>
+          <div class="ab-pdf-kpi-sub">${pre.periodi_chiusi}/${pre.periodi_totali} periodi trascorsi · ${(pre.frazione_anno * 100).toFixed(0)}% dell'anno</div>
+        </div>
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Fatturato proiettato fine anno</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(pre.fatturato_proiettato)} €</div>
+          <div class="ab-pdf-kpi-sub">${_kpiSub(dFatt, dFattPct)}</div>
+        </div>
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">Utile netto proiettato</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(pre.proiezione.utileNetto)} €</div>
+          <div class="ab-pdf-kpi-sub">${_kpiSub(dUtile, dUtilePct)}</div>
+        </div>
+        <div class="ab-pdf-kpi-card">
+          <div class="ab-pdf-kpi-label">MdC proiettato</div>
+          <div class="ab-pdf-kpi-value">${_fmtEuroInt(pre.proiezione.mdc)} €</div>
+          <div class="ab-pdf-kpi-sub">${_kpiSub(dMdc, dMdcPct)}</div>
+        </div>
+      </div>
+    `;
+
+    // Testata colonne periodo: etichetta + (trim) range mesi + stato.
+    const periodHeaders = cols.map(col => {
+      const sub = col.subLabel ? `<div class="ab-pdf-col-sublabel">${_escapeHtml(col.subLabel)}</div>` : '';
+      let stato = '';
+      let thCls = 'num ab-pdf-col-mese';
+      if (col.preAvvio) { stato = '<div class="ab-pdf-col-stato">pre-avvio</div>'; thCls += ' ab-pdf-col-preavvio'; }
+      else if (!col.chiuso) { stato = '<div class="ab-pdf-col-stato">—</div>'; thCls += ' ab-pdf-col-vuoto'; }
+      else { thCls += ' ab-pdf-col-mese-chiuso'; }
+      return `<th class="${thCls}">${_escapeHtml(col.label)}${sub}${stato}</th>`;
+    }).join('');
+
+    const isTrim = pre.frequenza === 'trimestrale';
+    const sottotitolo = isTrim
+      ? 'Consuntivo trimestrale · sviluppo per trimestre'
+      : 'Consuntivo mensile · sviluppo per mese (gen–dic)';
+
+    // Note metodologiche (nascoste in stampa via CSS, come gli altri PDF).
+    const noteMetodo = [
+      isTrim
+        ? '<strong>Colonne trimestrali</strong> — ogni colonna mostra il singolo trimestre isolato: costi variabili = % budget × fatturato del trimestre; fissi/proventi/oneri straord./imposte pro-quota 1/4 del budget annuale.'
+        : '<strong>Colonne mensili</strong> — ogni colonna mostra il singolo mese isolato: costi variabili = % budget × fatturato del mese; fissi/proventi/oneri straord./imposte pro-quota 1/12 del budget annuale. I mesi non ancora compilati (in grigio) mostrano i soli costi pro-quota; i mesi precedenti all\'avvio attività sono contrassegnati con "—".',
+      '<strong>Budget €</strong> — budget <em>annuale</em> completo, come riferimento; non proporzionato al periodo.',
+      '<strong>Proiezione fine anno</strong> — fatturato proiettato = consuntivato / frazione di anno chiusa; costi variabili = % budget × fatturato proiettato; fissi/proventi/oneri/imposte = budget annuale; rimanenze stabili al budget.',
+      '<strong>Δ</strong> — Proiezione − Budget annuale (verde favorevole, rosso sfavorevole).'
+    ];
+
+    let html = '';
+    html += _pdfHeader(progetto, sottotitolo);
+    html += kpiHtml;
+    html += '<table class="ab-pdf-tab ab-pdf-tab-consuntivo ab-pdf-tab-mensile"><thead><tr>'
+         +    '<th>Macroarea</th>'
+         +    '<th class="num">Budget €</th>'
+         +    '<th class="num">Proiez. fine anno</th>'
+         +    '<th class="num">Δ</th>'
+         +    periodHeaders
+         +  '</tr></thead><tbody>' + body + '</tbody></table>';
+
+    html += '<div class="ab-pdf-notes ab-pdf-notes-metodo"><div class="ab-pdf-notes-title">Note di metodo</div><ol>';
+    for (const t of noteMetodo) html += '<li>' + t + '</li>';
+    html += '</ol></div>';
+
+    if (noteUtente.length > 0) {
+      html += '<div class="ab-pdf-notes"><div class="ab-pdf-notes-title">Annotazioni per voce</div><ol>';
+      for (const nu of noteUtente) {
+        html += '<li><strong>[' + nu.n + '] ' + _escapeHtml(nu.label) + '</strong> — ' + _escapeHtml(nu.testo) + '</li>';
+      }
+      html += '</ol></div>';
+    }
+
+    return html;
+  }
+
+  function esportaPdfConsuntivoMensile() {
+    const progetto = Projects.getProgetto();
+    if (!progetto) return;
+    const senzaSottoconti = !Array.isArray(progetto.sottoconti_ce) || progetto.sottoconti_ce.length === 0;
+    if (senzaSottoconti && !_abSenzaStorico(progetto)) return;
+    const cliente = (progetto.meta && progetto.meta.cliente) || 'progetto';
+    const anno = (progetto.meta && progetto.meta.anno_corrente) || '';
+    const html = _renderConsuntivoMensilePdfHtml(progetto);
+    _printPdf(html, `Consuntivo mensile ${anno} — ${cliente}`, { landscape: true });
+  }
+
   function _placeholder(titolo, descrizione) {
     return (
       '<div class="tab-disabled-notice">' +
@@ -4288,7 +4566,8 @@ const BudgetUI = (() => {
     distribuisciPctBlur:        distribuisciPctBlur,
     applicaDistribuisciPct:     applicaDistribuisciPct,
     esportaPdfBudget:   esportaPdfBudget,
-    esportaPdfConsuntivo: esportaPdfConsuntivo
+    esportaPdfConsuntivo: esportaPdfConsuntivo,
+    esportaPdfConsuntivoMensile: esportaPdfConsuntivoMensile
   };
 
 })();

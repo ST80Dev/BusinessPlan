@@ -265,7 +265,8 @@ const UI = (() => {
         html = `<div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfBudget()" title="Esporta il prospetto budget in PDF">📄 Esporta PDF</div>`;
         break;
       case 'ab-consuntivo':
-        html = `<div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfConsuntivo()" title="Esporta il consuntivo in PDF">📄 Esporta PDF</div>`;
+        html = `<div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfConsuntivo()" title="Esporta il consuntivo in PDF verticale (mesi cumulati)">📄 Esporta PDF</div>`
+             + `<div class="btn btn-secondary btn-sm" onclick="BudgetUI.esportaPdfConsuntivoMensile()" title="Esporta il consuntivo in PDF orizzontale con tutti i mesi in colonna (come a video). Scegli A4 o A3 nella finestra di stampa.">📄 PDF mensile (orizz.)</div>`;
         break;
     }
     c.innerHTML = html;
