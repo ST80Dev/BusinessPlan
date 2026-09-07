@@ -3947,12 +3947,19 @@ thead .ab-col-periodo-preavvio {
 /* ── PDF consuntivo mensile orizzontale ───────────────────────────
    Layout compatto per far stare in larghezza le 4 colonne di sintesi
    (Macroarea, Budget, Proiezione, Δ) + tutti i periodi (12 mesi o 4
-   trimestri). Va stampato in orizzontale (landscape): sta in A4, ma
-   in A3 respira. Font e padding ridotti rispetto al PDF verticale. */
+   trimestri). Va stampato in orizzontale (landscape).
+
+   Larghezze in PERCENTUALE (non px): con `table-layout: fixed` +
+   `width: 100%` la tabella riempie l'intera pagina, quindi in A3 le
+   colonne (e lo spazio per le cifre) si allargano automaticamente
+   rispetto all'A4. Le cifre del corpo sono più grandi delle testate:
+   sono il dato che l'operatore legge. */
 .ab-pdf-tab-mensile {
   font-size: 8px;
   table-layout: fixed;
+  width: 100%;
 }
+/* Testate: font piccolo, non toccato dall'ingrandimento cifre. */
 .ab-pdf-tab-mensile thead th {
   padding: 3px 3px;
   font-size: 7.5px;
@@ -3962,22 +3969,26 @@ thead .ab-col-periodo-preavvio {
 .ab-pdf-tab-mensile tbody td {
   padding: 2px 3px;
 }
-/* Prima colonna (etichette macroarea): può andare a capo, larghezza fissa. */
+/* Cifre nelle celle del corpo (mesi + sintesi): ingrandite rispetto
+   alla base per leggibilità in stampa. Vale sia in A4 sia in A3; in A3
+   vengono ulteriormente ingrandite dalla media query più sotto. */
+.ab-pdf-tab-mensile tbody td.num {
+  font-size: 9.5px;
+}
+/* Prima colonna (etichette macroarea): può andare a capo. */
 .ab-pdf-tab-mensile th:first-child,
 .ab-pdf-tab-mensile td:first-child {
   white-space: normal;
-  width: 150px;
+  width: 12%;
   word-break: break-word;
 }
-/* Colonne di sintesi (Budget/Proiezione/Δ): un filo più larghe dei mesi. */
+/* Colonne di sintesi (Budget/Proiezione/Δ): un filo più larghe dei mesi.
+   Le colonne periodo (mesi/trimestri) non hanno width: con table-layout
+   fixed si spartiscono equamente lo spazio residuo. */
 .ab-pdf-tab-mensile thead th:nth-child(2),
 .ab-pdf-tab-mensile thead th:nth-child(3),
 .ab-pdf-tab-mensile thead th:nth-child(4) {
-  width: 62px;
-}
-/* Colonne periodo (mesi/trimestri). */
-.ab-pdf-tab-mensile .ab-pdf-col-mese {
-  width: 56px;
+  width: 6%;
 }
 .ab-pdf-tab-mensile .ab-pdf-col-mese-chiuso {
   background: #B7C8E2;
@@ -3987,6 +3998,20 @@ thead .ab-col-periodo-preavvio {
   background: #ECEFF4;
   color: var(--color-text-muted);
   text-align: center;
+}
+/* A3 (o qualsiasi carta più larga dell'A4 orizzontale): cifre del corpo
+   ancora più grandi. Chromium valuta le media query di stampa sulla
+   dimensione del foglio scelto: l'A4 orizzontale è ~297mm, l'A3 ~420mm,
+   quindi la soglia 340mm distingue i due. Miglioria progressiva: se il
+   browser non applicasse la regola, restano comunque valide le cifre
+   ingrandite qui sopra (valide in entrambi i formati). */
+@media print and (min-width: 340mm) {
+  .ab-pdf-tab-mensile tbody td.num {
+    font-size: 11.5px;
+  }
+  .ab-pdf-tab-mensile tbody td {
+    font-size: 9.5px;
+  }
 }
 
 .ab-pdf-notes {
